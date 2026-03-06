@@ -1,2 +1,0 @@
-# Kon-bot
-Currency bot
