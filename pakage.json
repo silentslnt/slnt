@@ -1,0 +1,16 @@
+{
+  "name": "𝓚𝓞𝓝",
+  "version": "1.0.0",
+  "description": "THE ULTIMATE CURRENCY BOT WITH COOL MINIGANES CURRENCY SYSTEM AND A COOL WAY TO EARN THE CURRENCY",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "Azure",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "discord.js": "^14.11.0",
+    "dotenv": "^16.3.1"
+  }
+}
