@@ -19,10 +19,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dzf0/KON.git"
+    "url": "git+https://github.com/silentslnt/slnt.git"
   },
   "bugs": {
-    "url": "https://github.com/dzf0/KON/issues"
+    "url": "https://github.com/silentslnt/slnt/issues"
   },
-  "homepage": "https://github.com/dzf0/KON#readme"
+  "homepage": "https://github.com/silentslnt/slnt#readme"
 }
