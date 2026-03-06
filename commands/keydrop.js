@@ -1,12 +1,12 @@
 // commands/keydrop.js
 const { EmbedBuilder } = require('discord.js');
 
-const KEYDROP_CHANNEL_ID = '1401925188991582338';
+const KEYDROP_CHANNEL_ID = '1472342562093404324';
 
 // Admin role and user IDs for keydrop channel control
-const KEYDROP_ADMIN_ROLE_ID = '1472342562093404324';
+const KEYDROP_ADMIN_ROLE_ID = '1471310720866975917';
 const KEYDROP_ADMIN_USER_IDS = [
-  '1349792214124986419','843738665301835796'
+  '1432513881653121047','730860363884527646'
 ];
 
 let currentKey = null;
