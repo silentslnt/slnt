@@ -1,8 +1,8 @@
 const { EmbedBuilder } = require('discord.js');
 
-const ADMIN_ROLE_ID = '1454818862397653074'; // admin role
+const ADMIN_ROLE_ID = '1471310723245150208'; // admin role
 const ADMIN_USER_IDS = [
-  '1349792214124986419', // add yourself
+  '1432513881653121047', // add yourself
   // 'ANOTHER_USER_ID',
 ];
 
@@ -761,3 +761,4 @@ module.exports = {
     });
   },
 };
+
