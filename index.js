@@ -116,7 +116,7 @@ client.commands = new Collection();
 const prefix = '.';
 
 // Ready event listener
-client.once('ready', () => {
+client.once('clientReady', () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
@@ -448,3 +448,4 @@ async function startBot() {
 }
 
 startBot();
+
