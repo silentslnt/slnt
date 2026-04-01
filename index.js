@@ -3,8 +3,23 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const mongoose = require('mongoose');
-const { Client, GatewayIntentBits, Collection, EmbedBuilder } = require('discord.js');
+const {
+  Client, GatewayIntentBits, Collection, EmbedBuilder,
+  ModalBuilder, TextInputBuilder, TextInputStyle,
+  ActionRowBuilder, PermissionFlagsBits,
+  REST, Routes, SlashCommandBuilder,
+} = require('discord.js');
 const keydrop = require('./commands/keydrop.js');
+
+// ── Vouch system config ────────────────────────────────────────
+const VOUCH_CONFIG_FILE = path.join(__dirname, 'vouch-config.json');
+function loadVouchConfig() {
+  try { return JSON.parse(fs.readFileSync(VOUCH_CONFIG_FILE, 'utf8')); } catch(e) { return {}; }
+}
+function saveVouchConfig(c) {
+  try { fs.writeFileSync(VOUCH_CONFIG_FILE, JSON.stringify(c, null, 2)); } catch(e) {}
+}
+const PENDING_VOUCHES = new Map();
 
 // Start Express server to keep bot awake
 const app = express();
@@ -116,8 +131,52 @@ client.commands = new Collection();
 const prefix = '.';
 
 // Ready event listener
-client.once('clientReady', () => {
+client.once('clientReady', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
+
+  // Register slash commands
+  try {
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+    const commands = [
+      new SlashCommandBuilder()
+        .setName('vouch')
+        .setDescription('Leave a vouch for Shiro / Silv Market')
+        .addUserOption(opt =>
+          opt.setName('user')
+            .setDescription('Tag the staff member who helped you (optional)')
+            .setRequired(false)
+        )
+        .addAttachmentOption(opt =>
+          opt.setName('image')
+            .setDescription('Screenshot of your trade/delivery (optional)')
+            .setRequired(false)
+        )
+        .toJSON(),
+      new SlashCommandBuilder()
+        .setName('setup')
+        .setDescription('Configure bot settings')
+        .addSubcommand(sub =>
+          sub.setName('vouch')
+            .setDescription('Set the channel and color for vouches')
+            .addChannelOption(opt =>
+              opt.setName('channel')
+                .setDescription('Channel to post vouches in')
+                .setRequired(true)
+            )
+            .addStringOption(opt =>
+              opt.setName('color')
+                .setDescription('Embed color as hex, e.g. #FFD700 (optional)')
+                .setRequired(false)
+            )
+        )
+        .toJSON(),
+    ];
+    await rest.put(
+      Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID),
+      { body: commands }
+    );
+    console.log('✅ Slash commands registered (/vouch, /setup vouch)');
+  } catch(e) { console.error('Failed to register slash commands:', e.message); }
 });
 
 // Global cooldowns
@@ -422,6 +481,114 @@ client.on('messageCreate', async (message) => {
       .setColor('Red')
       .setTimestamp();
     message.channel.send({ embeds: [errorEmbed] });
+  }
+});
+
+// ===== SLASH COMMAND INTERACTIONS =====
+client.on('interactionCreate', async (interaction) => {
+
+  // /setup vouch — admin only
+  if (interaction.isChatInputCommand() && interaction.commandName === 'setup') {
+    const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.ManageGuild);
+    if (!isAdmin) return interaction.reply({ content: '❌ You need Manage Server permission.', ephemeral: true });
+    if (interaction.options.getSubcommand() === 'vouch') {
+      const ch    = interaction.options.getChannel('channel');
+      const color = interaction.options.getString('color');
+      const cfg   = loadVouchConfig();
+      cfg.channelId = ch.id;
+      if (color) {
+        const hex = color.trim().replace(/^#/, '');
+        if (/^[0-9a-fA-F]{6}$/.test(hex)) cfg.color = `#${hex}`;
+        else return interaction.reply({ content: '❌ Invalid color — use a 6-digit hex like `#FFD700`', ephemeral: true });
+      }
+      saveVouchConfig(cfg);
+      const colorLine = cfg.color ? `\n🎨 Color: \`${cfg.color}\`` : '';
+      return interaction.reply({ content: `✅ Vouch channel set to <#${ch.id}>${colorLine}`, ephemeral: true });
+    }
+    return interaction.reply({ content: '❌ Unknown subcommand.', ephemeral: true });
+  }
+
+  // /vouch — anyone, store options then show modal
+  if (interaction.isChatInputCommand() && interaction.commandName === 'vouch') {
+    const taggedUser = interaction.options.getUser('user');
+    const attachment = interaction.options.getAttachment('image');
+    PENDING_VOUCHES.set(interaction.user.id, {
+      taggedUser: taggedUser ? { id: taggedUser.id } : null,
+      imageUrl: attachment?.url || null,
+    });
+    const modal = new ModalBuilder()
+      .setCustomId('vouch_modal')
+      .setTitle('✦ Leave a Vouch');
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('vouch_item')
+          .setLabel('What did you receive?')
+          .setPlaceholder('e.g. Perm Dragon Fruit — Blox Fruits')
+          .setStyle(TextInputStyle.Short)
+          .setMaxLength(120)
+          .setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('vouch_review')
+          .setLabel('Your honest review')
+          .setPlaceholder('Tell others about your experience...')
+          .setStyle(TextInputStyle.Paragraph)
+          .setMinLength(10)
+          .setMaxLength(500)
+          .setRequired(true)
+      )
+    );
+    return interaction.showModal(modal);
+  }
+
+  // vouch modal submit
+  if (interaction.isModalSubmit() && interaction.customId === 'vouch_modal') {
+    await interaction.deferReply({ ephemeral: true });
+    const item   = interaction.fields.getTextInputValue('vouch_item');
+    const review = interaction.fields.getTextInputValue('vouch_review');
+    const pending = PENDING_VOUCHES.get(interaction.user.id) || {};
+    PENDING_VOUCHES.delete(interaction.user.id);
+    const { taggedUser, imageUrl } = pending;
+
+    const cfg = loadVouchConfig();
+    if (!cfg.channelId) {
+      return interaction.editReply({ content: '❌ Vouch channel not set — ask an admin to run `/setup vouch #channel`.' });
+    }
+    const embedColor = cfg.color ? parseInt(cfg.color.replace('#', ''), 16) : 0xFFD700;
+    const STARS = '<:Golden_Star:1481125751758520373>'.repeat(5);
+
+    const fields = [
+      { name: '<a:Bshop:1388792189970284564>  Received', value: item, inline: true },
+      { name: '🧾  Buyer', value: `<@${interaction.user.id}>`, inline: true },
+    ];
+    if (taggedUser) {
+      fields.push({ name: '✦  Seller', value: `<@${taggedUser.id}>`, inline: false });
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(embedColor)
+      .setAuthor({
+        name: `${interaction.user.username} left a vouch`,
+        iconURL: interaction.user.displayAvatarURL({ dynamic: true }),
+      })
+      .setTitle(`${STARS}  Verified Purchase`)
+      .setDescription(`*"${review}"*`)
+      .addFields(...fields)
+      .setFooter({ text: 'Silv Market · silvmarket.shop', iconURL: 'https://silvmarket.shop/images/logo.png' })
+      .setTimestamp();
+
+    if (imageUrl) embed.setImage(imageUrl);
+
+    try {
+      const ch = await interaction.guild.channels.fetch(cfg.channelId);
+      await ch.send({ embeds: [embed] });
+      return interaction.editReply({ content: '✅ Your vouch has been posted — thank you!' });
+    } catch(e) {
+      console.error('Vouch post error:', e.message);
+      return interaction.editReply({ content: '❌ Could not post vouch — channel not found or inaccessible.' });
+    }
   }
 });
 
