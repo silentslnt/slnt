@@ -143,6 +143,9 @@ client.once('clientReady', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
   // Register slash commands
+  if (!process.env.GUILD_ID) {
+    console.error('⚠️  GUILD_ID env var not set — slash commands will not be registered');
+  } else
   try {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     const commands = [
