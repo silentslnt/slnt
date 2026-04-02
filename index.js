@@ -175,13 +175,22 @@ client.once('clientReady', async () => {
                 .setRequired(true)
             )
         )
+        .addSubcommand(sub =>
+          sub.setName('wins')
+            .setDescription('Set the channel where big wins are announced')
+            .addChannelOption(opt =>
+              opt.setName('channel')
+                .setDescription('Channel for win announcements (3x+ multiplier or 2000+ coins)')
+                .setRequired(true)
+            )
+        )
         .toJSON(),
     ];
     await rest.put(
       Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID),
       { body: commands }
     );
-    console.log('✅ Slash commands registered (/vouch, /setup vouch)');
+    console.log('✅ Slash commands registered (/vouch, /setup vouch, /setup wins)');
   } catch(e) { console.error('Failed to register slash commands:', e.message); }
 });
 
@@ -497,6 +506,14 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isChatInputCommand() && interaction.commandName === 'setup') {
     const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.ManageGuild);
     if (!isAdmin) return interaction.reply({ content: '❌ You need Manage Server permission.', ephemeral: true });
+    if (interaction.options.getSubcommand() === 'wins') {
+      const ch  = interaction.options.getChannel('channel');
+      const cfg = loadVouchConfig();
+      cfg.winsChannelId = ch.id;
+      saveVouchConfig(cfg);
+      return interaction.reply({ content: `✅ Win announcements will post to <#${ch.id}> (triggers at 3× multiplier or 2,000+ coin profit).`, ephemeral: true });
+    }
+
     if (interaction.options.getSubcommand() === 'vouch') {
       const ch  = interaction.options.getChannel('channel');
       const cfg = loadVouchConfig();

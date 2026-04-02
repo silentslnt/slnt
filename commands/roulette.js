@@ -1,108 +1,142 @@
+// commands/roulette.js — European Roulette (0-36)
 const { EmbedBuilder } = require('discord.js');
+const { COLOR, XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
+const { requireAdmin } = require('../utils/permissions');
+const { parseBet } = require('../utils/parseBet');
+const { getMultiplier, getLuckBonus } = require('../utils/essences');
+const { addXP } = require('../utils/xp');
+const { trackStat, checkAchievements } = require('../utils/achievements');
+const { randomFloat } = require('../utils/rng');
+const { announceWin } = require('../utils/winAnnouncer');
 
-const wheel = [
-  { num: 0, color: 'green' },
-  ...Array.from({ length: 36 }, (_, i) => ({
-    num: i + 1,
-    color: (i % 2 === 0 ? 'black' : 'red')
-  }))
-];
+// European roulette wheel — 37 slots (0 green, 1-18 alternating red/black)
+const RED_NUMS   = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+const BLACK_NUMS = new Set([2,4,6,8,10,11,13,15,17,20,22,24,26,28,29,31,33,35]);
 
 function spinWheel() {
-  const idx = Math.floor(Math.random() * wheel.length);
-  return wheel[idx];
+  const num = Math.floor(randomFloat() * 37); // 0-36
+  const color = num === 0 ? 'green' : RED_NUMS.has(num) ? 'red' : 'black';
+  return { num, color };
 }
+
+const COLOR_EMOJI = { red: '🟥', black: '⬛', green: '🟩' };
+const COLOR_LABEL = { red: 'RED', black: 'BLACK', green: 'GREEN (0)' };
+
+// Payouts (return including stake): red/black 2x, number 36x, green 18x
+const PAYOUT = { red: 2, black: 2, number: 36, green: 18 };
 
 module.exports = {
   name: 'roulette',
-  description: 'Bet on red, black, green, or a number (0-36) for a big payout!',
-  async execute({ message, args, userData, saveUserData }) {
-    if (args.length < 2)
-      return message.channel.send('Usage: `.roulette <amount> <red|black|green|0-36>`');
+  aliases: ['rl', 'spin'],
+  adminOnly: true,
+  description: 'Bet on red, black, green, or a number. `.rl <bet> <red|black|green|0-36>`',
 
-    const bet = parseInt(args[0]);
-    const choiceRaw = args[1].toLowerCase();
+  async execute({ message, args, userData, saveUserData, client }) {
+    if (!await requireAdmin(message)) return;
 
-    if (isNaN(bet) || bet <= 0)
-      return message.channel.send('Bet must be a positive integer!');
+    const betArg    = args[0];
+    const choiceRaw = (args[1] || '').toLowerCase();
+    const bet       = parseBet(betArg, userData.balance || 0);
 
-    if (typeof userData.balance !== 'number') userData.balance = 0;
-
-    if (userData.balance < bet)
-      return message.channel.send("You don't have enough balance to bet that!");
-
-    // Deduct bet first
-    userData.balance -= bet;
-
-    // Validate bet
-    let betType;
+    // Validate bet choice
+    let betType = null;
     let betNumber = null;
-    if (['red', 'black', 'green'].includes(choiceRaw)) {
+    if (['red','black','green'].includes(choiceRaw)) {
       betType = choiceRaw;
-    } else if (!isNaN(parseInt(choiceRaw)) && parseInt(choiceRaw) >= 0 && parseInt(choiceRaw) <= 36) {
-      betType = 'number';
-      betNumber = parseInt(choiceRaw);
-    } else {
-      return message.channel.send('Invalid bet. Choose red, black, green, or a number 0-36.');
+    } else if (choiceRaw !== '' && !isNaN(parseInt(choiceRaw))) {
+      const n = parseInt(choiceRaw);
+      if (n >= 0 && n <= 36) { betType = 'number'; betNumber = n; }
     }
 
-    // Spin
+    if (!bet || !betType) {
+      return message.channel.send({
+        embeds: [new EmbedBuilder().setColor(COLOR.DEFAULT)
+          .setTitle('˗ˏˋ 🎡 Roulette ˎˊ˗')
+          .setDescription(
+            '꒰ঌ Usage ໒꒱\n\n' +
+            '`.rl <bet> <choice>`\n\n' +
+            '**Choices & Payouts:**\n' +
+            '`red` / `black` → **2×** (48.6% win)\n' +
+            '`green` → **18×** (2.7% win)\n' +
+            '`0`–`36` → **36×** (2.7% win)\n\n' +
+            '**Examples:**\n' +
+            '`.rl 500 red` · `.rl 1000 7` · `.rl all black`'
+          )
+          .setFooter({ text: 'System • Roulette  |  RTP ~97%' })],
+      });
+    }
+
+    if ((userData.balance || 0) < bet) {
+      return message.channel.send({ content: `❌ You only have **${(userData.balance||0).toLocaleString()}** coins.` });
+    }
+
+    userData.balance = (userData.balance || 0) - bet;
+    await saveUserData(userData);
+
     const result = spinWheel();
 
-    let winnings = 0;
-    let resultBlock = 
-      '╭──────────────────────────────╮\n' +
-      `│  🎡 Result: **${result.num} (${result.color.toUpperCase()} )** │\n`;
+    // Determine win
+    let won = false;
+    if (betType === 'number') won = result.num === betNumber;
+    else if (betType === 'red')   won = result.color === 'red';
+    else if (betType === 'black') won = result.color === 'black';
+    else if (betType === 'green') won = result.color === 'green';
 
-    if (betType === 'number' && betNumber === result.num) {
-      winnings = bet * 36;
-      userData.balance += winnings;
-      resultBlock +=
-        '│  **✨ CELESTIAL JACKPOT ✨**  │\n' +
-        `│  Reward: **${winnings}** (36x) │\n`;
-    } else if (betType === 'red' && result.color === 'red') {
-      winnings = bet * 2;
-      userData.balance += winnings;
-      resultBlock +=
-        '│  **🟥 RED BLESSED WIN 🟥**    │\n' +
-        `│  Reward: **${winnings}** (2x)  │\n`;
-    } else if (betType === 'black' && result.color === 'black') {
-      winnings = bet * 2;
-      userData.balance += winnings;
-      resultBlock +=
-        '│  **⬛ SHADOWED LUCK ⬛**      │\n' +
-        `│  Reward: **${winnings}** (2x)  │\n`;
-    } else if (betType === 'green' && result.num === 0) {
-      winnings = bet * 18;
-      userData.balance += winnings;
-      resultBlock +=
-        '│  **🟩 DIVINE ZERO 🟩**       │\n' +
-        `│  Reward: **${winnings}** (18x) │\n`;
-    } else {
-      resultBlock +=
-        '│  **💔 FALLEN BET – YOU LOSE**│\n';
+    const baseMulti  = won ? PAYOUT[betType] : 0;
+    const frenzy     = won ? await getMultiplier(message.author.id, 'frenzy').catch(() => 1) : 1;
+    const finalMulti = baseMulti * frenzy;
+    const payout     = Math.floor(bet * finalMulti);
+    const profit     = payout - bet;
+
+    if (won) {
+      userData.balance = (userData.balance || 0) + payout;
+      await saveUserData(userData);
     }
 
-    resultBlock += '╰──────────────────────────────╯';
+    await addXP(message.author.id, XP_PER_GAME + (won ? XP_PER_WIN : 0)).catch(() => {});
+    await trackStat(message.author.id, 'gamesPlayed', 1).catch(() => {});
+    if (won) {
+      await trackStat(message.author.id, 'gamesWon', 1).catch(() => {});
+      await trackStat(message.author.id, 'coinsWon', profit).catch(() => {});
+    }
+    await checkAchievements(message.author.id, userData).catch(() => {});
 
-    // Persist to MongoDB – one argument, wrapper adds userId
-    await saveUserData({ balance: userData.balance });
+    const resultEmoji = COLOR_EMOJI[result.color];
+    const betLabel    = betType === 'number' ? `Number ${betNumber}` : betType.charAt(0).toUpperCase() + betType.slice(1);
+
+    let statusLine;
+    if (won) {
+      statusLine = frenzy > 1
+        ? `✅ **${resultEmoji} ${result.num} (${COLOR_LABEL[result.color]})** — ×${baseMulti} → ×${finalMulti} (Frenzy!) **+${profit.toLocaleString()}** coins!`
+        : `✅ **${resultEmoji} ${result.num} (${COLOR_LABEL[result.color]})** — ×${baseMulti} — **+${profit.toLocaleString()}** coins!`;
+    } else {
+      statusLine = `❌ **${resultEmoji} ${result.num} (${COLOR_LABEL[result.color]})** — not ${betLabel}. Lost **${bet.toLocaleString()}** coins.`;
+    }
 
     const embed = new EmbedBuilder()
-      .setTitle('˗ˏˋ 𐙚 🎡 𝔠𝔢𝔩𝔢𝔰𝔱𝔦𝔞𝔩 ℝ𝕠𝕦𝕝𝕖𝕥𝕥𝕖 𐙚 ˎˊ˗')
+      .setColor(won ? COLOR.WIN : COLOR.LOSS)
+      .setTitle('˗ˏˋ 🎡 Roulette ˎˊ˗')
       .setDescription(
-        [
-          '꒰ঌ spinning the heavenly wheel ໒꒱',
-          '',
-          resultBlock,
-          '',
-          `💰 **New Balance:** ${userData.balance} coins`
-        ].join('\n')
+        `${statusLine}\n\n` +
+        `꒰ Bet: \`${bet.toLocaleString()}\` on \`${betLabel}\` ꒱\n` +
+        `꒰ Balance: \`${(userData.balance || 0).toLocaleString()}\` ꒱`
       )
-      .setColor('#F5E6FF')
-      .setFooter({ text: 'System • Angelic Casino ✧' })
+      .setFooter({ text: 'System • Roulette  |  RTP ~97%' })
       .setTimestamp();
 
-    message.channel.send({ embeds: [embed] });
-  }
+    await message.channel.send({ embeds: [embed] });
+
+    if (client && won) {
+      announceWin(client, {
+        userId: message.author.id,
+        username: message.author.username,
+        avatarURL: message.author.displayAvatarURL({ dynamic: true }),
+        game: 'roulette',
+        bet,
+        payout,
+        multiplier: finalMulti,
+        detail: `bet ${betLabel}, landed ${result.num} ${COLOR_LABEL[result.color]}`,
+      }).catch(() => {});
+    }
+  },
 };
