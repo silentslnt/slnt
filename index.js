@@ -559,12 +559,18 @@ client.on('interactionCreate', async (interaction) => {
     const embedColor = cfg.color ? parseInt(cfg.color.replace('#', ''), 16) : 0xFFD700;
     const STARS = '<:Golden_Star:1481125751758520373>'.repeat(5);
 
-    const fields = [
-      { name: '<a:Bshop:1388792189970284564>  Received', value: item, inline: true },
-      { name: '🧾  Buyer', value: `<@${interaction.user.id}>`, inline: true },
-    ];
+    let fields;
     if (taggedUser) {
-      fields.push({ name: '✦  Seller', value: `<@${taggedUser.id}>`, inline: false });
+      fields = [
+        { name: '🌟  Vouched by',   value: `<@${interaction.user.id}>`,  inline: true },
+        { name: '✦  Vouching for',  value: `<@${taggedUser.id}>`,         inline: true },
+        { name: '<a:Bshop:1388792189970284564>  Received', value: item,   inline: false },
+      ];
+    } else {
+      fields = [
+        { name: '🌟  Vouched by',   value: `<@${interaction.user.id}>`,  inline: false },
+        { name: '<a:Bshop:1388792189970284564>  Received', value: item,   inline: false },
+      ];
     }
 
     const embed = new EmbedBuilder()
