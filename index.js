@@ -20,6 +20,14 @@ function saveVouchConfig(c) {
   try { fs.writeFileSync(VOUCH_CONFIG_FILE, JSON.stringify(c, null, 2)); } catch(e) {}
 }
 const PENDING_VOUCHES = new Map();
+const PENDING_SETUP   = new Map();
+const VOUCH_DEFAULTS = {
+  stars:            '<:Golden_Star:1481125751758520373>'.repeat(5),
+  vouchedByLabel:   '🌟  Vouched by',
+  vouchingForLabel: '✦  Vouching for',
+  receivedLabel:    '<:Zsword:1466872460338008064>  Received',
+  color:            '#FFD700',
+};
 
 // Start Express server to keep bot awake
 const app = express();
@@ -157,16 +165,11 @@ client.once('clientReady', async () => {
         .setDescription('Configure bot settings')
         .addSubcommand(sub =>
           sub.setName('vouch')
-            .setDescription('Set the channel and color for vouches')
+            .setDescription('Set the vouch channel + configure embed appearance')
             .addChannelOption(opt =>
               opt.setName('channel')
                 .setDescription('Channel to post vouches in')
                 .setRequired(true)
-            )
-            .addStringOption(opt =>
-              opt.setName('color')
-                .setDescription('Embed color as hex, e.g. #FFD700 (optional)')
-                .setRequired(false)
             )
         )
         .toJSON(),
@@ -487,25 +490,96 @@ client.on('messageCreate', async (message) => {
 // ===== SLASH COMMAND INTERACTIONS =====
 client.on('interactionCreate', async (interaction) => {
 
-  // /setup vouch — admin only
+  // /setup vouch — admin: pick channel then appearance modal
   if (interaction.isChatInputCommand() && interaction.commandName === 'setup') {
     const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.ManageGuild);
     if (!isAdmin) return interaction.reply({ content: '❌ You need Manage Server permission.', ephemeral: true });
     if (interaction.options.getSubcommand() === 'vouch') {
-      const ch    = interaction.options.getChannel('channel');
-      const color = interaction.options.getString('color');
-      const cfg   = loadVouchConfig();
-      cfg.channelId = ch.id;
-      if (color) {
-        const hex = color.trim().replace(/^#/, '');
-        if (/^[0-9a-fA-F]{6}$/.test(hex)) cfg.color = `#${hex}`;
-        else return interaction.reply({ content: '❌ Invalid color — use a 6-digit hex like `#FFD700`', ephemeral: true });
-      }
-      saveVouchConfig(cfg);
-      const colorLine = cfg.color ? `\n🎨 Color: \`${cfg.color}\`` : '';
-      return interaction.reply({ content: `✅ Vouch channel set to <#${ch.id}>${colorLine}`, ephemeral: true });
+      const ch  = interaction.options.getChannel('channel');
+      const cfg = loadVouchConfig();
+      PENDING_SETUP.set(interaction.user.id, ch.id);
+
+      const modal = new ModalBuilder()
+        .setCustomId('setup_vouch_modal')
+        .setTitle('⚙️ Vouch Embed Appearance');
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('sv_stars')
+            .setLabel('Stars emoji (shown in embed title)')
+            .setStyle(TextInputStyle.Short)
+            .setValue(cfg.stars || VOUCH_DEFAULTS.stars)
+            .setRequired(true)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('sv_vouched_by')
+            .setLabel('"Vouched by" field label')
+            .setStyle(TextInputStyle.Short)
+            .setValue(cfg.vouchedByLabel || VOUCH_DEFAULTS.vouchedByLabel)
+            .setRequired(true)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('sv_vouching_for')
+            .setLabel('"Vouching for" field label')
+            .setStyle(TextInputStyle.Short)
+            .setValue(cfg.vouchingForLabel || VOUCH_DEFAULTS.vouchingForLabel)
+            .setRequired(true)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('sv_received')
+            .setLabel('"Received" field label')
+            .setStyle(TextInputStyle.Short)
+            .setValue(cfg.receivedLabel || VOUCH_DEFAULTS.receivedLabel)
+            .setRequired(true)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('sv_color')
+            .setLabel('Embed color (hex, e.g. #FFD700)')
+            .setStyle(TextInputStyle.Short)
+            .setValue(cfg.color || VOUCH_DEFAULTS.color)
+            .setRequired(true)
+        )
+      );
+      return interaction.showModal(modal);
     }
     return interaction.reply({ content: '❌ Unknown subcommand.', ephemeral: true });
+  }
+
+  // setup vouch modal submit
+  if (interaction.isModalSubmit() && interaction.customId === 'setup_vouch_modal') {
+    const channelId = PENDING_SETUP.get(interaction.user.id);
+    PENDING_SETUP.delete(interaction.user.id);
+    if (!channelId) return interaction.reply({ content: '❌ Setup expired — run `/setup vouch` again.', ephemeral: true });
+
+    const colorRaw = interaction.fields.getTextInputValue('sv_color').trim();
+    const hex = colorRaw.replace(/^#/, '');
+    if (!/^[0-9a-fA-F]{6}$/.test(hex)) {
+      return interaction.reply({ content: '❌ Invalid color — use a 6-digit hex like `#FFD700`', ephemeral: true });
+    }
+
+    const cfg = loadVouchConfig();
+    cfg.channelId      = channelId;
+    cfg.color          = `#${hex}`;
+    cfg.stars          = interaction.fields.getTextInputValue('sv_stars').trim();
+    cfg.vouchedByLabel = interaction.fields.getTextInputValue('sv_vouched_by').trim();
+    cfg.vouchingForLabel = interaction.fields.getTextInputValue('sv_vouching_for').trim();
+    cfg.receivedLabel  = interaction.fields.getTextInputValue('sv_received').trim();
+    saveVouchConfig(cfg);
+
+    return interaction.reply({
+      content: [
+        `✅ Vouch setup saved!`,
+        `📢 Channel: <#${channelId}>`,
+        `🎨 Color: \`${cfg.color}\``,
+        `⭐ Stars: ${cfg.stars}`,
+        `🏷️ Labels: \`${cfg.vouchedByLabel}\` · \`${cfg.vouchingForLabel}\` · \`${cfg.receivedLabel}\``,
+      ].join('\n'),
+      ephemeral: true,
+    });
   }
 
   // /vouch — anyone, store options then show modal
@@ -546,8 +620,8 @@ client.on('interactionCreate', async (interaction) => {
   // vouch modal submit
   if (interaction.isModalSubmit() && interaction.customId === 'vouch_modal') {
     await interaction.deferReply({ ephemeral: true });
-    const item   = interaction.fields.getTextInputValue('vouch_item');
-    const review = interaction.fields.getTextInputValue('vouch_review');
+    const item    = interaction.fields.getTextInputValue('vouch_item');
+    const review  = interaction.fields.getTextInputValue('vouch_review');
     const pending = PENDING_VOUCHES.get(interaction.user.id) || {};
     PENDING_VOUCHES.delete(interaction.user.id);
     const { taggedUser, imageUrl } = pending;
@@ -556,20 +630,24 @@ client.on('interactionCreate', async (interaction) => {
     if (!cfg.channelId) {
       return interaction.editReply({ content: '❌ Vouch channel not set — ask an admin to run `/setup vouch #channel`.' });
     }
-    const embedColor = cfg.color ? parseInt(cfg.color.replace('#', ''), 16) : 0xFFD700;
-    const STARS = '<:Golden_Star:1481125751758520373>'.repeat(5);
+
+    const embedColor       = cfg.color          ? parseInt(cfg.color.replace('#', ''), 16) : 0xFFD700;
+    const STARS            = cfg.stars           || VOUCH_DEFAULTS.stars;
+    const LBL_VOUCHED_BY   = cfg.vouchedByLabel  || VOUCH_DEFAULTS.vouchedByLabel;
+    const LBL_VOUCHING_FOR = cfg.vouchingForLabel|| VOUCH_DEFAULTS.vouchingForLabel;
+    const LBL_RECEIVED     = cfg.receivedLabel   || VOUCH_DEFAULTS.receivedLabel;
 
     let fields;
     if (taggedUser) {
       fields = [
-        { name: '🌟  Vouched by',   value: `<@${interaction.user.id}>`,  inline: true },
-        { name: '✦  Vouching for',  value: `<@${taggedUser.id}>`,         inline: true },
-        { name: '<a:Bshop:1388792189970284564>  Received', value: item,   inline: false },
+        { name: LBL_VOUCHED_BY,   value: `<@${interaction.user.id}>`, inline: true },
+        { name: LBL_VOUCHING_FOR, value: `<@${taggedUser.id}>`,        inline: true },
+        { name: LBL_RECEIVED,     value: item,                         inline: false },
       ];
     } else {
       fields = [
-        { name: '🌟  Vouched by',   value: `<@${interaction.user.id}>`,  inline: false },
-        { name: '<a:Bshop:1388792189970284564>  Received', value: item,   inline: false },
+        { name: LBL_VOUCHED_BY, value: `<@${interaction.user.id}>`, inline: false },
+        { name: LBL_RECEIVED,   value: item,                         inline: false },
       ];
     }
 
@@ -588,8 +666,9 @@ client.on('interactionCreate', async (interaction) => {
     if (imageUrl) embed.setImage(imageUrl);
 
     try {
-      const ch = await interaction.guild.channels.fetch(cfg.channelId);
-      await ch.send({ embeds: [embed] });
+      const ch   = await interaction.guild.channels.fetch(cfg.channelId);
+      const ping = taggedUser ? `<@${taggedUser.id}>` : undefined;
+      await ch.send({ content: ping, embeds: [embed] });
       return interaction.editReply({ content: '✅ Your vouch has been posted — thank you!' });
     } catch(e) {
       console.error('Vouch post error:', e.message);
