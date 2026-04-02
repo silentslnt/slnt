@@ -22,7 +22,7 @@ function saveVouchConfig(c) {
 const PENDING_VOUCHES = new Map();
 const PENDING_SETUP   = new Map();
 const VOUCH_DEFAULTS = {
-  stars:            '<:Golden_Star:1481125751758520373>'.repeat(5),
+  title:            '<:Golden_Star:1481125751758520373>'.repeat(5) + '  Verified Purchase',
   vouchedByLabel:   '🌟  Vouched by',
   vouchingForLabel: '✦  Vouching for',
   receivedLabel:    '<:Zsword:1466872460338008064>  Received',
@@ -508,10 +508,11 @@ client.on('interactionCreate', async (interaction) => {
       modal.addComponents(
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
-            .setCustomId('sv_stars')
-            .setLabel('Stars emoji (shown in embed title)')
+            .setCustomId('sv_title')
+            .setLabel('Embed title (emojis + text, full control)')
             .setStyle(TextInputStyle.Short)
-            .setValue(cfg.stars || VOUCH_DEFAULTS.stars)
+            .setValue(cfg.title || VOUCH_DEFAULTS.title)
+            .setMaxLength(256)
             .setRequired(true)
         ),
         new ActionRowBuilder().addComponents(
@@ -567,7 +568,7 @@ client.on('interactionCreate', async (interaction) => {
     const cfg = loadVouchConfig();
     cfg.channelId      = channelId;
     cfg.color          = `#${hex}`;
-    cfg.stars          = interaction.fields.getTextInputValue('sv_stars').trim();
+    cfg.title          = interaction.fields.getTextInputValue('sv_title').trim();
     cfg.vouchedByLabel = interaction.fields.getTextInputValue('sv_vouched_by').trim();
     cfg.vouchingForLabel = interaction.fields.getTextInputValue('sv_vouching_for').trim();
     cfg.receivedLabel  = interaction.fields.getTextInputValue('sv_received').trim();
@@ -578,7 +579,8 @@ client.on('interactionCreate', async (interaction) => {
         `✅ Vouch setup saved!`,
         `📢 Channel: <#${channelId}>`,
         `🎨 Color: \`${cfg.color}\``,
-        `⭐ Stars: ${cfg.stars}`,
+        `📝 Title: ${cfg.title}`,
+        `💡 Tip: type \\:emojiname: in any channel to get the \`<:name:id>\` code you can paste here.`,
         `🏷️ Labels: \`${cfg.vouchedByLabel}\` · \`${cfg.vouchingForLabel}\` · \`${cfg.receivedLabel}\``,
       ].join('\n'),
       ephemeral: true,
@@ -635,7 +637,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     const embedColor       = cfg.color          ? parseInt(cfg.color.replace('#', ''), 16) : 0xFFD700;
-    const STARS            = cfg.stars           || VOUCH_DEFAULTS.stars;
+    const EMBED_TITLE      = cfg.title           || VOUCH_DEFAULTS.title;
     const LBL_VOUCHED_BY   = cfg.vouchedByLabel  || VOUCH_DEFAULTS.vouchedByLabel;
     const LBL_VOUCHING_FOR = cfg.vouchingForLabel|| VOUCH_DEFAULTS.vouchingForLabel;
     const LBL_RECEIVED     = cfg.receivedLabel   || VOUCH_DEFAULTS.receivedLabel;
@@ -660,7 +662,7 @@ client.on('interactionCreate', async (interaction) => {
         name: `${interaction.user.username} left a vouch`,
         iconURL: interaction.user.displayAvatarURL({ dynamic: true }),
       })
-      .setTitle(`${STARS}  Verified Purchase`)
+      .setTitle(EMBED_TITLE)
       .setDescription(`*"${review}"*`)
       .addFields(...fields)
       .setFooter({ text: 'Silv Market · silvmarket.shop', iconURL: 'https://silvmarket.shop/images/logo.png' })
