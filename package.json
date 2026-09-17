@@ -14,9 +14,9 @@
   "dependencies": {
     "discord.js": "^14.25.1",
     "dotenv": "^17.2.3",
-    "express": "^4.22.1",
     "mongodb": "^7.0.0",
-    "mongoose": "^9.0.1"
+    "mongoose": "^9.0.1",
+    "pg": "^8.13.3"
   },
   "repository": {
     "type": "git",

@@ -1,75 +1,197 @@
+// commands/slots.js
 const { EmbedBuilder } = require('discord.js');
+const mongoose = require('mongoose');
+const { COLOR, XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
+const { requireAdmin } = require('../utils/permissions');
+const { parseBet } = require('../utils/parseBet');
+const { getMultiplier, getLuckBonus } = require('../utils/essences');
+const { addXP } = require('../utils/xp');
+const { trackStat, checkAchievements } = require('../utils/achievements');
+const { awardPoints } = require('../utils/sentinelDb');
+
+// ── Jackpot state (persisted per guild in MongoDB meta collection) ────────────
+const metaSchema = new mongoose.Schema({ key: { type: String, unique: true }, value: mongoose.Schema.Types.Mixed });
+const Meta = mongoose.models.Meta || mongoose.model('Meta', metaSchema);
+
+async function getJackpot() {
+  const doc = await Meta.findOne({ key: 'slots_jackpot' });
+  return doc?.value || 5_000;
+}
+async function addToJackpot(amount) {
+  await Meta.findOneAndUpdate({ key: 'slots_jackpot' }, { $inc: { value: amount } }, { upsert: true });
+}
+async function resetJackpot() {
+  await Meta.findOneAndUpdate({ key: 'slots_jackpot' }, { $set: { value: 5_000 } }, { upsert: true });
+}
+
+// ── Reel symbols with weights ─────────────────────────────────────────────────
+const SYMBOLS = [
+  { s: '💎', weight: 1,  mult: 50  },
+  { s: '⭐', weight: 2,  mult: 25  },
+  { s: '🌙', weight: 4,  mult: 12  },
+  { s: '🔑', weight: 6,  mult: 8   },
+  { s: '💰', weight: 10, mult: 4   },
+  { s: '🌸', weight: 15, mult: 2.5 },
+  { s: '🎮', weight: 20, mult: 2   },
+  { s: '✨', weight: 25, mult: 1.5 },
+];
+const TOTAL_WEIGHT = SYMBOLS.reduce((t, s) => t + s.weight, 0);
+
+function spinReel(luckBonus = 0) {
+  // Luck slightly boosts high-value symbols by reducing effective weight of lowest 3
+  const adjusted = SYMBOLS.map((sym, i) => ({
+    ...sym,
+    weight: i < 3 ? sym.weight * (1 + luckBonus * 3) : sym.weight,
+  }));
+  const total = adjusted.reduce((t, s) => t + s.weight, 0);
+  let r = Math.random() * total;
+  for (const sym of adjusted) {
+    r -= sym.weight;
+    if (r <= 0) return sym;
+  }
+  return adjusted[adjusted.length - 1];
+}
+
+const SPIN_FRAMES = [
+  '🎰 | ❓ ❓ ❓ |',
+  '🎰 | 🌀 ❓ ❓ |',
+  '🎰 | 🌀 🌀 ❓ |',
+];
 
 module.exports = {
   name: 'slots',
-  description: 'Simple slots game',
+  aliases: ['sl', 's'],
+  adminOnly: true,
+  description: 'Spin the slots. `.sl <amount|all|max>`',
+
   async execute({ message, args, userData, saveUserData }) {
-    const betAmount = parseInt(args[0]);
-    if (!betAmount || isNaN(betAmount) || betAmount <= 0) {
-      return message.channel.send('Please enter a valid positive bet amount. Usage: `.slots <amount>`');
+    if (!await requireAdmin(message)) return;
+
+    const bet = parseBet(args[0], userData.balance || 0);
+    if (!bet) {
+      return message.channel.send({
+        embeds: [new EmbedBuilder().setColor(COLOR.DEFAULT)
+          .setTitle('˗ˏˋ 𐙚 🎰 𝕊𝕝𝕠𝕥𝕤 𐙚 ˎˊ˗')
+          .setDescription(
+            '꒰ঌ Usage ໒꒱\n\n' +
+            '`.sl <amount|all|max>`\n\n' +
+            '**Symbols:**\n' +
+            SYMBOLS.map(s => `${s.s} — **${s.mult}×**`).join('  |  ')
+          )
+          .setFooter({ text: 'System • Slots' })],
+      });
     }
 
-    if (typeof userData.balance !== 'number') userData.balance = 0;
+    if ((userData.balance || 0) < bet) return message.channel.send('❌ Insufficient balance.');
 
-    if (userData.balance < betAmount) {
-      return message.channel.send('You do not have enough balance to bet this amount.');
+    const jackpot    = await getJackpot();
+    const luckBonus  = getLuckBonus(userData);
+    const frenzyMult = getMultiplier(userData, 'frenzy');
+    const coinMult   = getMultiplier(userData, 'coins');
+
+    // ── 5% of bet goes to jackpot ─────────────────────────────────────────
+    const jackpotContrib = Math.floor(bet * 0.05);
+    await addToJackpot(jackpotContrib);
+
+    // ── Spin animation ────────────────────────────────────────────────────
+    const spinMsg = await message.channel.send({
+      embeds: [new EmbedBuilder().setColor(COLOR.DEFAULT)
+        .setTitle('˗ˏˋ 𐙚 🎰 𝕊𝕝𝕠𝕥𝕤 𐙚 ˎˊ˗')
+        .setDescription(`**${SPIN_FRAMES[0]}**\n\n🏆 Jackpot: **${(jackpot + jackpotContrib).toLocaleString()}** coins`)
+        .setFooter({ text: 'System • Slots' })],
+    });
+
+    for (let i = 1; i < SPIN_FRAMES.length; i++) {
+      await new Promise(r => setTimeout(r, 400));
+      await spinMsg.edit({
+        embeds: [new EmbedBuilder().setColor(COLOR.DEFAULT)
+          .setTitle('˗ˏˋ 𐙚 🎰 𝕊𝕝𝕠𝕥𝕤 𐙚 ˎˊ˗')
+          .setDescription(`**${SPIN_FRAMES[i]}**\n\n🏆 Jackpot: **${(jackpot + jackpotContrib).toLocaleString()}** coins`)
+          .setFooter({ text: 'System • Slots' })],
+      });
     }
 
-    // Deduct bet amount first
-    userData.balance -= betAmount;
+    // ── Spin reels ────────────────────────────────────────────────────────
+    const reels  = [spinReel(luckBonus), spinReel(luckBonus), spinReel(luckBonus)];
+    const row    = reels.map(r => r.s).join(' ');
 
-    // Slots emojis
-    const emojis = ['🍒', '🍋', '🍊', '🍉', '🍇', '⭐', '7️⃣'];
+    userData.balance = (userData.balance || 0) - bet;
 
-    // Spin result
-    const spin = [
-      emojis[Math.floor(Math.random() * emojis.length)],
-      emojis[Math.floor(Math.random() * emojis.length)],
-      emojis[Math.floor(Math.random() * emojis.length)],
-    ];
+    let resultText = '';
+    let payout     = 0;
+    let color      = COLOR.LOSS;
+    let isJackpot  = false;
 
-    let winnings = 0;
-    let outcomeBlock =
-      '╭──────────────────────────────╮\n' +
-      `│  🎰 Spin: ${spin.join(' | ')}   │\n`;
+    const allMatch = reels[0].s === reels[1].s && reels[1].s === reels[2].s;
+    const twoMatch = !allMatch && (
+      reels[0].s === reels[1].s || reels[1].s === reels[2].s || reels[0].s === reels[2].s
+    );
 
-    if (spin[0] === spin[1] && spin[1] === spin[2]) {
-      winnings = betAmount * 10;
-      userData.balance += winnings;
-      outcomeBlock +=
-        '│  **✨ CELESTIAL JACKPOT ✨**  │\n' +
-        `│  Reward: **${winnings}** (10x) │\n`;
-    } else if (spin[0] === spin[1] || spin[1] === spin[2] || spin[0] === spin[2]) {
-      winnings = betAmount * 2;
-      userData.balance += winnings;
-      outcomeBlock +=
-        '│  **⭐ BLESSED DOUBLE ⭐**     │\n' +
-        `│  Reward: **${winnings}** (2x)  │\n`;
+    if (allMatch && reels[0].s === '💎') {
+      // Jackpot!
+      payout       = jackpot + jackpotContrib;
+      isJackpot    = true;
+      color        = COLOR.PRESTIGE;
+      resultText   = `🎊 **JACKPOT!** 💎💎💎 You won the **${payout.toLocaleString()}** coin jackpot!!`;
+      await resetJackpot();
+    } else if (allMatch) {
+      payout     = Math.floor(bet * reels[0].mult * frenzyMult * coinMult);
+      color      = COLOR.WIN;
+      resultText = `🎉 **TRIPLE ${reels[0].s}!** You win **${payout.toLocaleString()}** coins! (${reels[0].mult}× → ${frenzyMult > 1 ? frenzyMult + '× Frenzy' : 'base'})`;
+    } else if (twoMatch) {
+      const matchSym = reels[0].s === reels[1].s ? reels[0] : reels[1].s === reels[2].s ? reels[1] : reels[0];
+      const twoMult  = matchSym.mult * 0.5;
+      payout         = Math.floor(bet * twoMult * frenzyMult * coinMult);
+      color          = '#E0C97B';
+      resultText     = `✨ **Double ${matchSym.s}!** You win **${payout.toLocaleString()}** coins! (${twoMult.toFixed(1)}×)`;
     } else {
-      outcomeBlock +=
-        '│  **💔 FALLEN BET – YOU LOSE**│\n';
+      resultText = `😔 No match. Better luck next time! \`${row}\``;
     }
 
-    outcomeBlock += '╰──────────────────────────────╯';
+    if (payout > 0) {
+      userData.balance += payout;
+      userData.totalEarned = (userData.totalEarned || 0) + payout;
+    }
 
-    // Persist to MongoDB – one argument, wrapper adds userId
-    await saveUserData({ balance: userData.balance });
+    await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned });
+    await addXP(message.author.id, payout > 0 ? XP_PER_WIN : XP_PER_GAME, userData, saveUserData, message);
+    if (payout > 0 && message.guild) {
+      const pts = isJackpot ? 100 : Math.min(50, Math.max(5, Math.floor(payout / 500)));
+      await awardPoints(message.guild.id, message.author.id, pts);
+    }
+
+    userData.stats = userData.stats || {};
+    userData.stats.gamesPlayed = (userData.stats.gamesPlayed || 0) + 1;
+    if (payout > 0) {
+      userData.stats.gamesWon = (userData.stats.gamesWon || 0) + 1;
+      userData.stats.coinsWon = (userData.stats.coinsWon || 0) + payout;
+    }
+    await saveUserData({ stats: userData.stats });
+    await checkAchievements(userData, { message, saveUserData });
+
+    const newJackpot = isJackpot ? 5_000 : jackpot + jackpotContrib;
 
     const embed = new EmbedBuilder()
-      .setTitle('˗ˏˋ 𐙚 🎰 𝔠𝔢𝔩𝔢𝔰𝔱𝔦𝔞𝔩 𝔖𝔩𝔬𝔱𝔰 𐙚 ˎˊ˗')
+      .setTitle(`˗ˏˋ 𐙚 🎰 𝕊𝕝𝕠𝕥𝕤 ${isJackpot ? '— 🎊 JACKPOT 🎊' : 'ℝ𝕖𝕤𝕦𝕝𝕥'} 𐙚 ˎˊ˗`)
+      .setColor(color)
       .setDescription(
-        [
-          '꒰ঌ the reels spin in the starlight ໒꒱',
-          '',
-          outcomeBlock,
-          '',
-          `💰 **New Balance:** ${userData.balance} coins`,
-        ].join('\n')
+        `**🎰 | ${row} |**\n\n` + resultText
       )
-      .setColor('#F5E6FF')
-      .setTimestamp()
-      .setFooter({ text: 'System • Angelic Casino ✧' });
+      .addFields(
+        { name: '💰 Bet',        value: bet.toLocaleString(),              inline: true },
+        { name: payout > 0 ? '🎉 Won' : '😔 Lost', value: payout > 0 ? `+${payout.toLocaleString()}` : `-${bet.toLocaleString()}`, inline: true },
+        { name: '💼 Balance',    value: userData.balance.toLocaleString(), inline: true },
+        { name: '🏆 Next Jackpot', value: `${newJackpot.toLocaleString()} coins`, inline: true },
+      )
+      .setFooter({
+        text: [
+          `🎰 5% of every bet feeds the jackpot`,
+          frenzyMult > 1 ? `🎮 ${frenzyMult}× Frenzy active` : '',
+          'System • Slots',
+        ].filter(Boolean).join(' • '),
+      })
+      .setTimestamp();
 
-    message.channel.send({ embeds: [embed] });
+    await spinMsg.edit({ embeds: [embed] });
   },
 };

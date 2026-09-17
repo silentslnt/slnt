@@ -1,131 +1,120 @@
+// commands/blackjack.js
 const { EmbedBuilder } = require('discord.js');
+const { COLOR, XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
+const { requireAdmin } = require('../utils/permissions');
+const { parseBet } = require('../utils/parseBet');
+const { getMultiplier, getLuckBonus, getActiveEssenceSummary } = require('../utils/essences');
+const { addXP } = require('../utils/xp');
+const { trackStat, checkAchievements } = require('../utils/achievements');
+const { awardPoints } = require('../utils/sentinelDb');
 
-// Track active games per user
 const activeGames = new Set();
 
 function getCard() {
-  const values = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11];
-  const suits = ['♠️', '♥️', '♦️', '♣️'];
-  const val = values[Math.floor(Math.random() * values.length)];
-  const suit = suits[Math.floor(Math.random() * suits.length)];
-  const valDisplay =
-    val === 11
-      ? 'A'
-      : val === 10
-      ? ['10', 'J', 'Q', 'K'][Math.floor(Math.random() * 4)]
-      : val;
-  return { val, display: `${valDisplay}${suit}` };
+  const values = [2,3,4,5,6,7,8,9,10,10,10,10,11];
+  const suits  = ['♠️','♥️','♦️','♣️'];
+  const val    = values[Math.floor(Math.random() * values.length)];
+  const suit   = suits[Math.floor(Math.random() * suits.length)];
+  const disp   = val === 11 ? 'A' : val === 10 ? ['10','J','Q','K'][Math.floor(Math.random()*4)] : String(val);
+  return { val, display: `${disp}${suit}` };
 }
 
 function handValue(hand) {
-  let sum = hand.reduce((t, c) => t + c.val, 0);
+  let sum  = hand.reduce((t, c) => t + c.val, 0);
   let aces = hand.filter(c => c.val === 11).length;
-  while (sum > 21 && aces > 0) {
-    sum -= 10;
-    aces--;
-  }
+  while (sum > 21 && aces-- > 0) sum -= 10;
   return sum;
 }
 
 module.exports = {
   name: 'blackjack',
-  description: 'Play blackjack and win double your bet!',
+  aliases: ['bj'],
+  adminOnly: true,
+  description: 'Play blackjack. `.bj <amount|all>`',
+
   async execute({ message, args, userData, saveUserData }) {
-    const bet = parseInt(args[0]);
+    if (!await requireAdmin(message)) return;
+
+    const bet = parseBet(args[0], userData.balance || 0);
     const userId = message.author.id;
 
-    if (activeGames.has(userId)) {
-      return message.channel.send('❌ You already have an active blackjack game! Finish it first.');
-    }
+    if (!bet) return message.channel.send('Usage: `.bj <amount|all>`');
+    if (activeGames.has(userId)) return message.channel.send('❌ You already have an active blackjack game!');
+    if ((userData.balance || 0) < bet) return message.channel.send('❌ Insufficient balance.');
 
-    if (!bet || isNaN(bet) || bet <= 0) {
-      return message.channel.send('Usage: `.blackjack <amount>`');
-    }
-
-    if (typeof userData.balance !== 'number') userData.balance = 0;
-
-    if (userData.balance < bet) {
-      return message.channel.send('Insufficient balance.');
-    }
+    // Check insurance slip
+    const hasInsurance = (userData.inventory?.['Insurance Slip'] || 0) > 0;
 
     activeGames.add(userId);
-
     userData.balance -= bet;
     await saveUserData({ balance: userData.balance });
 
     let playerHand = [getCard(), getCard()];
     let dealerHand = [getCard(), getCard()];
-    let gameOver = false;
+    let gameOver   = false;
+    let naturalBJ  = false;
 
-    function createEmbed(desc = '') {
-      return new EmbedBuilder()
+    // Check natural 21
+    if (handValue(playerHand) === 21) naturalBJ = true;
+
+    const luckBonus   = getLuckBonus(userData);
+    const frenzyMult  = getMultiplier(userData, 'frenzy');
+    const coinMult    = getMultiplier(userData, 'coins');
+    const activeEss   = getActiveEssenceSummary(userData);
+
+    function buildEmbed(desc) {
+      const e = new EmbedBuilder()
         .setTitle('˗ˏˋ 𐙚 🃏 𝔅𝔩𝔞𝔠𝔨𝔧𝔞𝔠𝔨 🃏 𐙚 ˎˊ˗')
+        .setColor(COLOR.DEFAULT)
         .addFields(
-          {
-            name: '꒰ঌ Your Hand ໒꒱',
-            value: playerHand.map(c => c.display).join(' '),
-            inline: true
-          },
-          {
-            name: '꒰ঌ Dealer Hand ໒꒱',
-            value: `${dealerHand[0].display} 🂠`,
-            inline: true
-          },
-          {
-            name: '⭐ Your Value',
-            value: handValue(playerHand).toString(),
-            inline: false
-          }
+          { name: '꒰ঌ Your Hand ໒꒱',   value: playerHand.map(c=>c.display).join(' '), inline: true },
+          { name: '꒰ঌ Dealer Hand ໒꒱',  value: `${dealerHand[0].display} 🂠`,          inline: true },
+          { name: '⭐ Your Value',        value: String(handValue(playerHand)),          inline: false },
         )
-        .setDescription(
-          desc ||
-          'React ✅ to **Hit** or ⏹️ to **Stand**.\n\n꒰ঌ Try to reach **21** without busting ໒꒱'
-        )
-        .setColor('#F5E6FF')
+        .setDescription(desc || 'React ✅ **Hit** · ⏹️ **Stand**' + (hasInsurance ? '\n🛡️ *Insurance Slip ready*' : ''))
         .setTimestamp()
-        .setFooter({ text: 'System • Blackjack Table' });
+        .setFooter({ text: 'System • Blackjack' + (activeEss ? ' • Essences active' : '') });
+      return e;
     }
 
-    const gameEmbed = createEmbed();
-    const statusMsg = await message.channel.send({ embeds: [gameEmbed] });
+    const msg = await message.channel.send({ embeds: [buildEmbed()] });
+    await msg.react('✅');
+    await msg.react('⏹️');
 
-    await statusMsg.react('✅');
-    await statusMsg.react('⏹️');
-
-    const filter = (reaction, user) =>
-      ['✅', '⏹️'].includes(reaction.emoji.name) && user.id === userId;
-
-    const collector = statusMsg.createReactionCollector({ filter, time: 60000 });
+    const filter = (r, u) => ['✅','⏹️'].includes(r.emoji.name) && u.id === userId;
+    const collector = msg.createReactionCollector({ filter, time: 60000 });
 
     collector.on('collect', async (reaction, user) => {
       if (gameOver) return;
-
       await reaction.users.remove(user.id).catch(() => {});
 
       if (reaction.emoji.name === '✅') {
         playerHand.push(getCard());
-        const pVal = handValue(playerHand);
+        const pv = handValue(playerHand);
+        if (pv > 21) {
+          gameOver = true;
+          collector.stop();
 
-        if (pVal > 21) {
+          // Insurance slip negates the loss
+          if (hasInsurance) {
+            userData.inventory['Insurance Slip']--;
+            if (userData.inventory['Insurance Slip'] <= 0) delete userData.inventory['Insurance Slip'];
+            userData.balance += bet;
+            await saveUserData({ balance: userData.balance, inventory: userData.inventory });
+            await msg.edit({ embeds: [buildEmbed('💥 Busted! 🛡️ **Insurance Slip** saved you — bet returned.')] });
+          } else {
+            await msg.edit({ embeds: [buildEmbed('💥 You busted! Dealer wins.')] });
+          }
+          await finalize(false, 0);
+        } else if (pv === 21) {
           gameOver = true;
           collector.stop();
-          const bustEmbed = createEmbed('💥 You busted! Dealer wins.');
-          bustEmbed.setColor('#FFB3C6');
-          await statusMsg.edit({ embeds: [bustEmbed] });
-          endGame();
-        } else if (pVal === 21) {
-          gameOver = true;
-          collector.stop();
-          await statusMsg.edit({
-            embeds: [createEmbed('🎯 **21!** Standing automatically...')]
-          });
+          await msg.edit({ embeds: [buildEmbed('🎯 **21!** Auto-standing...')] });
           await dealerTurn();
         } else {
-          await statusMsg.edit({
-            embeds: [createEmbed('✅ Hit registered! React again to draw another card.')]
-          });
+          await msg.edit({ embeds: [buildEmbed('✅ Hit! React again to draw or ⏹️ to stand.')] });
         }
-      } else if (reaction.emoji.name === '⏹️') {
+      } else {
         gameOver = true;
         collector.stop();
         await dealerTurn();
@@ -133,78 +122,90 @@ module.exports = {
     });
 
     collector.on('end', () => {
-      if (!gameOver) {
-        message.channel.send('⏱️ Game timed out.');
-        endGame();
-      }
+      if (!gameOver) { message.channel.send('⏱️ Blackjack timed out.'); finalize(false, 0); }
     });
 
     async function dealerTurn() {
-      while (handValue(dealerHand) < 17) {
-        dealerHand.push(getCard());
-      }
-
-      const pVal = handValue(playerHand);
-      const dVal = handValue(dealerHand);
+      while (handValue(dealerHand) < 17) dealerHand.push(getCard());
+      const pv = handValue(playerHand);
+      const dv = handValue(dealerHand);
 
       let result = '';
-      let color = '#FFFF00';
+      let color  = COLOR.DEFAULT;
+      let won    = false;
+      let payout = 0;
 
-      if (pVal > 21) {
-        result = '💥 You busted! Dealer wins.';
-        color = '#FFB3C6';
-      } else if (dVal > 21) {
-        userData.balance += bet * 2;
-        await saveUserData({ balance: userData.balance });
-        result = `🎉 Dealer busted! You win **${bet * 2}** coins!`;
-        color = '#C1FFD7';
-      } else if (pVal > dVal) {
-        userData.balance += bet * 2;
-        await saveUserData({ balance: userData.balance });
-        result = `🎉 You beat the dealer! You win **${bet * 2}** coins!`;
-        color = '#C1FFD7';
-      } else if (pVal === dVal) {
-        userData.balance += bet;
-        await saveUserData({ balance: userData.balance });
-        result = '🤝 Push! Your bet has been returned.';
-        color = '#F5E6FF';
+      if (pv > 21) {
+        result = '💥 You busted!';
+        color  = COLOR.LOSS;
+      } else if (dv > 21) {
+        payout = Math.floor(bet * 2 * frenzyMult * coinMult);
+        won    = true;
+        result = `🎉 Dealer busted! You win **${payout.toLocaleString()}** coins!`;
+        color  = COLOR.WIN;
+      } else if (naturalBJ && pv === 21) {
+        // Natural blackjack = 2.5x
+        payout = Math.floor(bet * 2.5 * frenzyMult * coinMult);
+        won    = true;
+        result = `♠ **Natural Blackjack!** You win **${payout.toLocaleString()}** coins!`;
+        color  = COLOR.PRESTIGE;
+      } else if (pv > dv) {
+        payout = Math.floor(bet * 2 * frenzyMult * coinMult);
+        won    = true;
+        result = `🎉 You beat the dealer! You win **${payout.toLocaleString()}** coins!`;
+        color  = COLOR.WIN;
+      } else if (pv === dv) {
+        payout = bet;
+        result = '🤝 Push! Bet returned.';
+        color  = COLOR.DEFAULT;
       } else {
         result = '😔 Dealer wins!';
-        color = '#FFB3C6';
+        color  = COLOR.LOSS;
+      }
+
+      if (won || pv === dv) {
+        userData.balance += payout;
+        await saveUserData({ balance: userData.balance });
+        if (won && message.guild) {
+          const pts = Math.min(40, Math.max(5, Math.floor(payout / 500)));
+          await awardPoints(message.guild.id, message.author.id, pts);
+        }
       }
 
       const finalEmbed = new EmbedBuilder()
-        .setTitle('˗ˏˋ 𐙚 🃏 𝔅𝔩𝔞𝔠𝔨𝔧𝔞𝔠𝔨 ℝ𝕖𝕤𝕦𝕝𝕥 🃏 𐙚 ˎˊ˗')
-        .addFields(
-          {
-            name: '꒰ঌ Your Hand ໒꒱',
-            value: playerHand.map(c => c.display).join(' '),
-            inline: true
-          },
-          {
-            name: '꒰ঌ Dealer Hand ໒꒱',
-            value: dealerHand.map(c => c.display).join(' '),
-            inline: true
-          },
-          { name: '⭐ Your Value', value: pVal.toString(), inline: true },
-          { name: '🂠 Dealer Value', value: dVal.toString(), inline: true },
-          {
-            name: '💰 New Balance',
-            value: userData.balance.toString(),
-            inline: false
-          }
-        )
-        .setDescription(result)
+        .setTitle('˗ˏˋ 𐙚 🃏 𝔅𝔩𝔞𝔠𝔨𝔧𝔞𝔠𝔨 ℝ𝕖𝕤𝕦𝕝𝕥 𐙚 ˎˊ˗')
         .setColor(color)
+        .setDescription(result)
+        .addFields(
+          { name: '꒰ঌ Your Hand ໒꒱',  value: playerHand.map(c=>c.display).join(' '), inline: true },
+          { name: '꒰ঌ Dealer Hand ໒꒱', value: dealerHand.map(c=>c.display).join(' '), inline: true },
+          { name: '⭐ Your Value',       value: String(pv), inline: true },
+          { name: '🂠 Dealer Value',     value: String(dv), inline: true },
+          { name: '💰 New Balance',      value: `**${userData.balance.toLocaleString()}** coins`, inline: false },
+        )
         .setTimestamp()
-        .setFooter({ text: 'System • Blackjack Table' });
+        .setFooter({ text: frenzyMult > 1 ? `🎮 ${frenzyMult}× Frenzy Essence active!` : 'System • Blackjack' });
 
       await message.channel.send({ embeds: [finalEmbed] });
-      endGame();
+      await finalize(won, payout);
     }
 
-    function endGame() {
+    async function finalize(won, payout) {
       activeGames.delete(userId);
+
+      // XP
+      await addXP(userId, won ? XP_PER_WIN : XP_PER_GAME, userData, saveUserData, message);
+
+      // Stats
+      userData.stats = userData.stats || {};
+      userData.stats.gamesPlayed = (userData.stats.gamesPlayed || 0) + 1;
+      if (won) {
+        userData.stats.gamesWon  = (userData.stats.gamesWon || 0) + 1;
+        userData.stats.coinsWon  = (userData.stats.coinsWon || 0) + payout;
+        if (naturalBJ) userData.stats.blackjack21 = (userData.stats.blackjack21 || 0) + 1;
+      }
+      await saveUserData({ stats: userData.stats });
+      await checkAchievements(userData, { message, saveUserData });
     }
   },
 };
