@@ -1,4 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
+const { awardPoints } = require('../utils/sentinelDb');
 
 module.exports = {
   name: 'dice',
@@ -62,6 +63,10 @@ module.exports = {
     }
 
     await saveUserData({ balance: userData.balance });
+    if (reward > 0 && message.guild) {
+      const pts = roll === 6 ? 20 : roll === 5 ? 12 : 8;
+      await awardPoints(message.guild.id, message.author.id, pts);
+    }
 
     const embed = new EmbedBuilder()
       .setTitle('˗ˏˋ 𐙚 🎲 𝔠𝔢𝔩𝔢𝔰𝔱𝔦𝔞𝔩 𝔇𝔦𝔠𝔢 𝕋𝕒𝕓𝕝𝕖 𐙚 ˎˊ˗')

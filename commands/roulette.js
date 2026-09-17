@@ -6,6 +6,7 @@ const { parseBet } = require('../utils/parseBet');
 const { getMultiplier, getLuckBonus } = require('../utils/essences');
 const { addXP } = require('../utils/xp');
 const { trackStat, checkAchievements } = require('../utils/achievements');
+const { awardPoints } = require('../utils/sentinelDb');
 const { randomFloat } = require('../utils/rng');
 const { announceWin } = require('../utils/winAnnouncer');
 
@@ -94,6 +95,10 @@ module.exports = {
     }
 
     await addXP(message.author.id, XP_PER_GAME + (won ? XP_PER_WIN : 0)).catch(() => {});
+    if (won && message.guild) {
+      const pts = betType === 'number' ? 50 : betType === 'green' ? 35 : Math.min(30, Math.max(5, Math.floor(profit / 500)));
+      await awardPoints(message.guild.id, message.author.id, pts);
+    }
     await trackStat(message.author.id, 'gamesPlayed', 1).catch(() => {});
     if (won) {
       await trackStat(message.author.id, 'gamesWon', 1).catch(() => {});

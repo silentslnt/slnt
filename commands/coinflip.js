@@ -1,72 +1,144 @@
+// commands/coinflip.js
 const { EmbedBuilder } = require('discord.js');
+const { COLOR, XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
+const { requireAdmin } = require('../utils/permissions');
+const { parseBet } = require('../utils/parseBet');
+const { getMultiplier, getLuckBonus } = require('../utils/essences');
+const { addXP } = require('../utils/xp');
+const { trackStat, checkAchievements } = require('../utils/achievements');
+const { awardPoints } = require('../utils/sentinelDb');
+
+const SPIN_FRAMES = ['🪙', '✨', '💫', '⭐', '🪙'];
 
 module.exports = {
-  name: 'cf',
-  description: 'Flip a coin and bet on heads(h) or tails(t).',
+  name: 'coinflip',
+  aliases: ['cf'],
+  adminOnly: true,
+  description: 'Flip a coin. `.cf <amount|all|max> <h|t>`',
+
   async execute({ message, args, userData, saveUserData }) {
-    if (args.length < 2) {
-      return message.channel.send('Usage: `.cf <amount> <h|t>`');
+    if (!await requireAdmin(message)) return;
+
+    const betArg  = args[0];
+    const sideArg = (args[1] || '').toLowerCase();
+    const bet     = parseBet(betArg, userData.balance || 0);
+
+    if (!bet || !['h', 't', 'heads', 'tails'].includes(sideArg)) {
+      return message.channel.send({
+        embeds: [new EmbedBuilder().setColor(COLOR.DEFAULT)
+          .setTitle('˗ˏˋ 𐙚 🪙 ℂ𝕠𝕚𝕟𝕗𝕝𝕚𝕡 𐙚 ˎˊ˗')
+          .setDescription(
+            '꒰ঌ Usage ໒꒱\n\n' +
+            '`.cf <amount|all|max> <h|t>`\n\n' +
+            '**Examples:**\n' +
+            '`.cf 500 h` — bet 500 on heads\n' +
+            '`.cf all t` — bet all on tails\n' +
+            '`.cf max h` — bet max on heads'
+          )
+          .setFooter({ text: 'System • Coinflip' })],
+      });
     }
 
-    const betAmount = parseInt(args[0]);
-    const guess = args[1].toLowerCase();
-
-    if (isNaN(betAmount) || betAmount <= 0) {
-      return message.channel.send('Please enter a valid positive amount to bet.');
+    if ((userData.balance || 0) < bet) {
+      return message.channel.send('❌ Insufficient balance.');
     }
 
-    if (guess !== 'h' && guess !== 't') {
-      return message.channel.send('You must bet on "h" (heads) or "t" (tails).');
+    const pickedHeads = sideArg.startsWith('h');
+    const luckBonus   = getLuckBonus(userData);
+    const frenzyMult  = getMultiplier(userData, 'frenzy');
+    const coinMult    = getMultiplier(userData, 'coins');
+
+    // Luck essence shifts win probability slightly
+    const winChance   = 0.5 + luckBonus;
+    const won         = Math.random() < winChance;
+    const landedHeads = won ? pickedHeads : !pickedHeads;
+    const result      = landedHeads ? 'Heads 🪙' : 'Tails 🌑';
+    const picked      = pickedHeads ? 'Heads 🪙' : 'Tails 🌑';
+
+    // Animation
+    const spinMsg = await message.channel.send({
+      embeds: [new EmbedBuilder().setColor(COLOR.DEFAULT)
+        .setTitle('˗ˏˋ 𐙚 🪙 Flipping... 𐙚 ˎˊ˗')
+        .setDescription(`${SPIN_FRAMES[0]} Spinning...`)
+        .setFooter({ text: 'System • Coinflip' })],
+    });
+    for (let i = 1; i < SPIN_FRAMES.length; i++) {
+      await new Promise(r => setTimeout(r, 300));
+      await spinMsg.edit({
+        embeds: [new EmbedBuilder().setColor(COLOR.DEFAULT)
+          .setTitle('˗ˏˋ 𐙚 🪙 Flipping... 𐙚 ˎˊ˗')
+          .setDescription(`${SPIN_FRAMES[i]} Spinning...`)
+          .setFooter({ text: 'System • Coinflip' })],
+      });
     }
 
-    if (typeof userData.balance !== 'number') userData.balance = 0;
+    // Calculate payout
+    let payout = 0;
+    userData.balance = (userData.balance || 0) - bet;
 
-    if (userData.balance < betAmount) {
-      return message.channel.send('You do not have enough balance to place that bet.');
+    if (won) {
+      payout           = Math.floor(bet * 2 * frenzyMult * coinMult);
+      userData.balance += payout;
+      userData.totalEarned = (userData.totalEarned || 0) + payout;
     }
 
-    // Deduct bet first
-    userData.balance -= betAmount;
-
-    const coinSides = ['h', 't'];
-    const result = coinSides[Math.floor(Math.random() * coinSides.length)];
-
-    let winnings = 0;
-    let block =
-      '╭──────────────────────────────╮\n' +
-      `│  🪙 Result: **${result === 'h' ? 'Heads' : 'Tails'}**      │\n`;
-
-    if (guess === result) {
-      winnings = betAmount * 2;
-      userData.balance += winnings;
-      block +=
-        '│  **✨ HEAVENLY FLIP – YOU WIN ✨** │\n' +
-        `│  Reward: **${winnings}** coins      │\n`;
+    // Streak tracking
+    userData.stats = userData.stats || {};
+    if (won) {
+      userData.stats.cfStreak = (userData.stats.cfStreak || 0) + 1;
     } else {
-      block +=
-        '│  **💔 FALLEN BET – YOU LOSE**       │\n';
+      userData.stats.cfStreak = 0;
     }
 
-    block += '╰──────────────────────────────╯';
+    const cfStreak = userData.stats.cfStreak;
+    let streakBonus = 0;
+    let streakNote  = '';
+    if (won && cfStreak > 0 && cfStreak % 5 === 0) {
+      streakBonus       = Math.floor(bet * 0.5);
+      userData.balance += streakBonus;
+      streakNote        = `\n🔥 **${cfStreak}-flip streak bonus:** +${streakBonus.toLocaleString()} coins!`;
+    }
+
+    await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned, stats: userData.stats });
+    await addXP(message.author.id, won ? XP_PER_WIN : XP_PER_GAME, userData, saveUserData, message);
+    if (won && message.guild) {
+      const pts = Math.min(30, Math.max(5, Math.floor(payout / 500)));
+      await awardPoints(message.guild.id, message.author.id, pts);
+    }
+
+    userData.stats.gamesPlayed = (userData.stats.gamesPlayed || 0) + 1;
+    if (won) {
+      userData.stats.gamesWon  = (userData.stats.gamesWon || 0) + 1;
+      userData.stats.coinsWon  = (userData.stats.coinsWon || 0) + payout;
+    }
+    await saveUserData({ stats: userData.stats });
+    await checkAchievements(userData, { message, saveUserData });
 
     const embed = new EmbedBuilder()
-      .setTitle('˗ˏˋ 𐙚 🪙 𝔠𝔢𝔩𝔢𝔰𝔱𝔦𝔞𝔩 𝔠𝔬𝔦𝔫 𝔉𝔩𝔦𝔭 𐙚 ˎˊ˗')
-      .setDescription(
-        [
-          `${message.author} cast a coin into the heavens.`,
-          '',
-          block,
-          '',
-          `💰 **New Balance:** ${userData.balance} coins`,
-        ].join('\n')
+      .setTitle('˗ˏˋ 𐙚 🪙 ℂ𝕠𝕚𝕟𝕗𝕝𝕚𝕡 ℝ𝕖𝕤𝕦𝕝𝕥 𐙚 ˎˊ˗')
+      .setColor(won ? COLOR.WIN : COLOR.LOSS)
+      .addFields(
+        { name: '🪙 Result',        value: result,                                   inline: true },
+        { name: '🎯 You Picked',    value: picked,                                   inline: true },
+        { name: '💰 Bet',           value: bet.toLocaleString(),                     inline: true },
+        { name: won ? '🎉 Won' : '😔 Lost', value: won ? `+${payout.toLocaleString()}` : `-${bet.toLocaleString()}`, inline: true },
+        { name: '💼 Balance',       value: userData.balance.toLocaleString(),        inline: true },
+        { name: '🔥 CF Streak',     value: `${cfStreak} flips`,                     inline: true },
       )
-      .setColor('#F5E6FF')
-      .setTimestamp()
-      .setFooter({ text: 'System • Angelic Games ✧' });
+      .setDescription(
+        won
+          ? `꒰ঌ **${result}!** You win **${payout.toLocaleString()}** coins! ໒꒱${streakNote}`
+          : `꒰ঌ **${result}!** You picked ${picked}. Better luck next time! ໒꒱`
+      )
+      .setFooter({
+        text: [
+          frenzyMult > 1 ? `🎮 ${frenzyMult}× Frenzy` : '',
+          luckBonus   > 0 ? `🍀 +${luckBonus * 100}% luck` : '',
+          'System • Coinflip',
+        ].filter(Boolean).join(' • '),
+      })
+      .setTimestamp();
 
-    // Persist to MongoDB (wrapped in index.js with userId)
-    await saveUserData({ balance: userData.balance });
-
-    message.channel.send({ embeds: [embed] });
+    await spinMsg.edit({ embeds: [embed] });
   },
 };
