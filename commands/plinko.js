@@ -99,26 +99,27 @@ module.exports = {
     }
 
     userData.balance = (userData.balance || 0) - bet;
-    await saveUserData(userData);
+    await saveUserData({ balance: userData.balance });
 
     const { bucket } = dropBall();
     const mults = MULTIPLIERS[riskArg];
     const baseMulti = mults[bucket] || 0.1;
 
-    const frenzy   = await getMultiplier(message.author.id, 'frenzy').catch(() => 1);
+    const frenzy     = getMultiplier(userData, 'frenzy');
     const finalMulti = Math.round(baseMulti * frenzy * 100) / 100;
     const payout     = Math.floor(bet * finalMulti);
     const profit     = payout - bet;
     const won        = payout > bet;
 
-    userData.balance = (userData.balance || 0) + payout;
-    await saveUserData(userData);
+    userData.balance     = (userData.balance || 0) + payout;
+    userData.totalEarned = (userData.totalEarned || 0) + Math.max(0, profit);
+    await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned });
 
-    await addXP(message.author.id, XP_PER_GAME + (won ? XP_PER_WIN : 0)).catch(() => {});
-    await trackStat(message.author.id, 'gamesPlayed', 1).catch(() => {});
-    if (won) await trackStat(message.author.id, 'gamesWon', 1).catch(() => {});
-    if (won) await trackStat(message.author.id, 'coinsWon', profit).catch(() => {});
-    await checkAchievements(message.author.id, userData).catch(() => {});
+    await addXP(message.author.id, XP_PER_GAME + (won ? XP_PER_WIN : 0), userData, saveUserData, message);
+    await trackStat(userData, 'gamesPlayed', 1);
+    if (won) await trackStat(userData, 'gamesWon', 1);
+    if (won) await trackStat(userData, 'coinsWon', profit);
+    await checkAchievements(userData, { message, saveUserData });
 
     // Build visual bucket row
     const bucketRow = mults.map((m, i) => {

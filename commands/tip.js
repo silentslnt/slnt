@@ -40,7 +40,7 @@ module.exports = {
 
     // Atomic update both balances
     userData.balance = (userData.balance || 0) - bet;
-    await saveUserData(userData);
+    await saveUserData({ balance: userData.balance });
     await updateUserBalance(target.id, bet);
 
     const embed = new EmbedBuilder()

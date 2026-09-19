@@ -1,4 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
+const { isAdmin } = require('../utils/permissions');
 
 // Track active hangman games - declared ONCE at the top
 const activeGamesMap = new Map();
@@ -13,7 +14,6 @@ const hangmanStages = [
   '``````'
 ];
 
-const ADMIN_ROLE_ID = '1454818862397653074'; // Your admin role ID
 const GAME_CHANNEL_ID = '1401925188991582338'; // Your game channel ID
 
 module.exports = {
@@ -24,7 +24,7 @@ module.exports = {
 
     // START GAME
     if (sub === 'start') {
-      if (!message.member.roles.cache.has(ADMIN_ROLE_ID)) {
+      if (!isAdmin(message)) {
         return message.channel.send('❌ Only admins can start a hangman game.');
       }
 
@@ -243,7 +243,7 @@ module.exports = {
 
     // CANCEL GAME
     if (sub === 'cancel') {
-      if (!message.member.roles.cache.has(ADMIN_ROLE_ID)) {
+      if (!isAdmin(message)) {
         return message.channel.send('❌ Only admins can cancel.');
       }
 

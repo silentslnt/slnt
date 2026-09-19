@@ -1,25 +1,12 @@
 const { EmbedBuilder } = require('discord.js');
-
-const ADMIN_ROLE_ID = '1454818862397653074';
-const ADMIN_USER_IDS = [
-  '1349792214124986419',
-];
-
-function canToggleKeydrops(member) {
-  if (!member) return false;
-  const hasRole = member.roles.cache.has(ADMIN_ROLE_ID);
-  const isWhitelisted = ADMIN_USER_IDS.includes(member.user.id);
-  return hasRole || isWhitelisted;
-}
+const { isAdmin } = require('../utils/permissions');
 
 module.exports = {
   name: 'tkd',
   description: 'Toggle automatic keydrops on/off (admin only)',
   async execute({ message, args, keydrop }) {
-    const member = message.member;
-
     // Check if user is not admin - silent block
-    if (!canToggleKeydrops(member)) {
+    if (!isAdmin(message)) {
       return;
     }
 
@@ -141,6 +128,4 @@ module.exports = {
       });
     }
   },
-
-  canToggleKeydrops,
 };

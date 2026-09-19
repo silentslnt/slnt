@@ -1,10 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-
-const ADMIN_ROLE_ID = '1471310723245150208'; // admin role
-const ADMIN_USER_IDS = [
-  '1432513881653121047', // add yourself
-  // 'ANOTHER_USER_ID',
-];
+const { requireAdmin } = require('../utils/permissions');
 
 const validRarities = [
   'Prismatic', 'Mythical', 'Legendary', 'Rare', 'Uncommon', 'Common',
@@ -21,6 +16,8 @@ module.exports = {
   description:
     'Admin commands: give/remove currency, silv tokens, keys, or inventory items; reset user data, spawn keys.',
   async execute({ message, args, getUserData, keydrop, logAdminAction }) {
+    if (!await requireAdmin(message)) return;
+
     if (args.length < 1) {
       return message.channel.send({
         embeds: [
@@ -40,29 +37,6 @@ module.exports = {
     }
 
     const subcommand = args[0].toLowerCase();
-
-    // allow if user has admin role OR is in ADMIN_USER_IDS
-    const hasAdminRole = message.member.roles.cache.has(ADMIN_ROLE_ID);
-    const isAdminUser = ADMIN_USER_IDS.includes(message.author.id);
-    const hasAdmin = hasAdminRole || isAdminUser;
-
-    if (!hasAdmin) {
-      return message.channel.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor('#F5E6FF')
-            .setTitle('˗ˏˋ 𐙚 𝔸𝕔𝕔𝕖𝕤𝕤 𝔻𝕖𝕟𝕚𝕖𝕕 𐙚 ˎˊ˗')
-            .setDescription(
-              [
-                '꒰ঌ 𝔗𝔥𝔦𝔰 𝔭𝔞𝔫𝔢𝔩 𝔦𝔰 𝔯𝔢𝔰𝔢𝔯𝔳𝔢𝔡 𝔣𝔬𝔯 𝔥𝔦𝔤𝔥𝔢𝔯 𝔞𝔫𝔤𝔢𝔩𝔰 ໒꒱',
-                '',
-                'Only approved users can use admin commands.',
-              ].join('\n'),
-            )
-            .setFooter({ text: 'System • Permission Check' }),
-        ],
-      });
-    }
 
     // ===== GIVE / REMOVE =====
     if (subcommand === 'give' || subcommand === 'remove') {

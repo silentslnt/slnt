@@ -1,18 +1,12 @@
 const { EmbedBuilder } = require('discord.js');
-
-const ADMIN_ROLE_ID = '1454818862397653074';
-const ADMIN_USER_IDS = [
-  '1349792214124986419',
-];
+const { isAdmin } = require('../utils/permissions');
 
 // Global bot state (in-memory, resets on restart)
 let commandsEnabled = true;
 
 function canToggleCommands(member) {
   if (!member) return false;
-  const hasRole = member.roles.cache.has(ADMIN_ROLE_ID);
-  const isWhitelisted = ADMIN_USER_IDS.includes(member.user.id);
-  return hasRole || isWhitelisted;
+  return isAdmin({ member, author: member.user });
 }
 
 function areCommandsEnabled() {

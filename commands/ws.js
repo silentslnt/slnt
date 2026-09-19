@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
+const { isAdmin } = require('../utils/permissions');
 
-const AUTH_ROLE_ID = '1454818862397653074';
 const GAME_CHANNEL_ID = '1401925188991582338';
 
 let activeScramble = null;
@@ -16,13 +16,14 @@ function scrambleWord(word) {
 
 module.exports = {
   name: 'wordscramble',
+  aliases: ['ws'],
   description: 'Start a word scramble game in the game channel. Usage: .wordscramble start <word>',
   async execute({ message, args, updateUserBalance, client }) {
     const sub = (args[0] || '').toLowerCase();
 
     // START GAME
     if (sub === 'start') {
-      if (!message.member.roles.cache.has(AUTH_ROLE_ID)) {
+      if (!isAdmin(message)) {
         return message.channel.send('❌ Only authorized users can start a word scramble.');
       }
 
@@ -141,7 +142,7 @@ module.exports = {
 
     // CANCEL GAME
     if (sub === 'cancel') {
-      if (!message.member.roles.cache.has(AUTH_ROLE_ID)) {
+      if (!isAdmin(message)) {
         return message.channel.send('❌ Only authorized users can cancel a scramble.');
       }
       if (!activeScramble) {

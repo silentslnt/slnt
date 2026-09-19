@@ -1,18 +1,48 @@
 const { EmbedBuilder } = require('discord.js');
+const mongoose = require('mongoose');
+const { requireAdmin } = require('../utils/permissions');
 
 const LOTTERY_PRICE = 500; // Ticket price
-const LOTTERY_DRAW_ROLE_ID = '1382513369801555988'; // Replace with your role ID
 
-// Use a global object to store lottery state in memory
-const lotteryState = {
-  tickets: [],  // Array of Discord user IDs
-  pot: 0
-};
+// Persisted so a bot restart/crash doesn't wipe the pot and tickets with
+// no refund path — previously this was an in-memory-only object.
+const lotteryStateSchema = new mongoose.Schema({
+  _id:     { type: String, default: 'global' },
+  tickets: { type: [String], default: [] },
+  pot:     { type: Number, default: 0 },
+});
+const LotteryState = mongoose.models.LotteryState || mongoose.model('LotteryState', lotteryStateSchema);
+
+// In-memory cache, kept in sync with Mongo on every mutation.
+const lotteryState = { tickets: [], pot: 0 };
+let loaded = false;
+
+async function ensureLoaded() {
+  if (loaded) return;
+  const doc = await LotteryState.findByIdAndUpdate(
+    'global',
+    { $setOnInsert: { tickets: [], pot: 0 } },
+    { upsert: true, new: true },
+  );
+  lotteryState.tickets = doc.tickets;
+  lotteryState.pot     = doc.pot;
+  loaded = true;
+}
+
+async function persist() {
+  await LotteryState.updateOne(
+    { _id: 'global' },
+    { $set: { tickets: lotteryState.tickets, pot: lotteryState.pot } },
+    { upsert: true },
+  );
+}
 
 module.exports = {
   name: 'lottery',
+  aliases: ['lot'],
   description: 'Join the lottery or draw a winner. Usage: .lottery buy | .lottery status | .lottery draw',
   async execute({ message, args, userData, saveUserData, updateUserBalance }) {
+    await ensureLoaded();
     const userId = message.author.id;
     const sub = (args[0] || '').toLowerCase();
 
@@ -39,6 +69,7 @@ module.exports = {
 
       // Persist to MongoDB – one argument, wrapper adds userId
       await saveUserData({ balance: userData.balance });
+      await persist();
 
       const boughtEmbed = new EmbedBuilder()
         .setTitle('˗ˏˋ 𐙚 🎟️ 𝔏𝔬𝔱𝔱𝔢𝔯𝔶 𝔗𝔦𝔠𝔨𝔢𝔱 𝔅𝔬𝔲𝔤𝔥𝔱! 𐙚 ˎˊ˗')
@@ -74,10 +105,7 @@ module.exports = {
     }
 
     if (sub === 'draw') {
-      // Check if the user has the specific role
-      if (!message.member.roles.cache.has(LOTTERY_DRAW_ROLE_ID)) {
-        return message.channel.send('❌ You do not have permission to draw the lottery. Only authorized users can do this.');
-      }
+      if (!await requireAdmin(message)) return;
 
       if (!lotteryState.tickets.length) {
         return message.channel.send('No tickets have been bought yet!');
@@ -109,6 +137,7 @@ module.exports = {
       // Reset state
       lotteryState.tickets = [];
       lotteryState.pot = 0;
+      await persist();
 
       return message.channel.send({ embeds: [winnerEmbed] });
     }

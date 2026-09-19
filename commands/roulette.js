@@ -72,7 +72,7 @@ module.exports = {
     }
 
     userData.balance = (userData.balance || 0) - bet;
-    await saveUserData(userData);
+    await saveUserData({ balance: userData.balance });
 
     const result = spinWheel();
 
@@ -84,27 +84,28 @@ module.exports = {
     else if (betType === 'green') won = result.color === 'green';
 
     const baseMulti  = won ? PAYOUT[betType] : 0;
-    const frenzy     = won ? await getMultiplier(message.author.id, 'frenzy').catch(() => 1) : 1;
+    const frenzy     = won ? getMultiplier(userData, 'frenzy') : 1;
     const finalMulti = baseMulti * frenzy;
     const payout     = Math.floor(bet * finalMulti);
     const profit     = payout - bet;
 
     if (won) {
-      userData.balance = (userData.balance || 0) + payout;
-      await saveUserData(userData);
+      userData.balance     = (userData.balance || 0) + payout;
+      userData.totalEarned = (userData.totalEarned || 0) + profit;
+      await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned });
     }
 
-    await addXP(message.author.id, XP_PER_GAME + (won ? XP_PER_WIN : 0)).catch(() => {});
+    await addXP(message.author.id, XP_PER_GAME + (won ? XP_PER_WIN : 0), userData, saveUserData, message);
     if (won && message.guild) {
       const pts = betType === 'number' ? 50 : betType === 'green' ? 35 : Math.min(30, Math.max(5, Math.floor(profit / 500)));
       await awardPoints(message.guild.id, message.author.id, pts);
     }
-    await trackStat(message.author.id, 'gamesPlayed', 1).catch(() => {});
+    await trackStat(userData, 'gamesPlayed', 1);
     if (won) {
-      await trackStat(message.author.id, 'gamesWon', 1).catch(() => {});
-      await trackStat(message.author.id, 'coinsWon', profit).catch(() => {});
+      await trackStat(userData, 'gamesWon', 1);
+      await trackStat(userData, 'coinsWon', profit);
     }
-    await checkAchievements(message.author.id, userData).catch(() => {});
+    await checkAchievements(userData, { message, saveUserData });
 
     const resultEmoji = COLOR_EMOJI[result.color];
     const betLabel    = betType === 'number' ? `Number ${betNumber}` : betType.charAt(0).toUpperCase() + betType.slice(1);

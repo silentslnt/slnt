@@ -1,18 +1,22 @@
 const { EmbedBuilder } = require('discord.js');
 const { awardPoints } = require('../utils/sentinelDb');
+const { requireAdmin } = require('../utils/permissions');
+const { parseBet } = require('../utils/parseBet');
 
 module.exports = {
   name: 'dice',
-  description: 'Roll a die and win rewards based on your roll!',
+  aliases: ['d'],
+  adminOnly: true,
+  description: 'Roll a die and win rewards based on your roll! `.dice <amount|all>`',
   async execute({ message, args, userData, saveUserData }) {
-    const bet = parseInt(args[0]);
-
-    if (!bet || isNaN(bet) || bet <= 0) {
-      return message.channel.send('Usage: `.dice <amount>` (bet must be positive number)');
-    }
+    if (!await requireAdmin(message)) return;
 
     if (typeof userData.balance !== 'number') userData.balance = 0;
+    const bet = parseBet(args[0], userData.balance);
 
+    if (!bet) {
+      return message.channel.send('Usage: `.dice <amount|all>` (bet must be a positive number)');
+    }
     if (userData.balance < bet) {
       return message.channel.send("You don't have enough balance to play!");
     }

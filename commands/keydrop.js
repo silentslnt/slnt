@@ -1,13 +1,8 @@
 // commands/keydrop.js
 const { EmbedBuilder } = require('discord.js');
+const { isAdmin } = require('../utils/permissions');
 
 const KEYDROP_CHANNEL_ID = '1472342562093404324';
-
-// Admin role and user IDs for keydrop channel control
-const KEYDROP_ADMIN_ROLE_ID = '1471310720866975917';
-const KEYDROP_ADMIN_USER_IDS = [
-  '1432513881653121047','730860363884527646'
-];
 
 let currentKey = null;
 let activeKeydropChannel = KEYDROP_CHANNEL_ID;
@@ -34,10 +29,8 @@ function getRandomRarity() {
 }
 
 // Check if user can manage keydrop settings
-function canManageKeydrop(member) {
-  const hasRole = member.roles.cache.has(KEYDROP_ADMIN_ROLE_ID);
-  const isWhitelisted = KEYDROP_ADMIN_USER_IDS.includes(member.id);
-  return hasRole || isWhitelisted;
+function canManageKeydrop(message) {
+  return isAdmin(message);
 }
 
 function areKeydropsEnabled() {
@@ -104,9 +97,7 @@ async function handleKeyDrop(message, client) {
 
 // Command to set keydrop channel
 async function setKeydropChannel(message, args) {
-  const member = message.member;
-
-  if (!canManageKeydrop(member)) {
+  if (!canManageKeydrop(message)) {
     return message.channel.send({
       embeds: [
         new EmbedBuilder()
@@ -221,8 +212,10 @@ async function spawnKey(rarity, channelId, client) {
 async function claimKey(userId, addKeyToInventory, client) {
   if (!currentKey || currentKey.claimed) return false;
 
-  await addKeyToInventory(userId, currentKey.rarity, 1);
+  // Claim the key synchronously before the first await so two concurrent
+  // .redeem calls can't both pass the check above and both get the key.
   currentKey.claimed = true;
+  await addKeyToInventory(userId, currentKey.rarity, 1);
 
   const channel = client.channels.cache.get(currentKey.channelId);
   if (channel) {

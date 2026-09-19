@@ -1,23 +1,12 @@
 const { EmbedBuilder } = require('discord.js');
-
-const ADMIN_ROLE_ID = '1454818862397653074'; // Replace with your admin role ID
+const { requireAdmin } = require('../utils/permissions');
 
 module.exports = {
   name: 'adminlogs',
+  aliases: ['al'],
   description: 'View admin command logs from the past 7 days (Admin only)',
   async execute({ message, AdminLog, client }) {
-    // Check if user has admin role
-    if (!message.member.roles.cache.has(ADMIN_ROLE_ID)) {
-      return message.channel.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor('#F5E6FF')
-            .setTitle('˗ˏˋ 𐙚 𝔄𝔠𝔠𝔢𝔰𝔰 𝔇𝔢𝔫𝔦𝔢𝔡 𐙚 ˎˊ˗')
-            .setDescription('Only admins can view admin logs.')
-            .setFooter({ text: 'System • Permission Check' })
-        ]
-      });
-    }
+    if (!await requireAdmin(message)) return;
 
     try {
       // Get logs from past 7 days

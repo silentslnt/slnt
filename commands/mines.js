@@ -134,7 +134,7 @@ module.exports = {
 
     // Deduct bet
     userData.balance = (userData.balance || 0) - bet;
-    await saveUserData(userData);
+    await saveUserData({ balance: userData.balance });
 
     // Place mines
     const minePositions = new Set(pickUniqueIndices(GRID_SIZE, mines));
@@ -172,15 +172,16 @@ module.exports = {
         session.won   = true;
 
         // Frenzy essence multiplier
-        const frenzy   = await getMultiplier(userId, 'frenzy').catch(() => 1);
+        const frenzy   = getMultiplier(userData, 'frenzy');
         const finalPay = Math.floor(payout * frenzy);
 
-        userData.balance = (userData.balance || 0) + finalPay;
-        await saveUserData(userData);
-        await addXP(userId, XP_PER_GAME + XP_PER_WIN).catch(() => {});
-        await trackStat(userId, 'gamesWon', 1).catch(() => {});
-        await trackStat(userId, 'coinsWon', finalPay - bet).catch(() => {});
-        await checkAchievements(userId, userData).catch(() => {});
+        userData.balance     = (userData.balance || 0) + finalPay;
+        userData.totalEarned = (userData.totalEarned || 0) + Math.max(0, finalPay - bet);
+        await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned });
+        await addXP(userId, XP_PER_GAME + XP_PER_WIN, userData, saveUserData, message);
+        await trackStat(userData, 'gamesWon', 1);
+        await trackStat(userData, 'coinsWon', finalPay - bet);
+        await checkAchievements(userData, { message, saveUserData });
 
         // Reveal all mines
         for (const mineIdx of session.minePositions) session.revealed.add(mineIdx);
@@ -224,8 +225,9 @@ module.exports = {
           session.won   = false;
           for (const mineIdx of session.minePositions) session.revealed.add(mineIdx);
 
-          await addXP(userId, XP_PER_GAME).catch(() => {});
-          await trackStat(userId, 'gamesPlayed', 1).catch(() => {});
+          await addXP(userId, XP_PER_GAME, userData, saveUserData, message);
+          await trackStat(userData, 'gamesPlayed', 1);
+          await checkAchievements(userData, { message, saveUserData });
 
           await i.update({
             embeds: [buildEmbed(session, `💥 BOOM! You hit a mine! Lost **${bet.toLocaleString()}** coins.`)],
@@ -244,9 +246,13 @@ module.exports = {
           session.ended = true;
           session.won   = true;
 
-          userData.balance = (userData.balance || 0) + payout;
-          await saveUserData(userData);
-          await addXP(userId, XP_PER_GAME + XP_PER_WIN * 2).catch(() => {});
+          userData.balance     = (userData.balance || 0) + payout;
+          userData.totalEarned = (userData.totalEarned || 0) + Math.max(0, payout - bet);
+          await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned });
+          await addXP(userId, XP_PER_GAME + XP_PER_WIN * 2, userData, saveUserData, message);
+          await trackStat(userData, 'gamesWon', 1);
+          await trackStat(userData, 'coinsWon', payout - bet);
+          await checkAchievements(userData, { message, saveUserData });
 
           await i.update({
             embeds: [buildEmbed(session, `🏆 PERFECT GAME! All ${totalSafe} safe tiles found! **+${(payout - bet).toLocaleString()}** coins!`)],
