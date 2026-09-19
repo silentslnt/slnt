@@ -3,14 +3,23 @@ const { EmbedBuilder } = require('discord.js');
 const mongoose = require('mongoose');
 const {
   ESSENCES, TITLES, BADGES, BUNDLES, UTILITY_ITEMS, SPELLS,
-  COLOR,
 } = require('../utils/config');
 const { activateEssence } = require('../utils/essences');
 const { trackStat, checkAchievements } = require('../utils/achievements');
 const { awardPoints, grantItem } = require('../utils/sentinelDb');
+const { isAdmin } = require('../utils/permissions');
 
 const SILV_KEY  = 'Silv token';
 const SILV_ICON = '<:SILV_TOKEN:1447678878448484555>';
+const CHECK     = '<:check:1547659779877642360>';
+const XMARK     = '<:xmark:1547659816783061153>';
+const SPARKLE   = '<a:csparkle:1512498380142674010>';
+const PRESENT   = '<:cpresent:1512497697381154826>';
+const WHITESTAR = '<a:cwhitestar:1512498079662735461>';
+const CROSS     = '<a:ccross:1512497030348542122>';
+const WHITESWIRL = '<a:cwhiteswirl:1512869492492079184>';
+const BLACKSWIRL = '<a:cblackswirl:1512496801394065688>';
+const BLACK      = 0x000000;
 
 // Aether packs — spend Shiro coins to earn community points in Sentinel
 const AETHER_PACKS = {
@@ -36,10 +45,6 @@ const ShopItem = mongoose.models.ShopItem || mongoose.model('ShopItem', shopItem
 
 // ── Shop cache ────────────────────────────────────────────────────────────────
 let shopCache = { lastRollTime: 0, itemsByCategory: {} };
-const SHOP_REFRESH_MS = 4 * 60 * 60 * 1000;
-
-// ── Admin check ───────────────────────────────────────────────────────────────
-const { isAdmin } = require('../utils/permissions');
 
 // ── parseQuotedArgs ───────────────────────────────────────────────────────────
 function parseQuotedArgs(str) {
@@ -52,6 +57,10 @@ function parseQuotedArgs(str) {
   }
   if (cur) parts.push(cur);
   return parts;
+}
+
+function footer(message) {
+  return { text: message.guild?.name || 'Shiro' };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -85,69 +94,46 @@ module.exports = {
 
 async function showMainShop({ message }) {
   const embed = new EmbedBuilder()
-    .setColor(COLOR.SHOP)
-    .setTitle('˗ˏˋ 𐙚 🛍 𝕂𝕆ℕ  𝕊𝕙𝕠𝕡 𐙚 ˎˊ˗')
+    .setColor(BLACK)
+    .setTitle('SHOP')
     .setDescription(
-      '╭─────────────────────────────╮\n' +
-      `│  1 ${SILV_ICON} SILV = 10 Robux  │\n` +
-      '╰─────────────────────────────╯\n\n' +
-      '꒰ঌ Browse each section or buy directly ໒꒱\n\n' +
-      `**Sections:**\n` +
-      `✨ \`.sh essences\` — Active boosts (SILV)\n` +
-      `🎁 \`.sh bundles\`  — Value packs (SILV)\n` +
-      `🎨 \`.sh cosmetics\`— Titles & Badges (SILV)\n` +
-      `🛠 \`.sh utility\`  — Utility items (coins)\n` +
-      `✦ \`.sh aether\`   — Aether packs (coins)\n` +
-      `🔮 \`.sh spells\`   — SILV race spells (SILV)\n` +
-      `🗃 \`.sh items\`    — Admin-added items\n\n` +
-      `**Buying:** \`.sh buy <item_id> [amount]\``
+      `> **1** ${SILV_ICON} SILV = **10** Robux\n\n` +
+      `__**Sections**__\n` +
+      `> ${SPARKLE} \`.sh essences\` — active boosts (SILV)\n` +
+      `> ${PRESENT} \`.sh bundles\` — value packs (SILV)\n` +
+      `> ${WHITESTAR} \`.sh cosmetics\` — titles & badges (SILV)\n` +
+      `> ${CROSS} \`.sh utility\` — utility items (coins)\n` +
+      `> ${WHITESWIRL} \`.sh aether\` — Aether packs (coins)\n` +
+      `> ${BLACKSWIRL} \`.sh spells\` — SILV race spells (SILV)\n` +
+      `> \`.sh items\` — admin-added items\n\n` +
+      `-# Buy with \`.sh buy <item_id> [amount]\`. Check your SILV with \`.inv\`, coins with \`.bal\`.`
     )
     .setThumbnail(message.guild.iconURL())
-    .addFields(
-      { name: `${SILV_ICON} Your SILV`, value: `**${userData_silv(message) || '?'}**`, inline: true },
-      { name: '💰 Your Coins', value: `**(use .bal)**`, inline: true },
-    )
-    .setFooter({ text: 'Shop refreshes every 4 hours' })
-    .setTimestamp();
+    .setFooter(footer(message));
   return message.channel.send({ embeds: [embed] });
 }
 
-function userData_silv(message) { return '(see .inv)'; }
-
 async function showEssenceShop({ message }) {
-  let desc = '꒰ঌ Essences grant powerful temporary buffs ໒꒱\n꒰ঌ Activated immediately on purchase ໒꒱\n\n';
+  let desc = '__**Essences**__\n> Temporary buffs, activated immediately on purchase.\n\n';
   for (const [id, e] of Object.entries(ESSENCES)) {
-    desc += `${e.emoji} **${e.name}** \`${id}\`\n`;
-    desc += `> **Effect:** ${e.effect}\n`;
-    desc += `> **Duration:** ${formatMs(e.durationMs)}\n`;
-    desc += `> **Cost:** ${e.silvCost} ${SILV_ICON}\n\n`;
+    desc += `> ${e.emoji} **${e.name}** \`${id}\`\n`;
+    desc += `> ${e.effect} · ${formatMs(e.durationMs)} · ${e.silvCost} ${SILV_ICON}\n\n`;
   }
+  desc += `-# Buy: \`.sh buy <essence_id>\` — e.g. \`.sh buy luck_essence\``;
   return message.channel.send({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(COLOR.ESSENCE)
-        .setTitle('˗ˏˋ 𐙚 ✨ 𝔈𝔰𝔰𝔢𝔫𝔠𝔢 𝔖𝔥𝔬𝔭 𐙚 ˎˊ˗')
-        .setDescription(desc)
-        .setFooter({ text: `Buy: .sh buy <essence_id>  |  e.g. .sh buy luck_essence` }),
-    ],
+    embeds: [new EmbedBuilder().setColor(BLACK).setTitle('ESSENCE SHOP').setDescription(desc).setFooter(footer(message))],
   });
 }
 
 async function showBundleShop({ message }) {
-  let desc = '꒰ঌ Bundles offer massive value for SILV ໒꒱\n\n';
+  let desc = '__**Bundles**__\n> Value packs, priced in SILV.\n\n';
   for (const [id, b] of Object.entries(BUNDLES)) {
-    desc += `🎁 **${b.name}** \`${id}\`\n`;
-    desc += `> ${b.description}\n`;
-    desc += `> **Cost:** ${b.silvCost} ${SILV_ICON}\n\n`;
+    desc += `> ${PRESENT} **${b.name}** \`${id}\`\n`;
+    desc += `> ${b.description} · ${b.silvCost} ${SILV_ICON}\n\n`;
   }
+  desc += `-# Buy: \`.sh buy <bundle_id>\` — e.g. \`.sh buy lucky_bundle\``;
   return message.channel.send({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(COLOR.WIN)
-        .setTitle('˗ˏˋ 𐙚 🎁 𝔅𝔲𝔫𝔡𝔩𝔢 𝔖𝔥𝔬𝔭 𐙚 ˎˊ˗')
-        .setDescription(desc)
-        .setFooter({ text: `Buy: .sh buy <bundle_id>  |  e.g. .sh buy lucky_bundle` }),
-    ],
+    embeds: [new EmbedBuilder().setColor(BLACK).setTitle('BUNDLE SHOP').setDescription(desc).setFooter(footer(message))],
   });
 }
 
@@ -160,73 +146,49 @@ async function showCosmeticsShop({ message }) {
   for (const [id, b] of Object.entries(BADGES)) {
     badgeLines += `> **${b.name}** \`${id}\` — ${b.silvCost} ${SILV_ICON}\n`;
   }
+  const desc =
+    `__**Titles**__ *(shown on \`.profile\`)*\n${titleLines}\n` +
+    `__**Badges**__ *(shown on \`.profile\`)*\n${badgeLines}\n` +
+    `-# Buy: \`.sh buy <item_id>\` · Equip: \`.profile customize title <id>\``;
   return message.channel.send({
-    embeds: [
-      new EmbedBuilder()
-        .setColor('#E879F9')
-        .setTitle('˗ˏˋ 𐙚 🎨 ℭ𝔬𝔰𝔪𝔢𝔱𝔦𝔠𝔰 𝔖𝔥𝔬𝔭 𐙚 ˎˊ˗')
-        .setDescription(
-          '꒰ঌ Show off your style ໒꒱\n\n' +
-          '**Titles** (shown on `.profile`)\n' + titleLines + '\n' +
-          '**Badges** (shown on `.profile`)\n' + badgeLines
-        )
-        .setFooter({ text: `Buy: .sh buy <item_id>  |  Equip: .profile customize title <id>` }),
-    ],
+    embeds: [new EmbedBuilder().setColor(BLACK).setTitle('COSMETICS SHOP').setDescription(desc).setFooter(footer(message))],
   });
 }
 
 async function showUtilityShop({ message }) {
-  let desc = '꒰ঌ Useful consumable items (bought with coins) ໒꒱\n\n';
+  let desc = '__**Utility Items**__\n> Consumables, priced in coins.\n\n';
   for (const [id, item] of Object.entries(UTILITY_ITEMS)) {
-    desc += `${item.emoji} **${item.name}** \`${id}\`\n`;
-    desc += `> ${item.description}\n`;
-    desc += `> **Cost:** ${item.coinCost.toLocaleString()} 💰\n\n`;
+    desc += `> ${item.emoji} **${item.name}** \`${id}\`\n`;
+    desc += `> ${item.description} · ${item.coinCost.toLocaleString()} coins\n\n`;
   }
+  desc += `-# Buy: \`.sh buy <item_id>\` — e.g. \`.sh buy insurance_slip\``;
   return message.channel.send({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(COLOR.DEFAULT)
-        .setTitle('˗ˏˋ 𐙚 🛠 𝕌𝕥𝕚𝕝𝕚𝕥𝕪 𝔖𝔥𝔬𝔭 𐙚 ˎˊ˗')
-        .setDescription(desc)
-        .setFooter({ text: `Buy: .sh buy <item_id>  |  e.g. .sh buy insurance_slip` }),
-    ],
+    embeds: [new EmbedBuilder().setColor(BLACK).setTitle('UTILITY SHOP').setDescription(desc).setFooter(footer(message))],
   });
 }
 
 async function showAetherShop({ message, userData }) {
   const coins = userData.balance || 0;
-  let desc = `꒰ঌ Convert Shiro coins into **Aether** — your community standing in SILV ໒꒱\n\n💰 Your coins: **${coins.toLocaleString()}**\n\n`;
+  let desc = `__**Aether Exchange**__\n> Convert Shiro coins into Aether — your community standing in SILV.\n\n> Your coins: **${coins.toLocaleString()}**\n\n`;
   for (const [id, p] of Object.entries(AETHER_PACKS)) {
     const bonus = id === 'aether_100' ? '' : id === 'aether_500' ? ' *(+12% value)*' : id === 'aether_1000' ? ' *(+25% value)*' : ' *(+30% value)*';
-    desc += `✦ **${p.label}** \`${id}\`\n> **Cost:** ${p.coins.toLocaleString()} coins${bonus}\n\n`;
+    desc += `> ${WHITESWIRL} **${p.label}** \`${id}\`\n> ${p.coins.toLocaleString()} coins${bonus}\n\n`;
   }
-  desc += `Use \`.sh buy <pack_id>\` to convert.`;
+  desc += `-# Buy: \`.sh buy <pack_id>\``;
   return message.channel.send({
-    embeds: [
-      new EmbedBuilder()
-        .setColor('#c5edff')
-        .setTitle('˗ˏˋ 𐙚 ✦ Aether Exchange 𐙚 ˎˊ˗')
-        .setDescription(desc)
-        .setFooter({ text: 'Aether builds your clan rank and race standing in SILV' }),
-    ],
+    embeds: [new EmbedBuilder().setColor(BLACK).setTitle('AETHER EXCHANGE').setDescription(desc).setFooter(footer(message))],
   });
 }
 
 async function showSpellShop({ message }) {
-  let desc = '꒰ঌ Spells are cast in SILV with `,cast <spell> @member` ໒꒱\n꒰ঌ Purchased here, delivered to your Sentinel inventory instantly ໒꒱\n\n';
+  let desc = '__**Spells**__\n> Cast in SILV with `,cast <spell> @member` — delivered to your Sentinel inventory instantly.\n\n';
   for (const [id, s] of Object.entries(SPELLS)) {
-    desc += `${s.emoji} **${s.name}** \`${id}\`${s.raceLocked ? ` *(${s.raceLocked}s only)*` : ''}\n`;
-    desc += `> ${s.effect}\n`;
-    desc += `> **Cost:** ${s.silvCost} ${SILV_ICON}\n\n`;
+    desc += `> ${s.emoji} **${s.name}** \`${id}\`${s.raceLocked ? ` *(${s.raceLocked}s only)*` : ''}\n`;
+    desc += `> ${s.effect} · ${s.silvCost} ${SILV_ICON}\n\n`;
   }
+  desc += `-# Buy: \`.sh buy <spell_id>\` — e.g. \`.sh buy shield\``;
   return message.channel.send({
-    embeds: [
-      new EmbedBuilder()
-        .setColor('#2b2d31')
-        .setTitle('˗ˏˋ 𐙚 🔮 𝔖𝔭𝔢𝔩𝔩 𝔖𝔥𝔬𝔭 𐙚 ˎˊ˗')
-        .setDescription(desc)
-        .setFooter({ text: `Buy: .sh buy <spell_id>  |  e.g. .sh buy shield` }),
-    ],
+    embeds: [new EmbedBuilder().setColor(BLACK).setTitle('SPELL SHOP').setDescription(desc).setFooter(footer(message))],
   });
 }
 
@@ -246,7 +208,7 @@ async function handleBuy({ message, args, userData, saveUserData }) {
   if (AETHER_PACKS[itemId]) {
     const pack = AETHER_PACKS[itemId];
     if (coins < pack.coins) return notEnoughCoins(message, pack.coins, coins);
-    if (!message.guild) return message.channel.send('❌ Must be used in a server.');
+    if (!message.guild) return message.channel.send(`${XMARK} Must be used in a server.`);
 
     userData.balance = coins - pack.coins;
     await saveUserData({ balance: userData.balance });
@@ -255,23 +217,22 @@ async function handleBuy({ message, args, userData, saveUserData }) {
     return message.channel.send({
       embeds: [
         new EmbedBuilder()
-          .setColor('#c5edff')
-          .setTitle('˗ˏˋ 𐙚 ✦ Aether Acquired 𐙚 ˎˊ˗')
+          .setColor(BLACK)
+          .setTitle('AETHER ACQUIRED')
           .setDescription(
-            `꒰ঌ **+${pack.pts.toLocaleString()} Aether** added to your community standing ໒꒱\n\n` +
-            `💰 Coins spent: **${pack.coins.toLocaleString()}**\n` +
-            `💰 Balance: **${userData.balance.toLocaleString()}**\n\n` +
+            `> ${WHITESWIRL} **+${pack.pts.toLocaleString()} Aether** added to your community standing\n\n` +
+            `> Coins spent: **${pack.coins.toLocaleString()}**\n` +
+            `> Balance: **${userData.balance.toLocaleString()}**\n\n` +
             `-# Check your Aether with \`,pts\` in SILV.`
           )
-          .setFooter({ text: 'System • Aether Exchange' })
-          .setTimestamp(),
+          .setFooter(footer(message)),
       ],
     });
   }
 
   // ── SPELL (delivered to Sentinel's user_inventory, cast with `,cast`) ────
   if (SPELLS[itemId]) {
-    if (!message.guild) return message.channel.send('❌ Must be used in a server.');
+    if (!message.guild) return message.channel.send(`${XMARK} Must be used in a server.`);
     const s    = SPELLS[itemId];
     const cost = s.silvCost * amount;
     if (silv < cost) return notEnoughSilv(message, cost, silv);
@@ -286,15 +247,14 @@ async function handleBuy({ message, args, userData, saveUserData }) {
     return message.channel.send({
       embeds: [
         new EmbedBuilder()
-          .setColor('#2b2d31')
-          .setTitle('˗ˏˋ 𐙚 🔮 𝔖𝔭𝔢𝔩𝔩 𝔻𝔢𝔩𝔦𝔳𝔢𝔯𝔢𝔡 𐙚 ˎˊ˗')
+          .setColor(BLACK)
+          .setTitle('SPELL DELIVERED')
           .setDescription(
-            `꒰ঌ **${amount}× ${s.emoji} ${s.name}** added to your SILV inventory ໒꒱\n\n` +
-            `${SILV_ICON} SILV spent: **${cost}**\n\n` +
+            `> ${s.emoji} **${amount}× ${s.name}** added to your SILV inventory\n\n` +
+            `> ${SILV_ICON} SILV spent: **${cost}**\n\n` +
             `-# Use \`,cast ${itemId} @member\` in SILV to cast it.`
           )
-          .setFooter({ text: 'System • Spell Shop' })
-          .setTimestamp(),
+          .setFooter(footer(message)),
       ],
     });
   }
@@ -307,25 +267,24 @@ async function handleBuy({ message, args, userData, saveUserData }) {
 
     userData.inventory[SILV_KEY] = silv - cost;
     for (let i = 0; i < amount; i++) activateEssence(userData, itemId);
-    
+
     userData.stats = userData.stats || {};
     userData.stats.silvSpent = (userData.stats.silvSpent || 0) + cost;
-    
+
     await saveUserData({ inventory: userData.inventory, activeEssences: userData.activeEssences, stats: userData.stats });
     await trackStat(userData, 'silvSpent', 0, { message, saveUserData });
 
     return message.channel.send({
       embeds: [
         new EmbedBuilder()
-          .setColor(COLOR.ESSENCE)
-          .setTitle('˗ˏˋ 𐙚 ✨ 𝔈𝔰𝔰𝔢𝔫𝔠𝔢 𝔸𝕔𝕥𝔦𝕧𝕒𝕥𝕖𝕕 𐙚 ˎˊ˗')
+          .setColor(BLACK)
+          .setTitle('ESSENCE ACTIVATED')
           .setDescription(
-            `${e.emoji} **${e.name}** is now active!\n\n` +
-            `> **Effect:** ${e.effect}\n` +
-            `> **Duration:** ${formatMs(e.durationMs)}\n\n` +
-            `꒰ঌ ${SILV_KEY}: ${silv} → **${userData.inventory[SILV_KEY]}** ໒꒱`
+            `> ${e.emoji} **${e.name}** is now active\n\n` +
+            `> ${e.effect} · ${formatMs(e.durationMs)}\n\n` +
+            `-# ${SILV_KEY}: ${silv} → **${userData.inventory[SILV_KEY]}**`
           )
-          .setFooter({ text: 'System • Essence Activated' }),
+          .setFooter(footer(message)),
       ],
     });
   }
@@ -337,7 +296,7 @@ async function handleBuy({ message, args, userData, saveUserData }) {
     if (silv < cost) return notEnoughSilv(message, cost, silv);
     userData.unlockedTitles = userData.unlockedTitles || [];
     if (userData.unlockedTitles.includes(itemId)) {
-      return message.channel.send('❌ You already own this title! Equip it with `.profile customize title ' + itemId + '`');
+      return message.channel.send(`${XMARK} You already own this title! Equip it with \`.profile customize title ${itemId}\``);
     }
     userData.inventory[SILV_KEY] = silv - cost;
     userData.unlockedTitles.push(itemId);
@@ -354,7 +313,7 @@ async function handleBuy({ message, args, userData, saveUserData }) {
     if (silv < cost) return notEnoughSilv(message, cost, silv);
     userData.unlockedBadges = userData.unlockedBadges || [];
     if (userData.unlockedBadges.includes(itemId)) {
-      return message.channel.send('❌ You already own this badge!');
+      return message.channel.send(`${XMARK} You already own this badge!`);
     }
     userData.inventory[SILV_KEY] = silv - cost;
     userData.unlockedBadges.push(itemId);
@@ -390,13 +349,13 @@ async function handleBuy({ message, args, userData, saveUserData }) {
     const invKey               = u.name;
     userData.inventory[invKey] = (userData.inventory[invKey] || 0) + amount;
     await saveUserData({ balance: userData.balance, inventory: userData.inventory });
-    return bought(message, `**${amount}× ${u.emoji} ${u.name}**`, `💰 Spent: ${total.toLocaleString()} coins`, true);
+    return bought(message, `**${amount}× ${u.emoji} ${u.name}**`, `Spent: ${total.toLocaleString()} coins`);
   }
 
   // ── DB ITEM ────────────────────────────────────────────────────────────────
   try {
     const item = await ShopItem.findOne({ itemId });
-    if (!item) return message.channel.send(`❌ No item with ID \`${itemId}\` found. Check \`.sh\` for available items.`);
+    if (!item) return message.channel.send(`${XMARK} No item with ID \`${itemId}\` found. Check \`.sh\` for available items.`);
 
     if (item.roleId && amount > 1) amount = 1;
     const totalCoins = item.priceCoins * amount;
@@ -409,7 +368,7 @@ async function handleBuy({ message, args, userData, saveUserData }) {
       if (coins < totalCoins) return notEnoughCoins(message, totalCoins, coins);
       userData.balance = coins - totalCoins;
     } else {
-      return message.channel.send('⚠ This item has no price configured.');
+      return message.channel.send('This item has no price configured.');
     }
 
     userData.inventory[item.name] = (userData.inventory[item.name] || 0) + amount;
@@ -435,7 +394,7 @@ async function handleBuy({ message, args, userData, saveUserData }) {
 
   } catch (err) {
     console.error('Shop buy error:', err);
-    return message.channel.send('❌ Something went wrong.');
+    return message.channel.send(`${XMARK} Something went wrong.`);
   }
 }
 
@@ -458,11 +417,11 @@ async function handleAddItem({ message, args }) {
   const itemId      = name.toLowerCase().replace(/\s+/g, '_');
 
   if (await ShopItem.findOne({ itemId })) {
-    return message.channel.send(`❌ Item \`${itemId}\` already exists.`);
+    return message.channel.send(`${XMARK} Item \`${itemId}\` already exists.`);
   }
   await new ShopItem({ itemId, name, category, priceCoins, priceSilv, spawnChance, roleId, roleDays }).save();
   shopCache.lastRollTime = 0; // force refresh
-  return message.channel.send(`✅ **${name}** added to shop.`);
+  return message.channel.send(`${CHECK} **${name}** added to shop.`);
 }
 
 async function handleRemoveItem({ message, args }) {
@@ -471,36 +430,38 @@ async function handleRemoveItem({ message, args }) {
   const item = await ShopItem.findOneAndDelete({ itemId });
   shopCache.lastRollTime = 0;
   return item
-    ? message.channel.send(`✅ **${item.name}** removed.`)
-    : message.channel.send(`❌ No item \`${itemId}\` found.`);
+    ? message.channel.send(`${CHECK} **${item.name}** removed.`)
+    : message.channel.send(`${XMARK} No item \`${itemId}\` found.`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 function deny(message) {
-  return message.channel.send({ embeds: [new EmbedBuilder().setColor(COLOR.DEFAULT).setTitle('˗ˏˋ 𐙚 𝔸𝕔𝕔𝕖𝕤𝕤 𝔻𝕖𝕟𝕚𝕖𝕕 𐙚 ˎˊ˗').setDescription('Admins only.')] });
+  return message.channel.send({ embeds: [new EmbedBuilder().setColor(BLACK).setTitle('ACCESS DENIED').setDescription(`${XMARK} Admins only.`).setFooter(footer(message))] });
 }
 
 function notEnoughSilv(message, need, have) {
   return message.channel.send({
-    embeds: [new EmbedBuilder().setColor(COLOR.LOSS).setTitle('✧˚₊‧ ✖ Not Enough SILV ‧₊˚✧')
-      .setDescription(`**Need:** ${need} ${SILV_ICON}\n**Have:** ${have} ${SILV_ICON}\n**Missing:** ${need - have} ${SILV_ICON}`)],
+    embeds: [new EmbedBuilder().setColor(BLACK).setTitle('NOT ENOUGH SILV')
+      .setDescription(`> Need: **${need}** ${SILV_ICON}\n> Have: **${have}** ${SILV_ICON}\n> Missing: **${need - have}** ${SILV_ICON}`)
+      .setFooter(footer(message))],
   });
 }
 
 function notEnoughCoins(message, need, have) {
   return message.channel.send({
-    embeds: [new EmbedBuilder().setColor(COLOR.LOSS).setTitle('✧˚₊‧ ✖ Not Enough Coins ‧₊˚✧')
-      .setDescription(`**Need:** ${need.toLocaleString()} 💰\n**Have:** ${have.toLocaleString()} 💰\n**Missing:** ${(need - have).toLocaleString()} 💰`)],
+    embeds: [new EmbedBuilder().setColor(BLACK).setTitle('NOT ENOUGH COINS')
+      .setDescription(`> Need: **${need.toLocaleString()}** coins\n> Have: **${have.toLocaleString()}** coins\n> Missing: **${(need - have).toLocaleString()}** coins`)
+      .setFooter(footer(message))],
   });
 }
 
-function bought(message, itemStr, note, coins = false) {
+function bought(message, itemStr, note) {
   return message.channel.send({
-    embeds: [new EmbedBuilder().setColor(COLOR.WIN).setTitle('˗ˏˋ 𐙚 ✅ ℙ𝕦𝕣𝕔𝕙𝕒𝕤𝕖 ℂ𝕠𝕞𝕡𝕝𝕖𝕥𝕖 𐙚 ˎˊ˗')
-      .setDescription(`꒰ঌ You purchased ${itemStr} ໒꒱\n\n${note}`)
-      .setFooter({ text: 'System • Shop' }).setTimestamp()],
+    embeds: [new EmbedBuilder().setColor(BLACK).setTitle('PURCHASE COMPLETE')
+      .setDescription(`> ${CHECK} You purchased ${itemStr}\n\n> ${note}`)
+      .setFooter(footer(message))],
   });
 }
 

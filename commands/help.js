@@ -1,6 +1,8 @@
 // commands/help.js
 const { EmbedBuilder } = require('discord.js');
-const { COLOR } = require('../utils/config');
+const CHECK = '<:check:1547659779877642360>';
+const XMARK = '<:xmark:1547659816783061153>';
+const BLACK = 0x000000;
 
 const SECTIONS = {
   economy: {
@@ -92,31 +94,32 @@ module.exports = {
 
     if (secData) {
       const embed = new EmbedBuilder()
-        .setTitle(`˗ˏˋ 𐙚 ${secData.title} 𐙚 ˎˊ˗`)
-        .setColor(COLOR.DEFAULT)
-        .setDescription(secData.commands.map(c => `\`${c.cmd}\` — ${c.desc}`).join('\n'))
-        .setFooter({ text: `Sections: ${Object.keys(SECTIONS).join(', ')} | .help [section]` });
+        .setTitle(secData.title.replace(/^\p{Extended_Pictographic}\s*/u, '').toUpperCase())
+        .setColor(BLACK)
+        .setDescription(secData.commands.map(c => `> \`${c.cmd}\` — ${c.desc}`).join('\n'))
+        .setFooter({ text: `Sections: ${Object.keys(SECTIONS).join(', ')} — .help [section]` });
       return message.channel.send({ embeds: [embed] });
     }
 
     // Main overview
     const embed = new EmbedBuilder()
-      .setTitle('˗ˏˋ 𐙚 𝕂𝕆ℕ — Command Guide 𐙚 ˎˊ˗')
-      .setColor(COLOR.DEFAULT)
+      .setTitle('COMMAND GUIDE')
+      .setColor(BLACK)
       .setDescription(
-        '꒰ঌ Use `.help [section]` to view a section in detail ໒꒱\n\n' +
-        '⭐ **Non-admin commands:** `.rd .lb .bal .pf .inv .daily .missions .ach .help`\n' +
-        '🔒 **All other commands are admin-only**\n\n' +
-        '💎 **1 SILV Token = 10 Robux** — Spend SILV in the shop for massive value!\n\n' +
+        '-# Use `.help [section]` to view a section in detail\n\n' +
+        `> ${CHECK} **Non-admin commands:** \`.rd .lb .bal .pf .inv .daily .missions .ach .help\`\n` +
+        `> ${XMARK} **All other commands are admin-only**\n\n` +
+        `> **1 SILV Token = 10 Robux** — spend SILV in the shop for the best value\n\n` +
+        '__**Sections**__\n' +
         Object.values(SECTIONS).map(s =>
-          `**${s.emoji} ${s.title}** — \`.help ${Object.keys(SECTIONS).find(k => SECTIONS[k] === s)}\``
+          `> **${s.title}** — \`.help ${Object.keys(SECTIONS).find(k => SECTIONS[k] === s)}\``
         ).join('\n')
       )
       .addFields(
-        { name: '💡 All-in Shortcuts', value: '`all` or `max` — bet full balance\nExample: `.bj all`, `.cf max h`, `.sl all`', inline: false },
-        { name: '🛍 Shop Highlights',   value: '`.sh essences` — Boost your gains\n`.sh bundles` — Best SILV value packs',        inline: false },
+        { name: 'All-in Shortcuts', value: '`all` or `max` — bet full balance\nExample: `.bj all`, `.cf max h`, `.sl all`', inline: false },
+        { name: 'Shop Highlights',  value: '`.sh essences` — boost your gains\n`.sh bundles` — best SILV value packs', inline: false },
       )
-      .setFooter({ text: 'System • Help | All gambling is admin-only' });
+      .setFooter({ text: message.guild?.name || 'Shiro' });
 
     return message.channel.send({ embeds: [embed] });
   },
