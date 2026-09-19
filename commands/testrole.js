@@ -1,38 +1,15 @@
 const { EmbedBuilder } = require('discord.js');
-
-// Configuration - Add your role IDs and user IDs here
-const ALLOWED_ROLE_IDS = [
-  '1454818862397653074',  // Admin role
-  '1450358872782147726',  // Moderator role
-  // Add more role IDs as needed
-];
-
-const ALLOWED_USER_IDS = [
-  '1349792214124986419',  // Your user ID
-  '472164764135587850',  // Another user ID
-  // Add more user IDs as needed
-];
+const { requireWhitelisted } = require('../utils/permissions');
 
 module.exports = {
   name: 'r',
   description: 'Toggle role on/off for a user (restricted access)',
   async execute({ message, args }) {
-    // Check if user has ANY allowed role OR is in allowed users
-    const hasAllowedRole = ALLOWED_ROLE_IDS.some(roleId => 
-      message.member.roles.cache.has(roleId)
-    );
-    const isAllowedUser = ALLOWED_USER_IDS.includes(message.author.id);
-
-    if (!hasAllowedRole && !isAllowedUser) {
-      return message.channel.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor('Red')
-            .setTitle('❌ No Permission')
-            .setDescription('You don\'t have permission to use this command.')
-        ]
-      });
-    }
+    // Can grant/remove ANY role including the real admin role — a command
+    // like this must never trust "has some role" alone (that's exactly
+    // how a stale/mislabeled role becomes a privilege-escalation path),
+    // so it's gated at the strict whitelist tier, not requireAdmin.
+    if (!await requireWhitelisted(message)) return;
 
     // Parse arguments
     if (args.length < 2) {

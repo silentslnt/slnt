@@ -1,7 +1,8 @@
 const { EmbedBuilder } = require('discord.js');
+const { isAdmin } = require('../utils/permissions');
 
-const GUESS_ADMIN_ROLE_ID = '1382513369801555988';
-const GUESS_CHANNEL_ID = '1454818862397653074';
+// Shared with hangman.js/ws.js — the designated minigame channel.
+const GUESS_CHANNEL_ID = '1401925188991582338';
 
 const guessGameState = {
   active: false,
@@ -33,10 +34,9 @@ module.exports = {
   description: 'Guess a number game with admin controls.',
   async execute({ message, args }) {
     const sub = (args[0] || '').toLowerCase();
-    const isAdmin = message.member.roles.cache.has(GUESS_ADMIN_ROLE_ID);
 
     if (sub === 'start') {
-      if (!isAdmin) {
+      if (!isAdmin(message)) {
         return message.channel.send('Only admins can start the guessing game.');
       }
 
@@ -68,7 +68,7 @@ module.exports = {
     }
 
     if (sub === 'stop') {
-      if (!isAdmin) {
+      if (!isAdmin(message)) {
         return message.channel.send('Only admins can stop the game.');
       }
 

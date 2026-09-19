@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { requireAdmin } = require('../utils/permissions');
+const { requireWhitelisted } = require('../utils/permissions');
 
 const validRarities = [
   'Prismatic', 'Mythical', 'Legendary', 'Rare', 'Uncommon', 'Common',
@@ -16,7 +16,8 @@ module.exports = {
   description:
     'Admin commands: give/remove currency, silv tokens, keys, or inventory items; reset user data, spawn keys.',
   async execute({ message, args, getUserData, keydrop, logAdminAction }) {
-    if (!await requireAdmin(message)) return;
+    // Currency/item creation panel — whitelist only, not just the admin role.
+    if (!await requireWhitelisted(message)) return;
 
     if (args.length < 1) {
       return message.channel.send({
