@@ -9,6 +9,13 @@ function loadCfg() {
   try { return JSON.parse(fs.readFileSync(CFG_FILE, 'utf8')); } catch { return {}; }
 }
 
+// Loaded once at startup; index.js calls updateCfg() after every config save.
+let cachedCfg = loadCfg();
+
+function updateCfg(newCfg) {
+  cachedCfg = newCfg;
+}
+
 // Minimum multiplier or absolute win to trigger an announcement
 const WIN_THRESHOLD_MULTIPLIER = 3;   // 3x or more
 const WIN_THRESHOLD_COINS      = 2000; // or won at least 2000 coins
@@ -41,7 +48,7 @@ const GAME_EMOJIS = {
  * @param {string} [opts.detail]   - optional flavour text
  */
 async function announceWin(client, opts) {
-  const cfg = loadCfg();
+  const cfg = cachedCfg;
   if (!cfg.winsChannelId) return;
 
   const profit = opts.payout - opts.bet;
@@ -68,4 +75,4 @@ async function announceWin(client, opts) {
   }
 }
 
-module.exports = { announceWin };
+module.exports = { announceWin, updateCfg };

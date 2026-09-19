@@ -70,6 +70,10 @@ web_modules/
 .env.*
 !.env.example
 
+# Bot runtime config
+prefix.json
+vouch-config.json
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache

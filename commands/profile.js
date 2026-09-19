@@ -1,219 +1,155 @@
+// commands/profile.js
 const { EmbedBuilder } = require('discord.js');
-
-// ROLE THAT UNLOCKS EXCLUSIVE PROFILE + CUSTOMIZATION
-const EXCLUSIVE_ROLE_ID = '1452178800459645026';
-
-// Inventory key for Silv tokens (same as shop)
-const SILV_TOKEN_KEY = 'Silv token';
+const { COLOR, TITLES, BADGES, PRESTIGE_RANKS } = require('../utils/config');
+const { xpProgress, progressBar } = require('../utils/xp');
+const { getRank, getNextRank } = require('../utils/prestige');
+const { getActiveEssenceSummary } = require('../utils/essences');
+const { trackStat } = require('../utils/achievements');
 
 module.exports = {
   name: 'profile',
-  description: 'View a profile. Special role = exclusive customizable profile.',
+  aliases: ['pf', 'p'],
+  adminOnly: false,
+  description: 'View your profile (or another user\'s). `.pf [@user]`',
+
   async execute({ message, args, userData, saveUserData, getUserData }) {
-    const mentioned = message.mentions.users.first();
-    const targetUser = mentioned || message.author;
-    const isSelf = targetUser.id === message.author.id;
-
-    const sub = args[0]?.toLowerCase();
-
-    // Load DB data for the TARGET user
-    const targetData = isSelf
-      ? userData
-      : await getUserData(targetUser.id);
-
-    // Fetch GuildMember for role checks
-    const targetMember = await message.guild.members
-      .fetch(targetUser.id)
-      .catch(() => null);
-    const isExclusive = !!targetMember?.roles.cache.has(EXCLUSIVE_ROLE_ID);
-
-    // CUSTOMIZATION ONLY: self + .profile customize ...
-    if (isSelf && sub === 'customize') {
-      return handleCustomize({
-        message,
-        args: args.slice(1),
-        userData,
-        saveUserData,
-      });
+    const target = message.mentions.users.first() || message.author;
+    let data     = userData;
+    if (target.id !== message.author.id) {
+      data = await getUserData(target.id);
+      if (!data) return message.channel.send('❌ That user has no profile yet.');
+    } else {
+      // track profile viewed
+      await trackStat(userData, 'profileViewed', 1, { message, saveUserData });
     }
 
-    // SHOW PROFILE (self or other)
-    return showProfile({
-      message,
-      targetUser,
-      userData: targetData,
-      isExclusive,
-      isSelf,
-    });
+    const balance    = data.balance || 0;
+    const silv       = data.inventory?.['Silv token'] || 0;
+    const { level, current, needed } = xpProgress(data.xp || 0);
+    const xpBar      = progressBar(current, needed);
+    const streak     = data.dailyStreak || 0;
+    const rank       = getRank(data.totalEarned || 0);
+    const nextRank   = getNextRank(data.totalEarned || 0);
+    const prestige   = data.prestige || 0;
+    const activeEss  = getActiveEssenceSummary(data);
+
+    // Equipped title
+    const equippedTitleId = data.equippedTitle;
+    const titleDisplay    = equippedTitleId && TITLES[equippedTitleId]
+      ? TITLES[equippedTitleId].name
+      : null;
+
+    // Badges
+    const ownedBadges = (data.unlockedBadges || [])
+      .map(id => BADGES[id]?.name)
+      .filter(Boolean)
+      .join('  ') || '_None yet_';
+
+    // Achievements count
+    const achCount = (data.achievements || []).length;
+
+    // Rank progress
+    let rankProgress = '';
+    if (nextRank) {
+      const curr  = data.totalEarned || 0;
+      const toGo  = nextRank.min - curr;
+      const bar   = progressBar(curr - rank.min, nextRank.min - rank.min);
+      rankProgress = `${bar} → **${nextRank.name}** in ${toGo.toLocaleString()} earned`;
+    } else {
+      rankProgress = '🏆 **Max rank reached!**';
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(`˗ˏˋ 𐙚 🪞 𝒫𝓇𝑜𝒻𝒾𝓁𝑒 — ${target.username} 𐙚 ˎˊ˗`)
+      .setColor(COLOR.DEFAULT)
+      .setThumbnail(target.displayAvatarURL({ dynamic: true }))
+      .setDescription(
+        (titleDisplay ? `✦ **${titleDisplay}**\n` : '') +
+        (prestige > 0  ? `🔥 **Prestige ${prestige}**\n` : '') +
+        `\n꒰ঌ Rank: **${rank.name}** ໒꒱`
+      )
+      .addFields(
+        // ── Economy ──────────────────────────────────────────────
+        {
+          name: '─── 💰 Economy',
+          value:
+            `**Balance:** ${balance.toLocaleString()} coins\n` +
+            `**SILV Tokens:** ${silv} 💎\n` +
+            `**Total Earned:** ${(data.totalEarned || 0).toLocaleString()}\n` +
+            `**Daily Streak:** 🔥 ${streak} days`,
+          inline: false,
+        },
+        // ── Level / XP ───────────────────────────────────────────
+        {
+          name: '─── 📈 Level & XP',
+          value:
+            `**Level ${level}** — ${current.toLocaleString()} / ${needed.toLocaleString()} XP\n` +
+            `${xpBar}`,
+          inline: false,
+        },
+        // ── Rank Progress ────────────────────────────────────────
+        {
+          name: `─── ⭐ Rank: ${rank.name}`,
+          value: rankProgress,
+          inline: false,
+        },
+        // ── Badges ───────────────────────────────────────────────
+        {
+          name: '─── 🎖 Badges',
+          value: ownedBadges,
+          inline: false,
+        },
+        // ── Achievements ─────────────────────────────────────────
+        {
+          name: '─── 🏆 Achievements',
+          value: `${achCount} unlocked — see \`.achievements\``,
+          inline: true,
+        },
+        // ── Stats ────────────────────────────────────────────────
+        {
+          name: '─── 🎮 Stats',
+          value:
+            `Games Played: ${data.stats?.gamesPlayed || 0}\n` +
+            `Games Won: ${data.stats?.gamesWon || 0}\n` +
+            `Keys Opened: ${data.stats?.keysOpened || 0}`,
+          inline: true,
+        },
+      )
+      .setFooter({ text: `System • Profile${activeEss ? ' • Essences active' : ''}` })
+      .setTimestamp();
+
+    // Active essences panel
+    if (activeEss && target.id === message.author.id) {
+      embed.addFields({ name: '─── ✨ Active Essences', value: activeEss, inline: false });
+    }
+
+    // Customize subcommand
+    if (args[0] === 'customize') {
+      return handleCustomize({ message, args: args.slice(1), userData, saveUserData });
+    }
+
+    return message.channel.send({ embeds: [embed] });
   },
 };
 
-// =============== CUSTOMIZATION HELPERS (SELF ONLY) ===============
-
+// ── Profile customization ─────────────────────────────────────────────────────
 async function handleCustomize({ message, args, userData, saveUserData }) {
-  const option = args[0]?.toLowerCase();
+  const type = (args[0] || '').toLowerCase();
+  const id   = (args[1] || '').toLowerCase();
 
-  if (!option) {
-    return message.channel.send(
-      '**Exclusive Profile Customization:**\n' +
-        '`.profile customize color #HEXCODE`\n' +
-        '`.profile customize bio <text>`\n' +
-        '`.profile customize banner <text>`',
-    );
-  }
-
-  // Color: ONLY users with exclusive role can change it
-  if (option === 'color') {
-    const member = message.member;
-    const hasRole = member.roles.cache.has(EXCLUSIVE_ROLE_ID);
-    if (!hasRole) {
-      return message.channel.send(
-        '❌ Only exclusive members can change profile color.',
-      );
+  if (type === 'title') {
+    if (!id || !TITLES[id]) return message.channel.send(`❌ Unknown title. Buy titles with \`.sh cosmetics\``);
+    if (!(userData.unlockedTitles || []).includes(id)) {
+      return message.channel.send(`❌ You don't own this title. Buy it with \`.sh buy ${id}\``);
     }
-
-    const color = args[1];
-    if (!color || !/^#[0-9A-F]{6}$/i.test(color)) {
-      return message.channel.send(
-        'Usage: `.profile customize color #HEXCODE`',
-      );
-    }
-
-    userData.profileColor = color;
-    await saveUserData({ profileColor: color });
-    return message.channel.send(`✅ Profile color set to **${color}**`);
+    userData.equippedTitle = id;
+    await saveUserData({ equippedTitle: id });
+    return message.channel.send(`✅ Title set to **${TITLES[id].name}**! Visible on your \`.profile\`.`);
   }
 
-  if (option === 'bio') {
-    const bio = args.slice(1).join(' ');
-    if (!bio)
-      return message.channel.send('Usage: `.profile customize bio <text>`');
-    if (bio.length > 100)
-      return message.channel.send('❌ Bio must be ≤ 100 characters.');
-
-    userData.profileBio = bio;
-    await saveUserData({ profileBio: bio });
-    return message.channel.send('✅ Bio updated.');
-  }
-
-  if (option === 'banner') {
-    const banner = args.slice(1).join(' ');
-    if (!banner)
-      return message.channel.send(
-        'Usage: `.profile customize banner <text>`',
-      );
-    if (banner.length > 50)
-      return message.channel.send('❌ Banner must be ≤ 50 characters.');
-
-    userData.profileBanner = banner;
-    await saveUserData({ profileBanner: banner });
-    return message.channel.send('✅ Banner updated.');
-  }
-
-  return message.channel.send('Unknown option. Use: `color`, `bio`, or `banner`.');
+  return message.channel.send(
+    '**Profile Customization**\n' +
+    '`.profile customize title <id>` — Set your title\n\n' +
+    'Available types: `title`'
+  );
 }
-
-// =============== PROFILE DISPLAY ===============
-
-function showProfile({ message, targetUser, userData, isExclusive, isSelf }) {
-  // Debug: see what color is coming from DB
-  console.log('PROFILE DEBUG', {
-    id: targetUser.id,
-    username: targetUser.username,
-    profileColor: userData.profileColor,
-  });
-
-  // Persistent profile fields (from Mongo)
-  const color = userData.profileColor || '#2b2d31';
-  const bio = userData.profileBio || 'No bio set.';
-  const banner = userData.profileBanner || null;
-
-  // Economy (Silv uses same key as inventory/shop)
-  const coins = userData.balance || 0;
-  const silv = userData.inventory?.[SILV_TOKEN_KEY] || 0;
-
-  // Characters
-  const chars = userData.characters || [];
-  const charCount = Array.isArray(chars) ? chars.length : 0;
-
-  const tiers = (Array.isArray(chars) ? chars : []).reduce((acc, ch) => {
-    if (!ch?.tier) return acc;
-    acc[ch.tier] = (acc[ch.tier] || 0) + 1;
-    return acc;
-  }, {});
-
-  // Header box
-  let header =
-    '╭──────────────────────────────────────────╮\n' +
-    `│  ${targetUser.username.toUpperCase().padEnd(38)} │\n`;
-
-  if (isExclusive) {
-    header += '│  ⭐ EXCLUSIVE MEMBER ⭐                  │\n';
-    if (banner) {
-      header += `│  ✨ ${banner.padEnd(34)} ✨ │\n`;
-    }
-  }
-
-  header += '╰──────────────────────────────────────────╯';
-
-  const embed = new EmbedBuilder()
-    .setTitle(`˗ˏˋ 𐙚 ${targetUser.username}'s Profile 𐙚 ˎˊ˗`)
-    .setDescription(`${header}\n\n**Bio:** _${bio}_`)
-    .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
-    .setColor(color) // always use stored color
-    .setTimestamp();
-
-  // Economy field
-  embed.addFields({
-    name: '💰 ECONOMY',
-    value:
-      `• Coins: \`${coins.toLocaleString()}\`\n` +
-      `• <:SILV_TOKEN:1447678878448484555> SILV Tokens: \`${silv}\``,
-    inline: true,
-  });
-
-  // Characters field
-  let charText = `• Total: **${charCount}**`;
-  if (charCount > 0) {
-    if (tiers.S) charText += `\n• S Tier: ${tiers.S}`;
-    if (tiers.A) charText += `\n• A Tier: ${tiers.A}`;
-    if (tiers.B) charText += `\n• B Tier: ${tiers.B}`;
-    if (tiers.C) charText += `\n• C Tier: ${tiers.C}`;
-  }
-
-  embed.addFields({
-    name: '⭐ CHARACTERS',
-    value: charText,
-    inline: true,
-  });
-
-  // Achievements
-  const achievements = [];
-  if (charCount >= 10) achievements.push('⭐ Character Enthusiast');
-  if (charCount >= 50) achievements.push('🌟 Character Master');
-  if (silv >= 5) achievements.push('🜂 SILV Holder');
-  if (isExclusive) achievements.push('✨ Exclusive Profile');
-
-  if (achievements.length) {
-    embed.addFields({
-      name: '🏆 ACHIEVEMENTS',
-      value: achievements.join(' • '),
-      inline: false,
-    });
-  }
-
-  // Show customization help only for self + exclusive role
-  if (isSelf && isExclusive) {
-    embed.addFields({
-      name: '⚙️ PROFILE CUSTOMIZATION',
-      value:
-        '`.profile customize color #HEXCODE`\n' +
-        '`.profile customize bio <text>`\n' +
-        '`.profile customize banner <text>`',
-      inline: false,
-    });
-  }
-
-  return message.channel.send({ embeds: [embed] });
-}
-

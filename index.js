@@ -1,7 +1,6 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const express = require('express');
 const mongoose = require('mongoose');
 const {
   Client, GatewayIntentBits, Collection, EmbedBuilder,
@@ -10,14 +9,20 @@ const {
   REST, Routes, SlashCommandBuilder,
 } = require('discord.js');
 const keydrop = require('./commands/keydrop.js');
+const winAnnouncer = require('./utils/winAnnouncer.js');
 
 // ── Vouch system config ────────────────────────────────────────
 const VOUCH_CONFIG_FILE = path.join(__dirname, 'vouch-config.json');
 function loadVouchConfig() {
   try { return JSON.parse(fs.readFileSync(VOUCH_CONFIG_FILE, 'utf8')); } catch(e) { return {}; }
 }
-function saveVouchConfig(c) {
-  try { fs.writeFileSync(VOUCH_CONFIG_FILE, JSON.stringify(c, null, 2)); } catch(e) {}
+// Loaded once at startup; all subsequent reads use this variable.
+let vouchConfig = loadVouchConfig();
+
+async function saveVouchConfig(c) {
+  vouchConfig = c;
+  winAnnouncer.updateCfg(c);
+  try { await fs.promises.writeFile(VOUCH_CONFIG_FILE, JSON.stringify(c, null, 2)); } catch(e) {}
 }
 const PENDING_VOUCHES = new Map();
 const PENDING_SETUP   = new Map();
@@ -29,25 +34,16 @@ const VOUCH_DEFAULTS = {
   color:            '#FFD700',
 };
 
-// Start Express server to keep bot awake
-const app = express();
-const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('Bot is running'));
-app.listen(PORT, () => console.log(`Web server started on port ${PORT}`));
-
 // ===== MONGODB SETUP =====
-const userSchema = new mongoose.Schema({
-  userId: { type: String, unique: true, required: true },
-  balance: { type: Number, default: 0 },
-  inventory: { type: Object, default: {} },
-  lastDaily: { type: Date, default: null },
-  characters: { type: Array, default: [] },
-  profileColor: { type: String, default: null },
-  profileBio: { type: String, default: null },
-  profileBanner: { type: String, default: null },
-});
-
-const User = mongoose.model('User', userSchema);
+// User model lives in models/user.js — it must be registered before any
+// command runs mongoose.model('User') (e.g. leaderboard.js) or does a
+// $set/updateOne with the new economy fields (missions, vault, xp, prestige,
+// achievements, gift caps). Previously this file registered its own narrow
+// inline schema first, which won under mongoose's models.User || model()
+// guard — Mongoose's default strict mode then silently dropped every field
+// not in that old schema on save (vault, missionProgress, xp, stats, etc.),
+// so the whole new economy layer looked like it worked but never persisted.
+const User = require('./models/user');
 
 const adminLogSchema = new mongoose.Schema({
   adminId: { type: String, required: true },
@@ -136,7 +132,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-const prefix = '.';
+let currentPrefix = loadPrefix();
 
 // Ready event listener
 client.once('clientReady', async () => {
@@ -193,6 +189,16 @@ client.once('clientReady', async () => {
     console.log('✅ Slash commands registered (/vouch, /setup vouch, /setup wins)');
   } catch(e) { console.error('Failed to register slash commands:', e.message); }
 });
+
+// ── Prefix config ─────────────────────────────────────────────
+const PREFIX_FILE = path.join(__dirname, 'prefix.json');
+function loadPrefix() {
+  try { return JSON.parse(fs.readFileSync(PREFIX_FILE, 'utf8')).prefix || '.'; } catch(e) { return '.'; }
+}
+async function savePrefix(p) {
+  currentPrefix = p;
+  try { await fs.promises.writeFile(PREFIX_FILE, JSON.stringify({ prefix: p }, null, 2)); } catch(e) {}
+}
 
 // Global cooldowns
 const cooldowns = new Map();
@@ -274,7 +280,7 @@ client.on('messageCreate', async (message) => {
       const userAnswer = message.content.toUpperCase().trim();
       
       // Ignore if it's a command
-      if (!userAnswer.startsWith(prefix)) {
+      if (!userAnswer.startsWith(currentPrefix)) {
         challenge.attempts++;
 
         // Check if answer matches
@@ -419,9 +425,9 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  if (!message.content.startsWith(prefix)) return;
+  if (!message.content.startsWith(currentPrefix)) return;
 
-  const args = message.content.slice(prefix.length).trim().split(/ +/);
+  const args = message.content.slice(currentPrefix.length).trim().split(/ +/);
   const commandName = args.shift().toLowerCase();
   const command = client.commands.get(commandName);
   if (!command) return;
@@ -460,7 +466,7 @@ client.on('messageCreate', async (message) => {
     if (now < expirationTime) {
       const remaining = ((expirationTime - now) / 1000).toFixed(1);
       return message.channel.send(
-        `⏳ Wait **${remaining}s** before using \`${prefix}${command.name}\` again.`
+        `⏳ Wait **${remaining}s** before using \`${currentPrefix}${command.name}\` again.`
       );
     }
   }
@@ -477,13 +483,15 @@ client.on('messageCreate', async (message) => {
       args,
       userData,
       saveUserData: (updatedData) => saveUserData(message.author.id, updatedData),
+      saveSpecificUserData: saveUserData,
       updateUserBalance,
       addKeyToInventory,
       getUserData,
       keydrop,
       guessGame,
       rarities,
-      prefix,
+      prefix: currentPrefix,
+      setPrefix: savePrefix,
       client,
       logAdminAction,
       AdminLog,
@@ -508,15 +516,14 @@ client.on('interactionCreate', async (interaction) => {
     if (!isAdmin) return interaction.reply({ content: '❌ You need Manage Server permission.', ephemeral: true });
     if (interaction.options.getSubcommand() === 'wins') {
       const ch  = interaction.options.getChannel('channel');
-      const cfg = loadVouchConfig();
-      cfg.winsChannelId = ch.id;
-      saveVouchConfig(cfg);
+      vouchConfig.winsChannelId = ch.id;
+      await saveVouchConfig(vouchConfig);
       return interaction.reply({ content: `✅ Win announcements will post to <#${ch.id}> (triggers at 3× multiplier or 2,000+ coin profit).`, ephemeral: true });
     }
 
     if (interaction.options.getSubcommand() === 'vouch') {
       const ch  = interaction.options.getChannel('channel');
-      const cfg = loadVouchConfig();
+      const cfg = vouchConfig;
       PENDING_SETUP.set(interaction.user.id, ch.id);
 
       const modal = new ModalBuilder()
@@ -582,14 +589,14 @@ client.on('interactionCreate', async (interaction) => {
       return interaction.reply({ content: '❌ Invalid color — use a 6-digit hex like `#FFD700`', ephemeral: true });
     }
 
-    const cfg = loadVouchConfig();
+    const cfg = { ...vouchConfig };
     cfg.channelId      = channelId;
     cfg.color          = `#${hex}`;
     cfg.title          = interaction.fields.getTextInputValue('sv_title').trim();
     cfg.vouchedByLabel = interaction.fields.getTextInputValue('sv_vouched_by').trim();
     cfg.vouchingForLabel = interaction.fields.getTextInputValue('sv_vouching_for').trim();
     cfg.receivedLabel  = interaction.fields.getTextInputValue('sv_received').trim();
-    saveVouchConfig(cfg);
+    await saveVouchConfig(cfg);
 
     return interaction.reply({
       content: [
@@ -648,7 +655,7 @@ client.on('interactionCreate', async (interaction) => {
     PENDING_VOUCHES.delete(interaction.user.id);
     const { taggedUser, imageUrl } = pending;
 
-    const cfg = loadVouchConfig();
+    const cfg = vouchConfig;
     if (!cfg.channelId) {
       return interaction.editReply({ content: '❌ Vouch channel not set — ask an admin to run `/setup vouch #channel`.' });
     }
