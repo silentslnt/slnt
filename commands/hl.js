@@ -1,18 +1,24 @@
 const { EmbedBuilder } = require('discord.js');
+const { requireAdmin } = require('../utils/permissions');
+const { parseBet } = require('../utils/parseBet');
+
+const BLACK = 0x000000;
 
 module.exports = {
   name: 'hl',
-  description: 'Play Higher or Lower: guess if the next number will be higher or lower!',
+  aliases: ['highlow'],
+  adminOnly: true,
+  description: 'Play Higher or Lower: guess if the next number will be higher or lower! `.hl <amount|all>`',
   async execute({ message, args, userData, saveUserData }) {
-    const bet = parseInt(args[0]);
-
-    if (!bet || isNaN(bet) || bet <= 0)
-      return message.channel.send('Usage: `.hl <amount>`');
+    if (!await requireAdmin(message)) return;
 
     if (typeof userData.balance !== 'number') userData.balance = 0;
+    const bet = parseBet(args[0], userData.balance);
 
-    if (userData.balance < bet)
+    if (!bet) return message.channel.send('Usage: `.hl <amount|all>`');
+    if (userData.balance < bet) {
       return message.channel.send("You don't have enough balance for this bet.");
+    }
 
     // Deduct bet first
     userData.balance -= bet;
@@ -22,25 +28,20 @@ module.exports = {
     let current = Math.floor(Math.random() * 99) + 1;
     let streak = 0;
 
-    // NERF: fewer rounds and softer multipliers
     const maxRounds = 3;
     const multipliers = [0, 1.5, 2.2, 3];
     // index = streak; streak 1→1.5x, 2→2.2x, 3→3x
 
     let embed = new EmbedBuilder()
-      .setTitle('˗ˏˋ 𐙚 🔼 𝔥𝔦𝔤𝔥𝔢𝔯 𝓸𝔯 𝔩𝔬𝔴𝔢𝔯 🔽 𐙚 ˎˊ˗')
+      .setTitle('HIGHER OR LOWER')
       .setDescription(
-        [
-          `Current number: **${current}**`,
-          '',
-          'React 🔼 for **Higher**, 🔽 for **Lower**.',
-          '',
-          `Streak: **0**`,
-          `Payout caps at **${multipliers[maxRounds]}x** after **${maxRounds}** correct celestial guesses.`
-        ].join('\n')
+        `> Current number: **${current}**\n\n` +
+        `> React 🔼 for **Higher**, 🔽 for **Lower**.\n\n` +
+        `> Streak: **0**\n` +
+        `> Payout caps at **${multipliers[maxRounds]}×** after **${maxRounds}** correct guesses.`
       )
-      .setColor('#F5E6FF')
-      .setTimestamp();
+      .setColor(BLACK)
+      .setFooter({ text: message.guild?.name || 'Shiro' });
 
     let statusMsg = await message.channel.send({ embeds: [embed] });
     await statusMsg.react('🔼');
@@ -57,25 +58,20 @@ module.exports = {
         userData.balance += payout;
         await saveUserData({ balance: userData.balance });
         resultMsg =
-          [
-            `🎉 You survived **${streakCount}** celestial round(s)!`,
-            `The next number was **${finalNum}**.`,
-            `**You won ${payout} coins!**`
-          ].join('\n');
+          `> You survived **${streakCount}** round(s)! The next number was **${finalNum}**.\n` +
+          `> **You won ${payout.toLocaleString()} coins!**`;
       } else {
         resultMsg =
-          [
-            `❌ Your streak has fallen. The next number was **${finalNum}**.`,
-            `Streak: **${streakCount}** – you lost your bet.`
-          ].join('\n');
+          `> Your streak ended. The next number was **${finalNum}**.\n` +
+          `> Streak: **${streakCount}** — you lost your bet.`;
       }
 
       const endEmbed = new EmbedBuilder()
-        .setTitle('˗ˏˋ 𐙚 🔮 𝔥/𝔩 𝔯𝔢𝔰𝔲𝔩𝔱𝔰 𐙚 ˎˊ˗')
+        .setTitle('HIGHER OR LOWER — RESULT')
         .setDescription(resultMsg)
-        .addFields({ name: '💰 Balance', value: `**${userData.balance}**`, inline: true })
-        .setColor(won ? '#C1FFD7' : '#FFB3C6')
-        .setTimestamp();
+        .addFields({ name: 'Balance', value: `**${userData.balance.toLocaleString()}**`, inline: true })
+        .setColor(BLACK)
+        .setFooter({ text: message.guild?.name || 'Shiro' });
 
       await message.channel.send({ embeds: [endEmbed] });
     }
@@ -101,19 +97,15 @@ module.exports = {
           return endGame(true, payout, streak, nextNum);
         } else {
           const streakEmbed = new EmbedBuilder()
-            .setTitle('˗ˏˋ 𐙚 🔼 𝔥𝔦𝔤𝔥𝔢𝔯 𝓸𝔯 𝔩𝔬𝔴𝔢𝔯 🔽 𐙚 ˎˊ˗')
+            .setTitle('HIGHER OR LOWER')
             .setDescription(
-              [
-                `✅ Correct guess! The new number is **${nextNum}**.`,
-                '',
-                'React again to continue your streak.',
-                '',
-                `Streak: **${streak}** / ${maxRounds}`,
-                `Current potential: **${multipliers[streak]}x** your bet if you make it to the end.`
-              ].join('\n')
+              `> Correct! The new number is **${nextNum}**.\n\n` +
+              `> React again to continue your streak.\n\n` +
+              `> Streak: **${streak}** / ${maxRounds}\n` +
+              `> Current potential: **${multipliers[streak]}×** if you make it to the end.`
             )
-            .setColor('#C1FFD7')
-            .setTimestamp();
+            .setColor(BLACK)
+            .setFooter({ text: message.guild?.name || 'Shiro' });
 
           await statusMsg.edit({ embeds: [streakEmbed] });
         }
@@ -125,7 +117,7 @@ module.exports = {
 
     collector.on('end', (_, reason) => {
       if (reason !== 'win' && reason !== 'fail') {
-        message.channel.send('⏱️ Higher or Lower game timed out.');
+        message.channel.send('Higher or Lower game timed out.');
       }
     });
   },
