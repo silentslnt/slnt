@@ -1,74 +1,69 @@
 const { EmbedBuilder } = require('discord.js');
 const { requireAdmin } = require('../utils/permissions');
 
+const BLACK = 0x000000;
+
 module.exports = {
   name: 'adminlogs',
   aliases: ['al'],
-  description: 'View admin command logs from the past 7 days (Admin only)',
-  async execute({ message, AdminLog, client }) {
+  description: 'View economy/moderation logs. `.adminlogs [command|@user]` — e.g. `.adminlogs gift`, `.adminlogs @user`',
+  async execute({ message, args, AdminLog }) {
     if (!await requireAdmin(message)) return;
 
     try {
-      // Get logs from past 7 days
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-      const logs = await AdminLog.find({
-        timestamp: { $gte: sevenDaysAgo }
-      })
+      const query = { timestamp: { $gte: sevenDaysAgo } };
+      const mentioned = message.mentions.users.first();
+      const filterArg = (args[0] || '').toLowerCase();
+
+      let filterLabel = 'all actions';
+      if (mentioned) {
+        query.$or = [{ adminId: mentioned.id }, { targetUserId: mentioned.id }];
+        filterLabel = `involving ${mentioned.username}`;
+      } else if (filterArg) {
+        query.command = filterArg;
+        filterLabel = `\`.${filterArg}\` only`;
+      }
+
+      const logs = await AdminLog.find(query)
         .sort({ timestamp: -1 })
-        .limit(50)
+        .limit(25)
         .lean();
 
       if (!logs || logs.length === 0) {
         return message.channel.send({
           embeds: [
             new EmbedBuilder()
-              .setColor('#F5E6FF')
-              .setTitle('📋 𝔄𝔡𝔪𝔦𝔫 𝕃𝕠𝕘𝕤')
-              .setDescription('No admin actions recorded in the past 7 days.')
-              .setFooter({ text: 'System • Log Viewer' })
-              .setTimestamp()
-          ]
+              .setColor(BLACK)
+              .setTitle('MODERATION LOGS')
+              .setDescription(`> No actions recorded (${filterLabel}) in the past 7 days.`)
+              .setFooter({ text: message.guild?.name || 'Shiro' }),
+          ],
         });
       }
 
-      // Group logs into chunks of 10 for better readability
-      const logsPerPage = 10;
-      const totalPages = Math.ceil(logs.length / logsPerPage);
-      const firstPageLogs = logs.slice(0, logsPerPage);
-
-      // Build log entries
       let logText = '';
-      for (const log of firstPageLogs) {
+      for (const log of logs) {
         const date = new Date(log.timestamp);
         const dateStr = date.toLocaleString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
         });
 
-        const target = log.targetUsername ? ` → **${log.targetUsername}**` : '';
+        const target  = log.targetUsername ? ` → **${log.targetUsername}**` : '';
         const details = log.details ? ` \`${log.details}\`` : '';
 
-        logText += `\`${dateStr}\` **${log.adminUsername}** used \`.${log.command}\` - ${log.action}${target}${details}\n`;
+        logText += `> \`${dateStr}\` **${log.adminUsername}** used \`.${log.command}\` — ${log.action}${target}${details}\n`;
       }
 
       const embed = new EmbedBuilder()
-        .setTitle('✧˚₊‧ 📋 𝔄𝔡𝔪𝔦𝔫 ℂ𝔬𝔪𝔪𝔞𝔫𝔡 𝕃𝕠𝕘𝕤 ‧₊˚✧')
+        .setTitle('MODERATION LOGS')
         .setDescription(
-          [
-            '꒰ঌ 𝔓𝔞𝔰𝔱 𝟟 𝔡𝔞𝔶𝔰 𝔬𝔣 𝔞𝔠𝔱𝔦𝔬𝔫𝔰 ໒꒱',
-            '',
-            logText || 'No logs to display'
-          ].join('\n')
+          `-# Past 7 days — ${filterLabel}\n\n${logText}`
         )
-        .setColor('#F5E6FF')
-        .setFooter({
-          text: `Page 1/${totalPages} • Showing ${firstPageLogs.length} of ${logs.length} logs`
-        })
-        .setTimestamp();
+        .setColor(BLACK)
+        .setFooter({ text: `Showing ${logs.length} (max 25) — ${message.guild?.name || 'Shiro'}` });
 
       await message.channel.send({ embeds: [embed] });
 
@@ -77,11 +72,11 @@ module.exports = {
       message.channel.send({
         embeds: [
           new EmbedBuilder()
-            .setColor('#F5E6FF')
-            .setTitle('✧˚₊‧ ❌ 𝔈𝔯𝔯𝔬𝔯 ‧₊˚✧')
-            .setDescription('Failed to retrieve admin logs. Check console for details.')
-            .setFooter({ text: 'System • Internal Error' })
-        ]
+            .setColor(BLACK)
+            .setTitle('ERROR')
+            .setDescription('Failed to retrieve logs. Check console for details.')
+            .setFooter({ text: message.guild?.name || 'Shiro' }),
+        ],
       });
     }
   }

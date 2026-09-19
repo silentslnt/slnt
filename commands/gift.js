@@ -13,7 +13,7 @@ module.exports = {
   adminOnly: true,
   description: 'Gift coins to another user. `.gift @user <amount>` (daily cap: 10,000)',
 
-  async execute({ message, args, userData, saveUserData, getUserData, saveSpecificUserData }) {
+  async execute({ message, args, userData, saveUserData, getUserData, saveSpecificUserData, logAdminAction }) {
     if (!await requireAdmin(message)) return;
 
     const target = message.mentions.users.first();
@@ -61,6 +61,7 @@ module.exports = {
 
     await saveUserData({ balance: userData.balance, giftedToday: userData.giftedToday, lastGiftReset: userData.lastGiftReset });
     await saveSpecificUserData(target.id, { balance: targetData.balance, totalEarned: targetData.totalEarned });
+    await logAdminAction(message.author.id, message.author.username, 'gift', 'Gift Sent', target.id, target.username, `${capped.toLocaleString()} coins`);
 
     return message.channel.send({
       embeds: [new EmbedBuilder().setColor(BLACK)

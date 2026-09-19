@@ -15,7 +15,7 @@ module.exports = {
   adminOnly: true,
   description: 'Challenge someone to a coin duel. `.duel @user <amount|all>`',
 
-  async execute({ message, args, userData, saveUserData, getUserData, saveSpecificUserData }) {
+  async execute({ message, args, userData, saveUserData, getUserData, saveSpecificUserData, logAdminAction }) {
     if (!await requireAdmin(message)) return;
 
     const challenger = message.author;
@@ -113,6 +113,8 @@ module.exports = {
           )
           .setFooter({ text: message.guild?.name || 'Shiro' })],
       });
+
+      await logAdminAction(winner.id, winner.username, 'duel', 'Duel Won', loser.id, loser.username, `${bet.toLocaleString()} coins`);
 
       activeDuels.delete(challenger.id);
       activeDuels.delete(opponent.id);

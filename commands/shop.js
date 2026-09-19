@@ -70,14 +70,14 @@ module.exports = {
   adminOnly: false,
   description: 'Browse and buy from the shop. `.sh [section] [buy <id>]`',
 
-  async execute({ message, args, userData, saveUserData }) {
+  async execute({ message, args, userData, saveUserData, logAdminAction }) {
     const sub = (args[0] || '').toLowerCase();
 
     // Admin-only dynamic item management
     if (sub === 'add')    return isAdmin(message) ? handleAddItem({ message, args: args.slice(1) }) : deny(message);
     if (sub === 'remove') return isAdmin(message) ? handleRemoveItem({ message, args: args.slice(1) }) : deny(message);
 
-    if (sub === 'buy')    return handleBuy({ message, args: args.slice(1), userData, saveUserData });
+    if (sub === 'buy')    return handleBuy({ message, args: args.slice(1), userData, saveUserData, logAdminAction });
     if (sub === 'essences' || sub === 'ess') return showEssenceShop({ message });
     if (sub === 'bundles' || sub === 'bun')  return showBundleShop({ message });
     if (sub === 'cosmetics' || sub === 'cos') return showCosmeticsShop({ message });
@@ -195,7 +195,7 @@ async function showSpellShop({ message }) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  BUY HANDLER
 // ─────────────────────────────────────────────────────────────────────────────
-async function handleBuy({ message, args, userData, saveUserData }) {
+async function handleBuy({ message, args, userData, saveUserData, logAdminAction }) {
   const itemId = (args[0] || '').toLowerCase();
   let amount = Math.max(1, parseInt(args[1] || '1', 10) || 1);
   if (!itemId) return message.channel.send('Usage: `.sh buy <item_id> [amount]`');
@@ -213,6 +213,7 @@ async function handleBuy({ message, args, userData, saveUserData }) {
     userData.balance = coins - pack.coins;
     await saveUserData({ balance: userData.balance });
     await awardPoints(message.guild.id, message.author.id, pack.pts);
+    await logAdminAction(message.author.id, message.author.username, 'shop', 'Aether Purchase', null, null, `${pack.coins.toLocaleString()} coins → ${pack.pts.toLocaleString()} Aether`);
 
     return message.channel.send({
       embeds: [
@@ -243,6 +244,7 @@ async function handleBuy({ message, args, userData, saveUserData }) {
     await saveUserData({ inventory: userData.inventory, stats: userData.stats });
     await trackStat(userData, 'silvSpent', 0, { message, saveUserData });
     await grantItem(message.guild.id, message.author.id, itemId, amount);
+    await logAdminAction(message.author.id, message.author.username, 'shop', 'Spell Purchase', null, null, `${amount}× ${s.name} for ${cost} SILV`);
 
     return message.channel.send({
       embeds: [
