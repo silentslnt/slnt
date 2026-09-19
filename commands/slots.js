@@ -1,7 +1,9 @@
 // commands/slots.js
 const { EmbedBuilder } = require('discord.js');
 const mongoose = require('mongoose');
-const { COLOR, XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
+const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
+
+const BLACK = 0x000000;
 const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
 const { getMultiplier, getLuckBonus } = require('../utils/essences');
@@ -70,19 +72,18 @@ module.exports = {
     const bet = parseBet(args[0], userData.balance || 0);
     if (!bet) {
       return message.channel.send({
-        embeds: [new EmbedBuilder().setColor(COLOR.DEFAULT)
-          .setTitle('˗ˏˋ 𐙚 🎰 𝕊𝕝𝕠𝕥𝕤 𐙚 ˎˊ˗')
+        embeds: [new EmbedBuilder().setColor(BLACK)
+          .setTitle('SLOTS')
           .setDescription(
-            '꒰ঌ Usage ໒꒱\n\n' +
-            '`.sl <amount|all|max>`\n\n' +
-            '**Symbols:**\n' +
-            SYMBOLS.map(s => `${s.s} — **${s.mult}×**`).join('  |  ')
+            '> Usage: `.sl <amount|all|max>`\n\n' +
+            '__**Symbols**__\n' +
+            SYMBOLS.map(s => `${s.s} **${s.mult}×**`).join('  ·  ')
           )
-          .setFooter({ text: 'System • Slots' })],
+          .setFooter({ text: message.guild?.name || 'Shiro' })],
       });
     }
 
-    if ((userData.balance || 0) < bet) return message.channel.send('❌ Insufficient balance.');
+    if ((userData.balance || 0) < bet) return message.channel.send('Insufficient balance.');
 
     const jackpot    = await getJackpot();
     const luckBonus  = getLuckBonus(userData);
@@ -95,19 +96,19 @@ module.exports = {
 
     // ── Spin animation ────────────────────────────────────────────────────
     const spinMsg = await message.channel.send({
-      embeds: [new EmbedBuilder().setColor(COLOR.DEFAULT)
-        .setTitle('˗ˏˋ 𐙚 🎰 𝕊𝕝𝕠𝕥𝕤 𐙚 ˎˊ˗')
-        .setDescription(`**${SPIN_FRAMES[0]}**\n\n🏆 Jackpot: **${(jackpot + jackpotContrib).toLocaleString()}** coins`)
-        .setFooter({ text: 'System • Slots' })],
+      embeds: [new EmbedBuilder().setColor(BLACK)
+        .setTitle('SLOTS')
+        .setDescription(`**${SPIN_FRAMES[0]}**\n\n> Jackpot: **${(jackpot + jackpotContrib).toLocaleString()}** coins`)
+        .setFooter({ text: message.guild?.name || 'Shiro' })],
     });
 
     for (let i = 1; i < SPIN_FRAMES.length; i++) {
       await new Promise(r => setTimeout(r, 400));
       await spinMsg.edit({
-        embeds: [new EmbedBuilder().setColor(COLOR.DEFAULT)
-          .setTitle('˗ˏˋ 𐙚 🎰 𝕊𝕝𝕠𝕥𝕤 𐙚 ˎˊ˗')
-          .setDescription(`**${SPIN_FRAMES[i]}**\n\n🏆 Jackpot: **${(jackpot + jackpotContrib).toLocaleString()}** coins`)
-          .setFooter({ text: 'System • Slots' })],
+        embeds: [new EmbedBuilder().setColor(BLACK)
+          .setTitle('SLOTS')
+          .setDescription(`**${SPIN_FRAMES[i]}**\n\n> Jackpot: **${(jackpot + jackpotContrib).toLocaleString()}** coins`)
+          .setFooter({ text: message.guild?.name || 'Shiro' })],
       });
     }
 
@@ -119,7 +120,6 @@ module.exports = {
 
     let resultText = '';
     let payout     = 0;
-    let color      = COLOR.LOSS;
     let isJackpot  = false;
 
     const allMatch = reels[0].s === reels[1].s && reels[1].s === reels[2].s;
@@ -131,21 +131,18 @@ module.exports = {
       // Jackpot!
       payout       = jackpot + jackpotContrib;
       isJackpot    = true;
-      color        = COLOR.PRESTIGE;
-      resultText   = `🎊 **JACKPOT!** 💎💎💎 You won the **${payout.toLocaleString()}** coin jackpot!!`;
+      resultText   = `**JACKPOT!** 💎💎💎 You won the **${payout.toLocaleString()}** coin jackpot!`;
       await resetJackpot();
     } else if (allMatch) {
       payout     = Math.floor(bet * reels[0].mult * frenzyMult * coinMult);
-      color      = COLOR.WIN;
-      resultText = `🎉 **TRIPLE ${reels[0].s}!** You win **${payout.toLocaleString()}** coins! (${reels[0].mult}× → ${frenzyMult > 1 ? frenzyMult + '× Frenzy' : 'base'})`;
+      resultText = `**TRIPLE ${reels[0].s}!** You win **${payout.toLocaleString()}** coins! (${reels[0].mult}× → ${frenzyMult > 1 ? frenzyMult + '× Frenzy' : 'base'})`;
     } else if (twoMatch) {
       const matchSym = reels[0].s === reels[1].s ? reels[0] : reels[1].s === reels[2].s ? reels[1] : reels[0];
       const twoMult  = matchSym.mult * 0.5;
       payout         = Math.floor(bet * twoMult * frenzyMult * coinMult);
-      color          = '#E0C97B';
-      resultText     = `✨ **Double ${matchSym.s}!** You win **${payout.toLocaleString()}** coins! (${twoMult.toFixed(1)}×)`;
+      resultText     = `**Double ${matchSym.s}!** You win **${payout.toLocaleString()}** coins! (${twoMult.toFixed(1)}×)`;
     } else {
-      resultText = `😔 No match. Better luck next time! \`${row}\``;
+      resultText = `No match. Better luck next time! \`${row}\``;
     }
 
     if (payout > 0) {
@@ -172,25 +169,24 @@ module.exports = {
     const newJackpot = isJackpot ? 5_000 : jackpot + jackpotContrib;
 
     const embed = new EmbedBuilder()
-      .setTitle(`˗ˏˋ 𐙚 🎰 𝕊𝕝𝕠𝕥𝕤 ${isJackpot ? '— 🎊 JACKPOT 🎊' : 'ℝ𝕖𝕤𝕦𝕝𝕥'} 𐙚 ˎˊ˗`)
-      .setColor(color)
+      .setTitle(isJackpot ? 'SLOTS — JACKPOT' : 'SLOTS RESULT')
+      .setColor(BLACK)
       .setDescription(
-        `**🎰 | ${row} |**\n\n` + resultText
+        `**🎰 | ${row} |**\n\n> ${resultText}`
       )
       .addFields(
-        { name: '💰 Bet',        value: bet.toLocaleString(),              inline: true },
-        { name: payout > 0 ? '🎉 Won' : '😔 Lost', value: payout > 0 ? `+${payout.toLocaleString()}` : `-${bet.toLocaleString()}`, inline: true },
-        { name: '💼 Balance',    value: userData.balance.toLocaleString(), inline: true },
-        { name: '🏆 Next Jackpot', value: `${newJackpot.toLocaleString()} coins`, inline: true },
+        { name: 'Bet',           value: bet.toLocaleString(),              inline: true },
+        { name: payout > 0 ? 'Won' : 'Lost', value: payout > 0 ? `+${payout.toLocaleString()}` : `-${bet.toLocaleString()}`, inline: true },
+        { name: 'Balance',       value: userData.balance.toLocaleString(), inline: true },
+        { name: 'Next Jackpot',  value: `${newJackpot.toLocaleString()} coins`, inline: true },
       )
       .setFooter({
         text: [
-          `🎰 5% of every bet feeds the jackpot`,
-          frenzyMult > 1 ? `🎮 ${frenzyMult}× Frenzy active` : '',
-          'System • Slots',
-        ].filter(Boolean).join(' • '),
-      })
-      .setTimestamp();
+          '5% of every bet feeds the jackpot',
+          frenzyMult > 1 ? `${frenzyMult}× Frenzy active` : '',
+          message.guild?.name || 'Shiro',
+        ].filter(Boolean).join(' — '),
+      });
 
     await spinMsg.edit({ embeds: [embed] });
   },

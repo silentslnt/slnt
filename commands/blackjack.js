@@ -1,6 +1,8 @@
 // commands/blackjack.js
 const { EmbedBuilder } = require('discord.js');
-const { COLOR, XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
+const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
+
+const BLACK = 0x000000;
 const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
 const { getMultiplier, getLuckBonus, getActiveEssenceSummary } = require('../utils/essences');
@@ -39,8 +41,8 @@ module.exports = {
     const userId = message.author.id;
 
     if (!bet) return message.channel.send('Usage: `.bj <amount|all>`');
-    if (activeGames.has(userId)) return message.channel.send('❌ You already have an active blackjack game!');
-    if ((userData.balance || 0) < bet) return message.channel.send('❌ Insufficient balance.');
+    if (activeGames.has(userId)) return message.channel.send('You already have an active blackjack game!');
+    if ((userData.balance || 0) < bet) return message.channel.send('Insufficient balance.');
 
     // Check insurance slip
     const hasInsurance = (userData.inventory?.['Insurance Slip'] || 0) > 0;
@@ -64,16 +66,15 @@ module.exports = {
 
     function buildEmbed(desc) {
       const e = new EmbedBuilder()
-        .setTitle('˗ˏˋ 𐙚 🃏 𝔅𝔩𝔞𝔠𝔨𝔧𝔞𝔠𝔨 🃏 𐙚 ˎˊ˗')
-        .setColor(COLOR.DEFAULT)
+        .setTitle('BLACKJACK')
+        .setColor(BLACK)
         .addFields(
-          { name: '꒰ঌ Your Hand ໒꒱',   value: playerHand.map(c=>c.display).join(' '), inline: true },
-          { name: '꒰ঌ Dealer Hand ໒꒱',  value: `${dealerHand[0].display} 🂠`,          inline: true },
-          { name: '⭐ Your Value',        value: String(handValue(playerHand)),          inline: false },
+          { name: 'Your Hand',   value: playerHand.map(c=>c.display).join(' '), inline: true },
+          { name: 'Dealer Hand', value: `${dealerHand[0].display} 🂠`,          inline: true },
+          { name: 'Your Value',  value: String(handValue(playerHand)),          inline: false },
         )
-        .setDescription(desc || 'React ✅ **Hit** · ⏹️ **Stand**' + (hasInsurance ? '\n🛡️ *Insurance Slip ready*' : ''))
-        .setTimestamp()
-        .setFooter({ text: 'System • Blackjack' + (activeEss ? ' • Essences active' : '') });
+        .setDescription((desc || 'React ✅ **Hit** · ⏹️ **Stand**') + (hasInsurance ? '\n-# Insurance Slip ready' : ''))
+        .setFooter({ text: (message.guild?.name || 'Shiro') + (activeEss ? ' — essences active' : '') });
       return e;
     }
 
@@ -101,18 +102,18 @@ module.exports = {
             if (userData.inventory['Insurance Slip'] <= 0) delete userData.inventory['Insurance Slip'];
             userData.balance += bet;
             await saveUserData({ balance: userData.balance, inventory: userData.inventory });
-            await msg.edit({ embeds: [buildEmbed('💥 Busted! 🛡️ **Insurance Slip** saved you — bet returned.')] });
+            await msg.edit({ embeds: [buildEmbed('Busted! Insurance Slip saved you — bet returned.')] });
           } else {
-            await msg.edit({ embeds: [buildEmbed('💥 You busted! Dealer wins.')] });
+            await msg.edit({ embeds: [buildEmbed('You busted! Dealer wins.')] });
           }
           await finalize(false, 0);
         } else if (pv === 21) {
           gameOver = true;
           collector.stop();
-          await msg.edit({ embeds: [buildEmbed('🎯 **21!** Auto-standing...')] });
+          await msg.edit({ embeds: [buildEmbed('**21!** Auto-standing...')] });
           await dealerTurn();
         } else {
-          await msg.edit({ embeds: [buildEmbed('✅ Hit! React again to draw or ⏹️ to stand.')] });
+          await msg.edit({ embeds: [buildEmbed('Hit! React again to draw or ⏹️ to stand.')] });
         }
       } else {
         gameOver = true;
@@ -122,7 +123,7 @@ module.exports = {
     });
 
     collector.on('end', () => {
-      if (!gameOver) { message.channel.send('⏱️ Blackjack timed out.'); finalize(false, 0); }
+      if (!gameOver) { message.channel.send('Blackjack timed out.'); finalize(false, 0); }
     });
 
     async function dealerTurn() {
@@ -131,36 +132,29 @@ module.exports = {
       const dv = handValue(dealerHand);
 
       let result = '';
-      let color  = COLOR.DEFAULT;
       let won    = false;
       let payout = 0;
 
       if (pv > 21) {
-        result = '💥 You busted!';
-        color  = COLOR.LOSS;
+        result = 'You busted!';
       } else if (dv > 21) {
         payout = Math.floor(bet * 2 * frenzyMult * coinMult);
         won    = true;
-        result = `🎉 Dealer busted! You win **${payout.toLocaleString()}** coins!`;
-        color  = COLOR.WIN;
+        result = `Dealer busted! You win **${payout.toLocaleString()}** coins!`;
       } else if (naturalBJ && pv === 21) {
         // Natural blackjack = 2.5x
         payout = Math.floor(bet * 2.5 * frenzyMult * coinMult);
         won    = true;
-        result = `♠ **Natural Blackjack!** You win **${payout.toLocaleString()}** coins!`;
-        color  = COLOR.PRESTIGE;
+        result = `**Natural Blackjack!** You win **${payout.toLocaleString()}** coins!`;
       } else if (pv > dv) {
         payout = Math.floor(bet * 2 * frenzyMult * coinMult);
         won    = true;
-        result = `🎉 You beat the dealer! You win **${payout.toLocaleString()}** coins!`;
-        color  = COLOR.WIN;
+        result = `You beat the dealer! You win **${payout.toLocaleString()}** coins!`;
       } else if (pv === dv) {
         payout = bet;
-        result = '🤝 Push! Bet returned.';
-        color  = COLOR.DEFAULT;
+        result = 'Push! Bet returned.';
       } else {
-        result = '😔 Dealer wins!';
-        color  = COLOR.LOSS;
+        result = 'Dealer wins!';
       }
 
       if (won || pv === dv) {
@@ -173,18 +167,17 @@ module.exports = {
       }
 
       const finalEmbed = new EmbedBuilder()
-        .setTitle('˗ˏˋ 𐙚 🃏 𝔅𝔩𝔞𝔠𝔨𝔧𝔞𝔠𝔨 ℝ𝕖𝕤𝕦𝕝𝕥 𐙚 ˎˊ˗')
-        .setColor(color)
-        .setDescription(result)
+        .setTitle('BLACKJACK RESULT')
+        .setColor(BLACK)
+        .setDescription(`> ${result}`)
         .addFields(
-          { name: '꒰ঌ Your Hand ໒꒱',  value: playerHand.map(c=>c.display).join(' '), inline: true },
-          { name: '꒰ঌ Dealer Hand ໒꒱', value: dealerHand.map(c=>c.display).join(' '), inline: true },
-          { name: '⭐ Your Value',       value: String(pv), inline: true },
-          { name: '🂠 Dealer Value',     value: String(dv), inline: true },
-          { name: '💰 New Balance',      value: `**${userData.balance.toLocaleString()}** coins`, inline: false },
+          { name: 'Your Hand',   value: playerHand.map(c=>c.display).join(' '), inline: true },
+          { name: 'Dealer Hand', value: dealerHand.map(c=>c.display).join(' '), inline: true },
+          { name: 'Your Value',  value: String(pv), inline: true },
+          { name: 'Dealer Value', value: String(dv), inline: true },
+          { name: 'New Balance', value: `**${userData.balance.toLocaleString()}** coins`, inline: false },
         )
-        .setTimestamp()
-        .setFooter({ text: frenzyMult > 1 ? `🎮 ${frenzyMult}× Frenzy Essence active!` : 'System • Blackjack' });
+        .setFooter({ text: frenzyMult > 1 ? `${frenzyMult}× Frenzy Essence active` : (message.guild?.name || 'Shiro') });
 
       await message.channel.send({ embeds: [finalEmbed] });
       await finalize(won, payout);
