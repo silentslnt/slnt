@@ -213,20 +213,36 @@ if (fs.existsSync(commandsPath)) {
     .readdirSync(commandsPath)
     .filter(file => file.endsWith('.js') && file !== 'keydrop.js');
 
+  const loaded = [];
   for (const file of commandFiles) {
     try {
       const command = require(path.join(commandsPath, file));
       if (command.name && command.execute) {
-        client.commands.set(command.name, command);
-        console.log(`Loaded command: ${command.name}`);
-        
-        if (command.name === 'commands') {
-          commandsModule = command;
-        }
+        loaded.push(command);
       }
     } catch (error) {
       console.error(`Error loading command ${file}:`, error);
     }
+  }
+
+  // Register primary names first so no alias can ever shadow a real command.
+  for (const command of loaded) {
+    client.commands.set(command.name, command);
+    if (command.name === 'commands') {
+      commandsModule = command;
+    }
+  }
+  for (const command of loaded) {
+    for (const alias of command.aliases || []) {
+      if (client.commands.has(alias)) {
+        console.warn(`Skipping alias '${alias}' for ${command.name} — already taken by ${client.commands.get(alias).name}`);
+        continue;
+      }
+      client.commands.set(alias, command);
+    }
+  }
+  for (const command of loaded) {
+    console.log(`Loaded command: ${command.name}${command.aliases?.length ? ` (aliases: ${command.aliases.join(', ')})` : ''}`);
   }
 }
 
