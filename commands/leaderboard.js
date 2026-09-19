@@ -1,16 +1,18 @@
 // commands/leaderboard.js
 const { EmbedBuilder } = require('discord.js');
 const mongoose = require('mongoose');
-const { COLOR } = require('../utils/config');
 const { levelFromXP } = require('../utils/xp');
 
+const BLACK = 0x000000;
+const MEDAL = ['🥇', '🥈', '🥉'];
+
 const CATEGORIES = {
-  coins:    { label: '💰 Richest Users',         sort: { balance: -1 },      display: u => `${u.balance?.toLocaleString() || 0} coins`    },
-  silv:     { label: '💎 SILV Token Holders',    sort: {},                   display: u => `${(u.inventory?.['Silv token'] || 0)} SILV`,  special: 'silv'  },
-  streak:   { label: '🔥 Longest Streaks',        sort: { dailyStreak: -1 },  display: u => `${u.dailyStreak || 0} days`                   },
-  level:    { label: '📈 Highest Level',          sort: { xp: -1 },           display: u => `Level ${levelFromXP(u.xp || 0)}`              },
-  prestige: { label: '👑 Most Prestigious',      sort: { prestige: -1 },     display: u => `Prestige ${u.prestige || 0}`                  },
-  earned:   { label: '🏦 Lifetime Earners',      sort: { totalEarned: -1 },  display: u => `${(u.totalEarned || 0).toLocaleString()} earned` },
+  coins:    { label: 'Richest Users',      sort: { balance: -1 },      display: u => `${u.balance?.toLocaleString() || 0} coins`    },
+  silv:     { label: 'SILV Token Holders', sort: {},                   display: u => `${(u.inventory?.['Silv token'] || 0)} SILV`,  special: 'silv'  },
+  streak:   { label: 'Longest Streaks',    sort: { dailyStreak: -1 },  display: u => `${u.dailyStreak || 0} days`                   },
+  level:    { label: 'Highest Level',      sort: { xp: -1 },           display: u => `Level ${levelFromXP(u.xp || 0)}`              },
+  prestige: { label: 'Most Prestigious',   sort: { prestige: -1 },     display: u => `Prestige ${u.prestige || 0}`                  },
+  earned:   { label: 'Lifetime Earners',   sort: { totalEarned: -1 },  display: u => `${(u.totalEarned || 0).toLocaleString()} earned` },
 };
 
 module.exports = {
@@ -27,11 +29,10 @@ module.exports = {
       return message.channel.send({
         embeds: [
           new EmbedBuilder()
-            .setColor(COLOR.DEFAULT)
-            .setTitle('✧˚₊‧ ℒ𝕖𝕒𝕕𝕖𝕣𝕓𝕠𝕒𝕣𝕕 ℂ𝕒𝕥𝕖𝕘𝕠𝕣𝕚𝕖𝕤 ‧₊˚✧')
+            .setColor(BLACK)
+            .setTitle('LEADERBOARD CATEGORIES')
             .setDescription(
-              '꒰ঌ Available categories ໒꒱\n\n' +
-              Object.entries(CATEGORIES).map(([k, v]) => `\`${k}\` — ${v.label}`).join('\n')
+              Object.entries(CATEGORIES).map(([k, v]) => `> \`${k}\` — ${v.label}`).join('\n')
             )
             .setFooter({ text: 'Usage: .lb [category]' }),
         ],
@@ -57,9 +58,6 @@ module.exports = {
         return message.channel.send('꒰ঌ No data found yet ໒꒱');
       }
 
-      // Rank medals
-      const medals = ['①', '②', '③'];
-
       let leaderboard = '';
       for (let i = 0; i < topUsers.length; i++) {
         const user   = topUsers[i];
@@ -73,15 +71,8 @@ module.exports = {
         }
 
         const value = config.display(user);
-
-        if (rank <= 3) {
-          leaderboard +=
-            `╭──────────────────────────────╮\n` +
-            `│  ${medals[i]} ${username.slice(0, 18).padEnd(18)} ${value.slice(0, 14).padEnd(14)} │\n` +
-            `╰──────────────────────────────╯\n`;
-        } else {
-          leaderboard += `**${rank}.** ${username} — ${value}\n`;
-        }
+        const badge = rank <= 3 ? MEDAL[i] : `\`#${rank}\``;
+        leaderboard += `> ${badge} **${username}** — ${value}\n`;
       }
 
       // Caller's own rank
@@ -94,21 +85,20 @@ module.exports = {
       let selfRankInfo = '';
       if (selfIdx >= 10) {
         const selfData = allSorted[selfIdx];
-        selfRankInfo   = `\n\n**Your rank:** #${selfIdx + 1} — ${config.display(selfData)}`;
+        selfRankInfo   = `\n> Your rank: **#${selfIdx + 1}** — ${config.display(selfData)}`;
       }
 
       const embed = new EmbedBuilder()
-        .setTitle(`˗ˏˋ 𐙚 ${config.label} 𐙚 ˎˊ˗`)
+        .setTitle(config.label.toUpperCase())
         .setDescription(leaderboard + selfRankInfo)
-        .setColor(COLOR.PRESTIGE)
-        .setFooter({ text: `Categories: ${Object.keys(CATEGORIES).join(' • ')} | .lb [cat]` })
-        .setTimestamp();
+        .setColor(BLACK)
+        .setFooter({ text: `Categories: ${Object.keys(CATEGORIES).join(', ')} — .lb [category]` });
 
       return message.channel.send({ embeds: [embed] });
 
     } catch (err) {
       console.error('Leaderboard error:', err);
-      return message.channel.send('❌ Failed to load leaderboard.');
+      return message.channel.send('Failed to load leaderboard.');
     }
   },
 };

@@ -1,8 +1,11 @@
 // commands/missions.js
 const { EmbedBuilder } = require('discord.js');
-const { MISSIONS_POOL, COLOR, XP_PER_MISSION } = require('../utils/config');
+const { MISSIONS_POOL } = require('../utils/config');
 const { addXP, progressBar } = require('../utils/xp');
 const { trackStat } = require('../utils/achievements');
+
+const CHECK = '<:check:1547659779877642360>';
+const BLACK = 0x000000;
 
 /** Get today's 3 missions using date as seed */
 function getTodaysMissions() {
@@ -64,9 +67,9 @@ module.exports = {
       ].filter(Boolean).join(', ');
 
       lines.push(
-        `${done ? '✅' : '🔲'} **${mission.label}**\n` +
-        `  ${bar} \`${Math.min(current, mission.target)}/${mission.target}\`\n` +
-        `  🎁 Reward: ${rewardText}`
+        `> ${done ? CHECK : '◻'} **${mission.label}**\n` +
+        `> ${bar} \`${Math.min(current, mission.target)}/${mission.target}\`\n` +
+        `> Reward: ${rewardText}`
       );
 
       if (done && !progress[mission.id]?.claimed) {
@@ -101,24 +104,16 @@ module.exports = {
     }
 
     const embed = new EmbedBuilder()
-      .setColor(COLOR.MISSIONS)
-      .setTitle('˗ˏˋ 𐙚 📋 𝔇𝔞𝔦𝔩𝔶 𝕄𝕚𝕤𝕤𝕚𝕠𝕟𝕤 𐙚 ˎˊ˗')
+      .setColor(BLACK)
+      .setTitle('DAILY MISSIONS')
       .setDescription(
-        '꒰ঌ Complete missions to earn bonus coins and XP ໒꒱\n' +
-        '꒰ঌ Missions refresh daily at midnight ໒꒱\n\n' +
-        lines.join('\n\n')
+        '-# Complete missions to earn bonus coins and XP. Missions refresh daily at midnight.\n\n' +
+        lines.join('\n\n') +
+        (totalCoins > 0
+          ? `\n\n__**Rewards Claimed**__\n> +${totalCoins.toLocaleString()} coins${totalXP ? ` + ${totalXP} XP` : ''}`
+          : '')
       )
-      .setColor(allDone ? COLOR.WIN : COLOR.MISSIONS)
-      .setFooter({ text: `Missions for ${today} • System • Missions Board` })
-      .setTimestamp();
-
-    if (totalCoins > 0) {
-      embed.addFields({
-        name: '🎉 Rewards Claimed!',
-        value: `+${totalCoins.toLocaleString()} coins${totalXP ? ` + ${totalXP} XP` : ''}`,
-        inline: false,
-      });
-    }
+      .setFooter({ text: `Missions for ${today} — ${message.guild?.name || 'Shiro'}` });
 
     return message.channel.send({ embeds: [embed] });
   },
