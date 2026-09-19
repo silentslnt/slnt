@@ -2,7 +2,9 @@
 // Player picks tiles on a 5×5 grid; each safe reveal increases the multiplier.
 // Hit a mine and lose everything. Cash out any time to lock in winnings.
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { COLOR, XP_PER_GAME, XP_PER_WIN, MAX_BET } = require('../utils/config');
+const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
+
+const BLACK = 0x000000;
 const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
 const { getMultiplier } = require('../utils/essences');
@@ -69,25 +71,22 @@ function buildCashoutRow(session) {
   );
 }
 
-function buildEmbed(session, status = '') {
+function buildEmbed(session, status = '', guildName = 'Shiro') {
   const multi  = calcMultiplier(session.mines, session.revealed.size);
   const payout = Math.floor(session.bet * multi);
   const safe   = 25 - session.mines - session.revealed.size;
-  const color  = session.ended
-    ? (session.won ? COLOR.WIN : COLOR.LOSS)
-    : '#1E1B4B';
 
   return new EmbedBuilder()
-    .setColor(color)
-    .setTitle('˗ˏˋ 💣 Mines ˎˊ˗')
+    .setColor(BLACK)
+    .setTitle('MINES')
     .setDescription(
-      (status ? `**${status}**\n\n` : '') +
-      `꒰ Bet: \`${session.bet.toLocaleString()}\` · Mines: \`${session.mines}\` ꒱\n` +
-      `꒰ Revealed: \`${session.revealed.size}\` safe · Multiplier: \`×${multi}\` ꒱\n` +
-      `꒰ Cash out value: \`${payout.toLocaleString()}\` ꒱\n\n` +
-      `*${safe} safe tiles remain — dig deeper or cash out!*`
+      (status ? `> ${status}\n\n` : '') +
+      `> Bet: \`${session.bet.toLocaleString()}\` · Mines: \`${session.mines}\`\n` +
+      `> Revealed: \`${session.revealed.size}\` safe · Multiplier: \`×${multi}\`\n` +
+      `> Cash out value: \`${payout.toLocaleString()}\`\n\n` +
+      `-# ${safe} safe tiles remain — dig deeper or cash out.`
     )
-    .setFooter({ text: `System • Mines  |  RTP ~97%` });
+    .setFooter({ text: `${guildName} — RTP ~97%` });
 }
 
 module.exports = {
@@ -103,7 +102,7 @@ module.exports = {
 
     // If player already has a session, remind them
     if (SESSIONS.has(userId)) {
-      return message.channel.send({ content: '⚠️ You already have an active Mines game! Click a tile or cash out.' });
+      return message.channel.send('You already have an active Mines game! Click a tile or cash out.');
     }
 
     const betArg   = args[0];
@@ -113,23 +112,22 @@ module.exports = {
 
     if (!bet) {
       return message.channel.send({
-        embeds: [new EmbedBuilder().setColor(COLOR.DEFAULT)
-          .setTitle('˗ˏˋ 💣 Mines ˎˊ˗')
+        embeds: [new EmbedBuilder().setColor(BLACK)
+          .setTitle('MINES')
           .setDescription(
-            '꒰ঌ Usage ໒꒱\n\n' +
-            '`.mines <bet> [mines]`\n\n' +
-            '**Mine counts:** 1 · 2 · 3 · 5 · 7 · 10 · 15 · 20 · 24\n' +
-            '**Examples:**\n' +
-            '`.mines 500` — 500 bet, 3 mines (default)\n' +
-            '`.mines 1000 5` — 1000 bet, 5 mines\n\n' +
-            '*More mines = higher multipliers per tile revealed!*'
+            '> Usage: `.mines <bet> [mines]`\n\n' +
+            '__**Mine Counts**__\n> 1 · 2 · 3 · 5 · 7 · 10 · 15 · 20 · 24\n\n' +
+            '__**Examples**__\n' +
+            '> `.mines 500` — 500 bet, 3 mines (default)\n' +
+            '> `.mines 1000 5` — 1000 bet, 5 mines\n\n' +
+            '-# More mines = higher multipliers per tile revealed.'
           )
-          .setFooter({ text: 'System • Mines  |  RTP ~97%' })],
+          .setFooter({ text: `${message.guild?.name || 'Shiro'} — RTP ~97%` })],
       });
     }
 
     if ((userData.balance || 0) < bet) {
-      return message.channel.send({ content: `❌ You only have **${(userData.balance||0).toLocaleString()}** coins.` });
+      return message.channel.send(`You only have **${(userData.balance||0).toLocaleString()}** coins.`);
     }
 
     // Deduct bet
@@ -149,7 +147,7 @@ module.exports = {
     SESSIONS.set(userId, session);
 
     const rows = [...buildGrid(session), buildCashoutRow(session)];
-    const msg  = await message.channel.send({ embeds: [buildEmbed(session)], components: rows });
+    const msg  = await message.channel.send({ embeds: [buildEmbed(session, '', message.guild?.name)], components: rows });
     session.gameMsg = msg;
 
     // Collector
@@ -205,7 +203,7 @@ module.exports = {
           : `✅ Cashed out at ×${multi} — **+${(finalPay - bet).toLocaleString()}** coins!`;
 
         await i.update({
-          embeds: [buildEmbed(session, status)],
+          embeds: [buildEmbed(session, status, message.guild?.name)],
           components: [...buildGrid(session), buildCashoutRow(session)],
         });
         collector.stop('cashout');
@@ -230,7 +228,7 @@ module.exports = {
           await checkAchievements(userData, { message, saveUserData });
 
           await i.update({
-            embeds: [buildEmbed(session, `💥 BOOM! You hit a mine! Lost **${bet.toLocaleString()}** coins.`)],
+            embeds: [buildEmbed(session, `BOOM! You hit a mine! Lost **${bet.toLocaleString()}** coins.`, message.guild?.name)],
             components: [...buildGrid(session), buildCashoutRow(session)],
           });
           collector.stop('mine_hit');
@@ -255,7 +253,7 @@ module.exports = {
           await checkAchievements(userData, { message, saveUserData });
 
           await i.update({
-            embeds: [buildEmbed(session, `🏆 PERFECT GAME! All ${totalSafe} safe tiles found! **+${(payout - bet).toLocaleString()}** coins!`)],
+            embeds: [buildEmbed(session, `🏆 PERFECT GAME! All ${totalSafe} safe tiles found! **+${(payout - bet).toLocaleString()}** coins!`, message.guild?.name)],
             components: [...buildGrid(session), buildCashoutRow(session)],
           });
           collector.stop('perfect');
@@ -263,7 +261,7 @@ module.exports = {
         }
 
         await i.update({
-          embeds: [buildEmbed(session)],
+          embeds: [buildEmbed(session, '', message.guild?.name)],
           components: [...buildGrid(session), buildCashoutRow(session)],
         });
       }
@@ -275,7 +273,7 @@ module.exports = {
         // Timeout — treat as loss
         session.ended = true;
         await msg.edit({
-          embeds: [buildEmbed(session, `⏱️ Game timed out — bet of **${bet.toLocaleString()}** lost.`)],
+          embeds: [buildEmbed(session, `⏱️ Game timed out — bet of **${bet.toLocaleString()}** lost.`, message.guild?.name)],
           components: [...buildGrid(session), buildCashoutRow(session)],
         }).catch(() => {});
       }

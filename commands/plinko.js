@@ -2,7 +2,11 @@
 // Ball drops through 16 rows of pegs, landing in one of 17 buckets.
 // Risk level controls the spread of multipliers (low/medium/high).
 const { EmbedBuilder } = require('discord.js');
-const { COLOR, XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
+const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
+
+const CHECK = '<:check:1547659779877642360>';
+const XMARK = '<:xmark:1547659816783061153>';
+const BLACK = 0x000000;
 const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
 const { getMultiplier } = require('../utils/essences');
@@ -77,25 +81,24 @@ module.exports = {
 
     if (!bet || !['low','medium','high'].includes(riskArg)) {
       return message.channel.send({
-        embeds: [new EmbedBuilder().setColor(COLOR.DEFAULT)
-          .setTitle('˗ˏˋ 🎯 Plinko ˎˊ˗')
+        embeds: [new EmbedBuilder().setColor(BLACK)
+          .setTitle('PLINKO')
           .setDescription(
-            '꒰ঌ Usage ໒꒱\n\n' +
-            '`.plinko <bet> [risk]`\n\n' +
-            '**Risk levels:**\n' +
-            '`low` — steady, multipliers 0.2×–1.2×\n' +
-            '`medium` — balanced, up to 2×\n' +
-            '`high` — volatile, up to 10×\n\n' +
-            '**Examples:**\n' +
-            '`.plinko 500 medium`\n' +
-            '`.plinko all high`'
+            '> Usage: `.plinko <bet> [risk]`\n\n' +
+            '__**Risk Levels**__\n' +
+            '> `low` — steady, multipliers 0.2×–1.2×\n' +
+            '> `medium` — balanced, up to 2×\n' +
+            '> `high` — volatile, up to 10×\n\n' +
+            '__**Examples**__\n' +
+            '> `.plinko 500 medium`\n' +
+            '> `.plinko all high`'
           )
-          .setFooter({ text: 'System • Plinko  |  RTP ~97%' })],
+          .setFooter({ text: `${message.guild?.name || 'Shiro'} — RTP ~97%` })],
       });
     }
 
     if ((userData.balance || 0) < bet) {
-      return message.channel.send({ content: `❌ You only have **${(userData.balance||0).toLocaleString()}** coins.` });
+      return message.channel.send(`You only have **${(userData.balance||0).toLocaleString()}** coins.`);
     }
 
     userData.balance = (userData.balance || 0) - bet;
@@ -128,19 +131,19 @@ module.exports = {
     }).join(' ');
 
     const statusLine = won
-      ? `✅ Ball landed in bucket **${bucket + 1}** — **×${finalMulti}** → **+${profit.toLocaleString()}** coins!`
-      : `❌ Ball landed in bucket **${bucket + 1}** — **×${finalMulti}** → lost **${(bet - payout).toLocaleString()}** coins.`;
+      ? `${CHECK} Ball landed in bucket **${bucket + 1}** — **×${finalMulti}** → **+${profit.toLocaleString()}** coins!`
+      : `${XMARK} Ball landed in bucket **${bucket + 1}** — **×${finalMulti}** → lost **${(bet - payout).toLocaleString()}** coins.`;
 
     const embed = new EmbedBuilder()
-      .setColor(won ? COLOR.WIN : COLOR.LOSS)
-      .setTitle('˗ˏˋ 🎯 Plinko ˎˊ˗')
+      .setColor(BLACK)
+      .setTitle('PLINKO')
       .setDescription(
-        `${statusLine}\n\n` +
-        `꒰ Risk: \`${riskArg}\` · Bet: \`${bet.toLocaleString()}\` ꒱\n` +
-        `꒰ Multiplier: \`×${baseMulti}\`${frenzy > 1 ? ` → \`×${finalMulti}\` (Frenzy!)` : ''} ꒱\n` +
-        `꒰ Payout: \`${payout.toLocaleString()}\` ꒱`
+        `> ${statusLine}\n\n` +
+        `> Risk: \`${riskArg}\` · Bet: \`${bet.toLocaleString()}\`\n` +
+        `> Multiplier: \`×${baseMulti}\`${frenzy > 1 ? ` → \`×${finalMulti}\` (Frenzy)` : ''}\n` +
+        `> Payout: \`${payout.toLocaleString()}\``
       )
-      .setFooter({ text: 'System • Plinko  |  RTP ~97%' });
+      .setFooter({ text: `${message.guild?.name || 'Shiro'} — RTP ~97%` });
 
     await message.channel.send({ embeds: [embed] });
 
