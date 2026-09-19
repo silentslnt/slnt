@@ -1,4 +1,8 @@
 const { EmbedBuilder } = require('discord.js');
+const { MAX_BET } = require('../utils/config');
+const { requireAdmin } = require('../utils/permissions');
+
+const BLACK = 0x000000;
 
 // Each user can have one game active; key: userId, value: gameState
 const userGames = new Map();
@@ -27,15 +31,18 @@ function gridDisplay(grid, picks) {
 
 module.exports = {
   name: 'minesweeper',
+  adminOnly: true,
   description: 'Play a personalized minesweeper! Usage: .minesweeper start <size> <mines> <bet>',
   async execute({ message, args, userData, saveUserData }) {
+    if (!await requireAdmin(message)) return;
+
     const sub = (args[0] || '').toLowerCase();
     const userId = message.author.id;
 
-    // START game (any user)
+    // START game
     if (sub === 'start') {
       if (userGames.has(userId)) {
-        return message.channel.send('❌ You already have a minesweeper game in progress!');
+        return message.channel.send('You already have a minesweeper game in progress!');
       }
       const size = parseInt(args[1]);
       const mineCount = parseInt(args[2]);
@@ -45,12 +52,11 @@ module.exports = {
       if (isNaN(mineCount) || mineCount < 1 || mineCount >= size)
         return message.channel.send('Invalid mine count.');
       if (isNaN(bet) || bet <= 0) return message.channel.send('Valid bet required.');
+      if (bet > MAX_BET) return message.channel.send(`Max bet is **${MAX_BET.toLocaleString()}** coins.`);
 
-      // userData is already loaded from MongoDB by index.js
       if (userData.balance < bet)
         return message.channel.send('You do not have enough balance for this bet.');
 
-      // Deduct bet – one argument, wrapper adds userId
       userData.balance -= bet;
       await saveUserData({ balance: userData.balance });
 
@@ -65,32 +71,29 @@ module.exports = {
       });
 
       const embed = new EmbedBuilder()
-        .setTitle('˗ˏˋ 𐙚 ☢️ 𝔠𝔢𝔩𝔢𝔰𝔱𝔦𝔞𝔩 𝔪𝔦𝔫𝔢𝔰𝔴𝔢𝔢𝔭𝔢𝔯 𐙚 ˎˊ˗')
+        .setTitle('MINESWEEPER')
         .setDescription(
-          [
-            `Grid: **${size}** tiles with **${mineCount}** hidden mines.`,
-            '',
-            '꒰ঌ Type `.minesweeper pick <tile number>` to begin uncovering the field ໒꒱',
-          ].join('\n')
+          `> Grid: **${size}** tiles with **${mineCount}** hidden mines.\n\n` +
+          `-# Type \`.minesweeper pick <tile number>\` to begin uncovering the field.`
         )
         .addFields({
           name: 'Grid',
           value: gridDisplay(Array(size).fill('safe'), new Set()),
           inline: false,
         })
-        .setColor('#F5E6FF')
-        .setTimestamp();
+        .setColor(BLACK)
+        .setFooter({ text: message.guild?.name || 'Shiro' });
 
       await message.channel.send({ embeds: [embed] });
       return;
     }
 
-    // Picking a tile (only by game owner)
+    // Picking a tile
     if (sub === 'pick') {
       const game = userGames.get(userId);
       if (!game || !game.started) {
         return message.channel.send(
-          '❌ You do not have a minesweeper game running! Start with `.minesweeper start`.'
+          'You do not have a minesweeper game running! Start with `.minesweeper start`.'
         );
       }
       const pickNum = parseInt(args[1]);
@@ -98,23 +101,20 @@ module.exports = {
         return message.channel.send(`Pick a tile between 1 and ${game.size}.`);
       }
       if (game.picks.has(pickNum - 1)) {
-        return message.channel.send('❌ This tile was already picked!');
+        return message.channel.send('This tile was already picked!');
       }
       game.picks.add(pickNum - 1);
 
       if (game.grid[pickNum - 1] === 'mine') {
         // Lost
         const embed = new EmbedBuilder()
-          .setTitle('˗ˏˋ 𐙚 💥 𝔪𝔦𝔫𝔢 𝔥𝔦𝔱! 𝔤𝔞𝔪𝔢 𝔬𝔳𝔢𝔯 𐙚 ˎˊ˗')
+          .setTitle('MINE HIT — GAME OVER')
           .setDescription(
-            [
-              gridDisplay(game.grid, game.picks),
-              '',
-              `You stepped on a mine at tile **${pickNum}** and lost your bet.`,
-            ].join('\n')
+            `${gridDisplay(game.grid, game.picks)}\n\n` +
+            `> You stepped on a mine at tile **${pickNum}** and lost your bet.`
           )
-          .setColor('#FFB3C6')
-          .setTimestamp();
+          .setColor(BLACK)
+          .setFooter({ text: message.guild?.name || 'Shiro' });
         message.channel.send({ embeds: [embed] });
         userGames.delete(userId);
         return;
@@ -125,21 +125,17 @@ module.exports = {
       if (game.picks.size >= safeTiles) {
         const payout = game.bet * 5;
         userData.balance += payout;
-
-        // Persist to MongoDB – one argument, wrapper adds userId
-        await saveUserData({ balance: userData.balance });
+        userData.totalEarned = (userData.totalEarned || 0) + (payout - game.bet);
+        await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned });
 
         const embed = new EmbedBuilder()
-          .setTitle('˗ˏˋ 𐙚 🎉 𝔪𝔦𝔫𝔢𝔰 𝔠𝔩𝔢𝔞𝔯𝔢𝔡! 𐙚 ˎˊ˗')
+          .setTitle('MINES CLEARED')
           .setDescription(
-            [
-              gridDisplay(game.grid, game.picks),
-              '',
-              `You cleared all safe tiles and earn **${payout}** coins!`,
-            ].join('\n')
+            `${gridDisplay(game.grid, game.picks)}\n\n` +
+            `> You cleared all safe tiles and earned **${payout.toLocaleString()}** coins!`
           )
-          .setColor('#C1FFD7')
-          .setTimestamp();
+          .setColor(BLACK)
+          .setFooter({ text: message.guild?.name || 'Shiro' });
         message.channel.send({ embeds: [embed] });
         userGames.delete(userId);
         return;
@@ -147,27 +143,27 @@ module.exports = {
 
       // Show progress
       const embed = new EmbedBuilder()
-        .setTitle('˗ˏˋ 𐙚 ☢️ 𝔪𝔦𝔫𝔢𝔰𝔴𝔢𝔢𝔭𝔢𝔯 𝔭𝔯𝔬𝔤𝔯𝔢𝔰𝔰 𐙚 ˎˊ˗')
+        .setTitle('MINESWEEPER PROGRESS')
         .setDescription(
-          [
-            gridDisplay(game.grid, game.picks),
-            '',
-            'Pick another tile with `.minesweeper pick <tile number>`.',
-          ].join('\n')
+          `${gridDisplay(game.grid, game.picks)}\n\n` +
+          `-# Pick another tile with \`.minesweeper pick <tile number>\`.`
         )
-        .setColor('#F5E6FF')
-        .setTimestamp();
+        .setColor(BLACK)
+        .setFooter({ text: message.guild?.name || 'Shiro' });
       message.channel.send({ embeds: [embed] });
       return;
     }
 
-    // CANCEL game
+    // CANCEL game — refund the bet, it was never at risk if no tile was picked yet
     if (sub === 'cancel') {
-      if (!userGames.has(userId)) {
-        return message.channel.send('❌ You have no game to cancel.');
+      const game = userGames.get(userId);
+      if (!game) {
+        return message.channel.send('You have no game to cancel.');
       }
+      userData.balance += game.bet;
+      await saveUserData({ balance: userData.balance });
       userGames.delete(userId);
-      return message.channel.send('✅ Your minesweeper game was cancelled.');
+      return message.channel.send(`Your minesweeper game was cancelled — **${game.bet.toLocaleString()}** coins refunded.`);
     }
 
     // HELP
@@ -175,7 +171,7 @@ module.exports = {
       '**Minesweeper Commands:**\n' +
         '`.minesweeper start <size> <mines> <bet>` - Start your own game\n' +
         '`.minesweeper pick <tile number>` - Play your game\n' +
-        '`.minesweeper cancel` - Cancel your game'
+        '`.minesweeper cancel` - Cancel your game (refunds bet)'
     );
   },
 };
