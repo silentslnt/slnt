@@ -1,11 +1,12 @@
 // commands/duel.js
 const { EmbedBuilder } = require('discord.js');
-const { COLOR, XP_PER_WIN, XP_PER_GAME } = require('../utils/config');
+const { XP_PER_WIN, XP_PER_GAME } = require('../utils/config');
 const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
 const { addXP } = require('../utils/xp');
 const { trackStat, checkAchievements } = require('../utils/achievements');
 
+const BLACK  = 0x000000;
 const activeDuels = new Map();
 
 module.exports = {
@@ -24,16 +25,16 @@ module.exports = {
     if (!opponent || !bet) {
       return message.channel.send('Usage: `.duel @user <amount|all>`');
     }
-    if (opponent.id === challenger.id) return message.channel.send('❌ You cannot duel yourself.');
-    if (opponent.bot) return message.channel.send('❌ You cannot duel bots.');
+    if (opponent.id === challenger.id) return message.channel.send('You cannot duel yourself.');
+    if (opponent.bot) return message.channel.send('You cannot duel bots.');
     if (activeDuels.has(challenger.id) || activeDuels.has(opponent.id)) {
-      return message.channel.send('❌ One of you already has an active duel.');
+      return message.channel.send('One of you already has an active duel.');
     }
-    if ((userData.balance || 0) < bet) return message.channel.send('❌ Insufficient balance.');
+    if ((userData.balance || 0) < bet) return message.channel.send('Insufficient balance.');
 
     const opponentData = await getUserData(opponent.id);
     if (!opponentData || (opponentData.balance || 0) < bet) {
-      return message.channel.send(`❌ ${opponent.username} doesn't have enough coins.`);
+      return message.channel.send(`${opponent.username} doesn't have enough coins.`);
     }
 
     activeDuels.set(challenger.id, true);
@@ -41,15 +42,14 @@ module.exports = {
 
     // Challenge embed
     const challengeEmbed = new EmbedBuilder()
-      .setTitle('˗ˏˋ 𐙚 ⚔️ ᴅᴜᴇʟ ᴄʜᴀʟʟᴇɴɢᴇ ᴅᴇᴄʟᴀʀᴇᴅ 𐙚 ˎˊ˗')
-      .setColor(COLOR.WARNING)
+      .setTitle('DUEL CHALLENGE')
+      .setColor(BLACK)
       .setDescription(
-        `${challenger} **challenges** ${opponent} to a duel!\n\n` +
-        `⚔️ Stakes: **${bet.toLocaleString()}** coins each\n\n` +
-        `꒰ঌ ${opponent.username}, react ✅ to accept or ❌ to decline ໒꒱\n` +
-        `_(30 seconds to respond)_`
+        `> ${challenger} challenges ${opponent} to a duel\n\n` +
+        `> Stakes: **${bet.toLocaleString()}** coins each\n\n` +
+        `-# ${opponent.username}, react ✅ to accept or ❌ to decline (30 seconds).`
       )
-      .setFooter({ text: 'System • Duel' });
+      .setFooter({ text: message.guild?.name || 'Shiro' });
 
     const msg = await message.channel.send({ embeds: [challengeEmbed] });
     await msg.react('✅');
@@ -63,9 +63,9 @@ module.exports = {
         activeDuels.delete(challenger.id);
         activeDuels.delete(opponent.id);
         return msg.edit({
-          embeds: [new EmbedBuilder().setColor(COLOR.LOSS)
-            .setTitle('˗ˏˋ 𐙚 ⚔️ Duel Declined 𐙚 ˎˊ˗')
-            .setDescription(`꒰ঌ ${opponent.username} declined the duel ໒꒱`)],
+          embeds: [new EmbedBuilder().setColor(BLACK)
+            .setTitle('DUEL DECLINED')
+            .setDescription(`> ${opponent.username} declined the duel.`)],
         });
       }
 
@@ -102,19 +102,16 @@ module.exports = {
       const flavor = DUEL_FLAVOR[Math.floor(Math.random() * DUEL_FLAVOR.length)];
 
       await msg.edit({
-        embeds: [new EmbedBuilder().setColor(COLOR.WIN)
-          .setTitle('˗ˏˋ 𐙚 ⚔️ ᴅᴜᴇʟ ᴄᴏɴᴄʟᴜᴅᴇᴅ 𐙚 ˎˊ˗')
+        embeds: [new EmbedBuilder().setColor(BLACK)
+          .setTitle('DUEL CONCLUDED')
           .setDescription(
-            `꒰ঌ ${flavor} ໒꒱\n\n` +
-            `🏆 **${winner.username}** wins **${bet.toLocaleString()}** coins!\n` +
-            `💀 **${loser.username}** loses ${bet.toLocaleString()} coins.`
+            `> ${flavor}\n\n` +
+            `> **${winner.username}** wins **${bet.toLocaleString()}** coins\n` +
+            `> **${loser.username}** loses **${bet.toLocaleString()}** coins\n\n` +
+            `> ${winner.username}: **${winnerData.balance.toLocaleString()}** coins\n` +
+            `> ${loser.username}: **${loserData.balance.toLocaleString()}** coins`
           )
-          .addFields(
-            { name: `⚔️ ${winner.username}`, value: `${(winnerData.balance).toLocaleString()} coins`, inline: true },
-            { name: `🛡️ ${loser.username}`,  value: `${(loserData.balance).toLocaleString()} coins`,  inline: true },
-          )
-          .setFooter({ text: 'System • Duel' })
-          .setTimestamp()],
+          .setFooter({ text: message.guild?.name || 'Shiro' })],
       });
 
       activeDuels.delete(challenger.id);
@@ -126,9 +123,9 @@ module.exports = {
         activeDuels.delete(challenger.id);
         activeDuels.delete(opponent.id);
         msg.edit({
-          embeds: [new EmbedBuilder().setColor(COLOR.LOSS)
-            .setTitle('˗ˏˋ 𐙚 ⚔️ Duel Expired 𐙚 ˎˊ˗')
-            .setDescription(`꒰ঌ ${opponent.username} didn't respond in time ໒꒱`)],
+          embeds: [new EmbedBuilder().setColor(BLACK)
+            .setTitle('DUEL EXPIRED')
+            .setDescription(`> ${opponent.username} didn't respond in time.`)],
         }).catch(() => {});
       }
     });

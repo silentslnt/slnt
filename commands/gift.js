@@ -1,9 +1,11 @@
 // commands/gift.js
 const { EmbedBuilder } = require('discord.js');
-const { COLOR, GIFT_DAILY_CAP } = require('../utils/config');
+const { GIFT_DAILY_CAP } = require('../utils/config');
 const { requireAdmin } = require('../utils/permissions');
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+const PRESENT = '<:cpresent:1512497697381154826>';
+const BLACK   = 0x000000;
+const DAY_MS  = 24 * 60 * 60 * 1000;
 
 module.exports = {
   name: 'gift',
@@ -20,8 +22,8 @@ module.exports = {
     if (!target || isNaN(amount) || amount <= 0) {
       return message.channel.send('Usage: `.gift @user <amount>`');
     }
-    if (target.id === message.author.id) return message.channel.send('❌ You cannot gift yourself.');
-    if (target.bot) return message.channel.send('❌ You cannot gift bots.');
+    if (target.id === message.author.id) return message.channel.send('You cannot gift yourself.');
+    if (target.bot) return message.channel.send('You cannot gift bots.');
 
     // Daily cap check
     const now = Date.now();
@@ -36,20 +38,20 @@ module.exports = {
     const remaining = GIFT_DAILY_CAP - userData.giftedToday;
     if (remaining <= 0) {
       return message.channel.send({
-        embeds: [new EmbedBuilder().setColor(COLOR.LOSS)
-          .setTitle('˗ˏˋ 𐙚 ✖ Daily Gift Cap Reached 𐙚 ˎˊ˗')
-          .setDescription(`꒰ঌ You can gift up to **${GIFT_DAILY_CAP.toLocaleString()}** coins per day ໒꒱\nCap resets in 24h.`)
-          .setFooter({ text: 'System • Gift' })],
+        embeds: [new EmbedBuilder().setColor(BLACK)
+          .setTitle('DAILY GIFT CAP REACHED')
+          .setDescription(`> You can gift up to **${GIFT_DAILY_CAP.toLocaleString()}** coins per day.\n> Cap resets in 24h.`)
+          .setFooter({ text: message.guild?.name || 'Shiro' })],
       });
     }
 
     const capped  = Math.min(amount, remaining);
     const balance = userData.balance || 0;
-    if (balance < capped) return message.channel.send(`❌ Insufficient balance. You have **${balance.toLocaleString()}** coins.`);
+    if (balance < capped) return message.channel.send(`Insufficient balance. You have **${balance.toLocaleString()}** coins.`);
 
     // Apply
     const targetData = await getUserData(target.id);
-    if (!targetData) return message.channel.send('❌ That user has no account yet.');
+    if (!targetData) return message.channel.send('That user has no account yet.');
 
     userData.balance        -= capped;
     userData.giftedToday    += capped;
@@ -61,14 +63,14 @@ module.exports = {
     await saveSpecificUserData(target.id, { balance: targetData.balance, totalEarned: targetData.totalEarned });
 
     return message.channel.send({
-      embeds: [new EmbedBuilder().setColor(COLOR.WIN)
-        .setTitle('˗ˏˋ 𐙚 🎁 ɢɪꜰᴛ ꜱᴇɴᴛ 𐙚 ˎˊ˗')
+      embeds: [new EmbedBuilder().setColor(BLACK)
+        .setTitle('GIFT SENT')
         .setDescription(
-          `꒰ঌ ${message.author} gifted **${capped.toLocaleString()}** coins to ${target} ໒꒱\n\n` +
-          `💰 Your balance: **${userData.balance.toLocaleString()}**\n` +
-          `📦 Daily gift remaining: **${(GIFT_DAILY_CAP - userData.giftedToday).toLocaleString()}** coins`
+          `> ${PRESENT} ${message.author} gifted **${capped.toLocaleString()}** coins to ${target}\n\n` +
+          `> Your balance: **${userData.balance.toLocaleString()}**\n` +
+          `> Daily gift remaining: **${(GIFT_DAILY_CAP - userData.giftedToday).toLocaleString()}** coins`
         )
-        .setFooter({ text: 'System • Gift' }).setTimestamp()],
+        .setFooter({ text: message.guild?.name || 'Shiro' })],
     });
   },
 };

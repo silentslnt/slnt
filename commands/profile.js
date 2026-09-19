@@ -1,10 +1,17 @@
 // commands/profile.js
 const { EmbedBuilder } = require('discord.js');
-const { COLOR, TITLES, BADGES, PRESTIGE_RANKS } = require('../utils/config');
+const { TITLES, BADGES } = require('../utils/config');
 const { xpProgress, progressBar } = require('../utils/xp');
 const { getRank, getNextRank } = require('../utils/prestige');
 const { getActiveEssenceSummary } = require('../utils/essences');
 const { trackStat } = require('../utils/achievements');
+
+const CHECK      = '<:check:1547659779877642360>';
+const XMARK      = '<:xmark:1547659816783061153>';
+const SILV_ICON  = '<:SILV_TOKEN:1447678878448484555>';
+const CSTAR      = '<a:cstar:1545032606603812954>';
+const CSPARKLE   = '<a:csparkle:1512498380142674010>';
+const BLACK      = 0x000000;
 
 module.exports = {
   name: 'profile',
@@ -13,13 +20,17 @@ module.exports = {
   description: 'View your profile (or another user\'s). `.pf [@user]`',
 
   async execute({ message, args, userData, saveUserData, getUserData }) {
+    // Customize subcommand
+    if (args[0] === 'customize') {
+      return handleCustomize({ message, args: args.slice(1), userData, saveUserData });
+    }
+
     const target = message.mentions.users.first() || message.author;
     let data     = userData;
     if (target.id !== message.author.id) {
       data = await getUserData(target.id);
-      if (!data) return message.channel.send('❌ That user has no profile yet.');
+      if (!data) return message.channel.send('That user has no profile yet.');
     } else {
-      // track profile viewed
       await trackStat(userData, 'profileViewed', 1, { message, saveUserData });
     }
 
@@ -33,100 +44,62 @@ module.exports = {
     const prestige   = data.prestige || 0;
     const activeEss  = getActiveEssenceSummary(data);
 
-    // Equipped title
     const equippedTitleId = data.equippedTitle;
     const titleDisplay    = equippedTitleId && TITLES[equippedTitleId]
       ? TITLES[equippedTitleId].name
       : null;
 
-    // Badges
     const ownedBadges = (data.unlockedBadges || [])
       .map(id => BADGES[id]?.name)
       .filter(Boolean)
-      .join('  ') || '_None yet_';
+      .join('  ') || 'None yet';
 
-    // Achievements count
     const achCount = (data.achievements || []).length;
 
-    // Rank progress
-    let rankProgress = '';
+    let rankProgress;
     if (nextRank) {
-      const curr  = data.totalEarned || 0;
-      const toGo  = nextRank.min - curr;
-      const bar   = progressBar(curr - rank.min, nextRank.min - rank.min);
+      const curr = data.totalEarned || 0;
+      const toGo = nextRank.min - curr;
+      const bar  = progressBar(curr - rank.min, nextRank.min - rank.min);
       rankProgress = `${bar} → **${nextRank.name}** in ${toGo.toLocaleString()} earned`;
     } else {
-      rankProgress = '🏆 **Max rank reached!**';
+      rankProgress = 'Max rank reached';
     }
 
     const embed = new EmbedBuilder()
-      .setTitle(`˗ˏˋ 𐙚 🪞 𝒫𝓇𝑜𝒻𝒾𝓁𝑒 — ${target.username} 𐙚 ˎˊ˗`)
-      .setColor(COLOR.DEFAULT)
+      .setTitle(`PROFILE — ${target.username.toUpperCase()}`)
+      .setColor(BLACK)
       .setThumbnail(target.displayAvatarURL({ dynamic: true }))
       .setDescription(
-        (titleDisplay ? `✦ **${titleDisplay}**\n` : '') +
-        (prestige > 0  ? `🔥 **Prestige ${prestige}**\n` : '') +
-        `\n꒰ঌ Rank: **${rank.name}** ໒꒱`
-      )
-      .addFields(
-        // ── Economy ──────────────────────────────────────────────
-        {
-          name: '─── 💰 Economy',
-          value:
-            `**Balance:** ${balance.toLocaleString()} coins\n` +
-            `**SILV Tokens:** ${silv} 💎\n` +
-            `**Total Earned:** ${(data.totalEarned || 0).toLocaleString()}\n` +
-            `**Daily Streak:** 🔥 ${streak} days`,
-          inline: false,
-        },
-        // ── Level / XP ───────────────────────────────────────────
-        {
-          name: '─── 📈 Level & XP',
-          value:
-            `**Level ${level}** — ${current.toLocaleString()} / ${needed.toLocaleString()} XP\n` +
-            `${xpBar}`,
-          inline: false,
-        },
-        // ── Rank Progress ────────────────────────────────────────
-        {
-          name: `─── ⭐ Rank: ${rank.name}`,
-          value: rankProgress,
-          inline: false,
-        },
-        // ── Badges ───────────────────────────────────────────────
-        {
-          name: '─── 🎖 Badges',
-          value: ownedBadges,
-          inline: false,
-        },
-        // ── Achievements ─────────────────────────────────────────
-        {
-          name: '─── 🏆 Achievements',
-          value: `${achCount} unlocked — see \`.achievements\``,
-          inline: true,
-        },
-        // ── Stats ────────────────────────────────────────────────
-        {
-          name: '─── 🎮 Stats',
-          value:
-            `Games Played: ${data.stats?.gamesPlayed || 0}\n` +
-            `Games Won: ${data.stats?.gamesWon || 0}\n` +
-            `Keys Opened: ${data.stats?.keysOpened || 0}`,
-          inline: true,
-        },
-      )
-      .setFooter({ text: `System • Profile${activeEss ? ' • Essences active' : ''}` })
-      .setTimestamp();
+        (titleDisplay ? `> ${CSPARKLE} **${titleDisplay}**\n` : '') +
+        (prestige > 0 ? `> Prestige **${prestige}**\n` : '') +
+        `> Rank: **${rank.name}**\n\n` +
 
-    // Active essences panel
-    if (activeEss && target.id === message.author.id) {
-      embed.addFields({ name: '─── ✨ Active Essences', value: activeEss, inline: false });
-    }
+        `__**Economy**__\n` +
+        `> Balance: **${balance.toLocaleString()}** coins\n` +
+        `> SILV Tokens: **${silv}** ${SILV_ICON}\n` +
+        `> Total earned: **${(data.totalEarned || 0).toLocaleString()}**\n` +
+        `> Daily streak: **${streak}** days\n\n` +
 
-    // Customize subcommand
-    if (args[0] === 'customize') {
-      return handleCustomize({ message, args: args.slice(1), userData, saveUserData });
-    }
+        `__**Level & XP**__\n` +
+        `> **Level ${level}** — ${current.toLocaleString()}/${needed.toLocaleString()} XP\n` +
+        `> ${xpBar}\n\n` +
+
+        `__**Rank Progress**__ *(${rank.name})*\n` +
+        `> ${rankProgress}\n\n` +
+
+        `__**Badges**__\n> ${ownedBadges}\n\n` +
+
+        `__**Achievements**__\n> ${CSTAR} **${achCount}** unlocked — see \`.achievements\`\n\n` +
+
+        `__**Stats**__\n` +
+        `> Games played: **${data.stats?.gamesPlayed || 0}** · Games won: **${data.stats?.gamesWon || 0}** · Keys opened: **${data.stats?.keysOpened || 0}**` +
+
+        (activeEss && target.id === message.author.id
+          ? `\n\n__**Active Essences**__\n${activeEss}`
+          : '')
+      )
+      .setFooter({ text: message.guild?.name || 'Shiro' });
 
     return message.channel.send({ embeds: [embed] });
   },
@@ -138,18 +111,18 @@ async function handleCustomize({ message, args, userData, saveUserData }) {
   const id   = (args[1] || '').toLowerCase();
 
   if (type === 'title') {
-    if (!id || !TITLES[id]) return message.channel.send(`❌ Unknown title. Buy titles with \`.sh cosmetics\``);
+    if (!id || !TITLES[id]) return message.channel.send(`${XMARK} Unknown title. Buy titles with \`.sh cosmetics\``);
     if (!(userData.unlockedTitles || []).includes(id)) {
-      return message.channel.send(`❌ You don't own this title. Buy it with \`.sh buy ${id}\``);
+      return message.channel.send(`${XMARK} You don't own this title. Buy it with \`.sh buy ${id}\``);
     }
     userData.equippedTitle = id;
     await saveUserData({ equippedTitle: id });
-    return message.channel.send(`✅ Title set to **${TITLES[id].name}**! Visible on your \`.profile\`.`);
+    return message.channel.send(`${CHECK} Title set to **${TITLES[id].name}** — visible on your \`.profile\`.`);
   }
 
   return message.channel.send(
     '**Profile Customization**\n' +
-    '`.profile customize title <id>` — Set your title\n\n' +
+    '`.profile customize title <id>` — set your title\n\n' +
     'Available types: `title`'
   );
 }
