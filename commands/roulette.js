@@ -1,6 +1,10 @@
 // commands/roulette.js — European Roulette (0-36)
 const { EmbedBuilder } = require('discord.js');
-const { COLOR, XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
+const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
+
+const CHECK = '<:check:1547659779877642360>';
+const XMARK = '<:xmark:1547659816783061153>';
+const BLACK = 0x000000;
 const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
 const { getMultiplier, getLuckBonus } = require('../utils/essences');
@@ -51,24 +55,23 @@ module.exports = {
 
     if (!bet || !betType) {
       return message.channel.send({
-        embeds: [new EmbedBuilder().setColor(COLOR.DEFAULT)
-          .setTitle('˗ˏˋ 🎡 Roulette ˎˊ˗')
+        embeds: [new EmbedBuilder().setColor(BLACK)
+          .setTitle('ROULETTE')
           .setDescription(
-            '꒰ঌ Usage ໒꒱\n\n' +
-            '`.rl <bet> <choice>`\n\n' +
-            '**Choices & Payouts:**\n' +
-            '`red` / `black` → **2×** (48.6% win)\n' +
-            '`green` → **18×** (2.7% win)\n' +
-            '`0`–`36` → **36×** (2.7% win)\n\n' +
-            '**Examples:**\n' +
-            '`.rl 500 red` · `.rl 1000 7` · `.rl all black`'
+            '> Usage: `.rl <bet> <choice>`\n\n' +
+            '__**Choices & Payouts**__\n' +
+            '> `red` / `black` → **2×** (48.6% win)\n' +
+            '> `green` → **18×** (2.7% win)\n' +
+            '> `0`–`36` → **36×** (2.7% win)\n\n' +
+            '__**Examples**__\n' +
+            '> `.rl 500 red` · `.rl 1000 7` · `.rl all black`'
           )
-          .setFooter({ text: 'System • Roulette  |  RTP ~97%' })],
+          .setFooter({ text: `${message.guild?.name || 'Shiro'} — RTP ~97%` })],
       });
     }
 
     if ((userData.balance || 0) < bet) {
-      return message.channel.send({ content: `❌ You only have **${(userData.balance||0).toLocaleString()}** coins.` });
+      return message.channel.send(`You only have **${(userData.balance||0).toLocaleString()}** coins.`);
     }
 
     userData.balance = (userData.balance || 0) - bet;
@@ -113,22 +116,21 @@ module.exports = {
     let statusLine;
     if (won) {
       statusLine = frenzy > 1
-        ? `✅ **${resultEmoji} ${result.num} (${COLOR_LABEL[result.color]})** — ×${baseMulti} → ×${finalMulti} (Frenzy!) **+${profit.toLocaleString()}** coins!`
-        : `✅ **${resultEmoji} ${result.num} (${COLOR_LABEL[result.color]})** — ×${baseMulti} — **+${profit.toLocaleString()}** coins!`;
+        ? `${CHECK} **${resultEmoji} ${result.num} (${COLOR_LABEL[result.color]})** — ×${baseMulti} → ×${finalMulti} (Frenzy) **+${profit.toLocaleString()}** coins`
+        : `${CHECK} **${resultEmoji} ${result.num} (${COLOR_LABEL[result.color]})** — ×${baseMulti} — **+${profit.toLocaleString()}** coins`;
     } else {
-      statusLine = `❌ **${resultEmoji} ${result.num} (${COLOR_LABEL[result.color]})** — not ${betLabel}. Lost **${bet.toLocaleString()}** coins.`;
+      statusLine = `${XMARK} **${resultEmoji} ${result.num} (${COLOR_LABEL[result.color]})** — not ${betLabel}. Lost **${bet.toLocaleString()}** coins.`;
     }
 
     const embed = new EmbedBuilder()
-      .setColor(won ? COLOR.WIN : COLOR.LOSS)
-      .setTitle('˗ˏˋ 🎡 Roulette ˎˊ˗')
+      .setColor(BLACK)
+      .setTitle('ROULETTE')
       .setDescription(
-        `${statusLine}\n\n` +
-        `꒰ Bet: \`${bet.toLocaleString()}\` on \`${betLabel}\` ꒱\n` +
-        `꒰ Balance: \`${(userData.balance || 0).toLocaleString()}\` ꒱`
+        `> ${statusLine}\n\n` +
+        `> Bet: \`${bet.toLocaleString()}\` on \`${betLabel}\`\n` +
+        `> Balance: \`${(userData.balance || 0).toLocaleString()}\``
       )
-      .setFooter({ text: 'System • Roulette  |  RTP ~97%' })
-      .setTimestamp();
+      .setFooter({ text: `${message.guild?.name || 'Shiro'} — RTP ~97%` });
 
     await message.channel.send({ embeds: [embed] });
 

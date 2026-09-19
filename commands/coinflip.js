@@ -1,6 +1,8 @@
 // commands/coinflip.js
 const { EmbedBuilder } = require('discord.js');
-const { COLOR, XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
+const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
+
+const BLACK = 0x000000;
 const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
 const { getMultiplier, getLuckBonus } = require('../utils/essences');
@@ -25,22 +27,21 @@ module.exports = {
 
     if (!bet || !['h', 't', 'heads', 'tails'].includes(sideArg)) {
       return message.channel.send({
-        embeds: [new EmbedBuilder().setColor(COLOR.DEFAULT)
-          .setTitle('˗ˏˋ 𐙚 🪙 ℂ𝕠𝕚𝕟𝕗𝕝𝕚𝕡 𐙚 ˎˊ˗')
+        embeds: [new EmbedBuilder().setColor(BLACK)
+          .setTitle('COINFLIP')
           .setDescription(
-            '꒰ঌ Usage ໒꒱\n\n' +
-            '`.cf <amount|all|max> <h|t>`\n\n' +
-            '**Examples:**\n' +
-            '`.cf 500 h` — bet 500 on heads\n' +
-            '`.cf all t` — bet all on tails\n' +
-            '`.cf max h` — bet max on heads'
+            '> Usage: `.cf <amount|all|max> <h|t>`\n\n' +
+            '__**Examples**__\n' +
+            '> `.cf 500 h` — bet 500 on heads\n' +
+            '> `.cf all t` — bet all on tails\n' +
+            '> `.cf max h` — bet max on heads'
           )
-          .setFooter({ text: 'System • Coinflip' })],
+          .setFooter({ text: message.guild?.name || 'Shiro' })],
       });
     }
 
     if ((userData.balance || 0) < bet) {
-      return message.channel.send('❌ Insufficient balance.');
+      return message.channel.send('Insufficient balance.');
     }
 
     const pickedHeads = sideArg.startsWith('h');
@@ -57,18 +58,18 @@ module.exports = {
 
     // Animation
     const spinMsg = await message.channel.send({
-      embeds: [new EmbedBuilder().setColor(COLOR.DEFAULT)
-        .setTitle('˗ˏˋ 𐙚 🪙 Flipping... 𐙚 ˎˊ˗')
+      embeds: [new EmbedBuilder().setColor(BLACK)
+        .setTitle('FLIPPING...')
         .setDescription(`${SPIN_FRAMES[0]} Spinning...`)
-        .setFooter({ text: 'System • Coinflip' })],
+        .setFooter({ text: message.guild?.name || 'Shiro' })],
     });
     for (let i = 1; i < SPIN_FRAMES.length; i++) {
       await new Promise(r => setTimeout(r, 300));
       await spinMsg.edit({
-        embeds: [new EmbedBuilder().setColor(COLOR.DEFAULT)
-          .setTitle('˗ˏˋ 𐙚 🪙 Flipping... 𐙚 ˎˊ˗')
+        embeds: [new EmbedBuilder().setColor(BLACK)
+          .setTitle('FLIPPING...')
           .setDescription(`${SPIN_FRAMES[i]} Spinning...`)
-          .setFooter({ text: 'System • Coinflip' })],
+          .setFooter({ text: message.guild?.name || 'Shiro' })],
       });
     }
 
@@ -96,7 +97,7 @@ module.exports = {
     if (won && cfStreak > 0 && cfStreak % 5 === 0) {
       streakBonus       = Math.floor(bet * 0.5);
       userData.balance += streakBonus;
-      streakNote        = `\n🔥 **${cfStreak}-flip streak bonus:** +${streakBonus.toLocaleString()} coins!`;
+      streakNote        = `\n> **${cfStreak}-flip streak bonus:** +${streakBonus.toLocaleString()} coins!`;
     }
 
     await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned, stats: userData.stats });
@@ -115,29 +116,28 @@ module.exports = {
     await checkAchievements(userData, { message, saveUserData });
 
     const embed = new EmbedBuilder()
-      .setTitle('˗ˏˋ 𐙚 🪙 ℂ𝕠𝕚𝕟𝕗𝕝𝕚𝕡 ℝ𝕖𝕤𝕦𝕝𝕥 𐙚 ˎˊ˗')
-      .setColor(won ? COLOR.WIN : COLOR.LOSS)
+      .setTitle('COINFLIP RESULT')
+      .setColor(BLACK)
       .addFields(
-        { name: '🪙 Result',        value: result,                                   inline: true },
-        { name: '🎯 You Picked',    value: picked,                                   inline: true },
-        { name: '💰 Bet',           value: bet.toLocaleString(),                     inline: true },
-        { name: won ? '🎉 Won' : '😔 Lost', value: won ? `+${payout.toLocaleString()}` : `-${bet.toLocaleString()}`, inline: true },
-        { name: '💼 Balance',       value: userData.balance.toLocaleString(),        inline: true },
-        { name: '🔥 CF Streak',     value: `${cfStreak} flips`,                     inline: true },
+        { name: 'Result',     value: result,                                   inline: true },
+        { name: 'You Picked', value: picked,                                   inline: true },
+        { name: 'Bet',        value: bet.toLocaleString(),                     inline: true },
+        { name: won ? 'Won' : 'Lost', value: won ? `+${payout.toLocaleString()}` : `-${bet.toLocaleString()}`, inline: true },
+        { name: 'Balance',    value: userData.balance.toLocaleString(),        inline: true },
+        { name: 'CF Streak',  value: `${cfStreak} flips`,                     inline: true },
       )
       .setDescription(
         won
-          ? `꒰ঌ **${result}!** You win **${payout.toLocaleString()}** coins! ໒꒱${streakNote}`
-          : `꒰ঌ **${result}!** You picked ${picked}. Better luck next time! ໒꒱`
+          ? `> **${result}!** You win **${payout.toLocaleString()}** coins!${streakNote}`
+          : `> **${result}!** You picked ${picked}. Better luck next time.`
       )
       .setFooter({
         text: [
-          frenzyMult > 1 ? `🎮 ${frenzyMult}× Frenzy` : '',
-          luckBonus   > 0 ? `🍀 +${luckBonus * 100}% luck` : '',
-          'System • Coinflip',
-        ].filter(Boolean).join(' • '),
-      })
-      .setTimestamp();
+          frenzyMult > 1 ? `${frenzyMult}× Frenzy` : '',
+          luckBonus   > 0 ? `+${luckBonus * 100}% luck` : '',
+          message.guild?.name || 'Shiro',
+        ].filter(Boolean).join(' — '),
+      });
 
     await spinMsg.edit({ embeds: [embed] });
   },

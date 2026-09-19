@@ -3,6 +3,8 @@ const { awardPoints } = require('../utils/sentinelDb');
 const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
 
+const BLACK = 0x000000;
+
 module.exports = {
   name: 'dice',
   aliases: ['d'],
@@ -26,44 +28,22 @@ module.exports = {
 
     const roll = Math.floor(Math.random() * 6) + 1; // 1-6
     let reward = 0;
-    let resultBlock = '';
+    let resultLine = '';
 
     if (roll === 6) {
       reward = Math.floor(bet * 2);
       userData.balance += reward;
-
-      resultBlock =
-        '╭──────────────────────────────╮\n' +
-        '│  🎲 Rolled: **6**            │\n' +
-        '│  **✨ CELESTIAL JACKPOT ✨**  │\n' +
-        `│  Reward: **${reward}** (2x)  │\n` +
-        '╰──────────────────────────────╯';
+      resultLine = `> Rolled **6** — Jackpot! Reward: **${reward.toLocaleString()}** (2×)`;
     } else if (roll === 5) {
       reward = Math.floor(bet * 1.7);
       userData.balance += reward;
-
-      resultBlock =
-        '╭──────────────────────────────╮\n' +
-        '│  🎲 Rolled: **5**            │\n' +
-        '│  **⭐ HEAVENLY WIN ⭐**       │\n' +
-        `│  Reward: **${reward}** (1.7x)│\n` +
-        '╰──────────────────────────────╯';
+      resultLine = `> Rolled **5** — Big Win! Reward: **${reward.toLocaleString()}** (1.7×)`;
     } else if (roll === 4) {
       reward = Math.floor(bet * 1.4);
       userData.balance += reward;
-
-      resultBlock =
-        '╭──────────────────────────────╮\n' +
-        '│  🎲 Rolled: **4**            │\n' +
-        '│  **🪽 BLESSED WIN 🪽**       │\n' +
-        `│  Reward: **${reward}** (1.4x)│\n` +
-        '╰──────────────────────────────╯';
+      resultLine = `> Rolled **4** — Win! Reward: **${reward.toLocaleString()}** (1.4×)`;
     } else {
-      resultBlock =
-        '╭──────────────────────────────╮\n' +
-        `│  🎲 Rolled: **${roll}**      │\n` +
-        '│  **💔 FALLEN BET – YOU LOSE**│\n' +
-        '╰──────────────────────────────╯';
+      resultLine = `> Rolled **${roll}** — you lose.`;
     }
 
     await saveUserData({ balance: userData.balance });
@@ -73,19 +53,12 @@ module.exports = {
     }
 
     const embed = new EmbedBuilder()
-      .setTitle('˗ˏˋ 𐙚 🎲 𝔠𝔢𝔩𝔢𝔰𝔱𝔦𝔞𝔩 𝔇𝔦𝔠𝔢 𝕋𝕒𝕓𝕝𝕖 𐙚 ˎˊ˗')
+      .setTitle('DICE TABLE')
       .setDescription(
-        [
-          '꒰ঌ rolling the heavenly dice ໒꒱',
-          '',
-          resultBlock,
-          '',
-          `💰 **New Balance:** ${userData.balance} coins`
-        ].join('\n')
+        `${resultLine}\n\n> New balance: **${userData.balance.toLocaleString()}** coins`
       )
-      .setColor('#F5E6FF')
-      .setFooter({ text: 'System • Angelic Games ✧' })
-      .setTimestamp();
+      .setColor(BLACK)
+      .setFooter({ text: message.guild?.name || 'Shiro' });
 
     message.channel.send({ embeds: [embed] });
   }
