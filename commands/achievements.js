@@ -1,6 +1,9 @@
 // commands/achievements.js
 const { EmbedBuilder } = require('discord.js');
-const { ACHIEVEMENTS, COLOR } = require('../utils/config');
+const { ACHIEVEMENTS } = require('../utils/config');
+
+const CHECK = '<:check:1547659779877642360>';
+const BLACK = 0x000000;
 
 module.exports = {
   name: 'achievements',
@@ -13,19 +16,18 @@ module.exports = {
 
     const lines = ACHIEVEMENTS.map(ach =>
       earned.has(ach.id)
-        ? `✅ **${ach.name}** — _${ach.desc}_`
-        : `🔒 ${ach.name} — _${ach.desc}_`
+        ? `> ${CHECK} **${ach.name}** — ${ach.desc}`
+        : `> ${ach.name} — ${ach.desc}`
     );
 
     const embed = new EmbedBuilder()
-      .setColor(COLOR.PRESTIGE)
-      .setTitle('˗ˏˋ 𐙚 🏆 𝔸𝕔𝕙𝕚𝕖𝕧𝕖𝕞𝕖𝕟𝕥𝕤 𐙚 ˎˊ˗')
+      .setColor(BLACK)
+      .setTitle('ACHIEVEMENTS')
       .setDescription(
-        `꒰ঌ **${earned.size}/${ACHIEVEMENTS.length}** unlocked ໒꒱\n\n` +
+        `-# ${earned.size}/${ACHIEVEMENTS.length} unlocked\n\n` +
         lines.join('\n')
       )
-      .setFooter({ text: 'System • Achievements' })
-      .setTimestamp();
+      .setFooter({ text: message.guild?.name || 'Shiro' });
 
     return message.channel.send({ embeds: [embed] });
   },

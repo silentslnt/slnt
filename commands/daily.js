@@ -4,11 +4,17 @@ const {
   DAILY_BASE, STREAK_TIERS,
   WEEKLY_BONUS_COINS, WEEKLY_BONUS_KEY,
   MONTHLY_BONUS_COINS, MONTHLY_BONUS_SILV, MONTHLY_BADGE,
-  COLOR, XP_PER_DAILY,
+  XP_PER_DAILY,
 } = require('../utils/config');
 const { getRankBonusMultiplier } = require('../utils/prestige');
 const { addXP, progressBar, xpProgress } = require('../utils/xp');
 const { trackStat } = require('../utils/achievements');
+
+const CDOTSWIRL = '<a:cdotswirl:1512497077329068172>';
+const CPRESENT  = '<:cpresent:1512497697381154826>';
+const CMOON     = '<:cmoon:1512498518558773419>';
+const CSTAR     = '<a:cstar:1545032606603812954>';
+const BLACK     = 0x000000;
 
 const DAY_MS   = 24 * 60 * 60 * 1000;
 const WEEK_MS  =  7 * DAY_MS;
@@ -46,14 +52,14 @@ module.exports = {
       return message.channel.send({
         embeds: [
           new EmbedBuilder()
-            .setColor(COLOR.LOSS)
-            .setTitle('˗ˏˋ 𐙚 ⏰ 𝔇𝔞𝔦𝔩𝔶 𝔬𝔫 ℭ𝔬𝔬𝔩𝔡𝔬𝔴𝔫 𐙚 ˎˊ˗')
+            .setColor(BLACK)
+            .setTitle('DAILY ON COOLDOWN')
             .setDescription(
-              `You've already claimed today!\n\n` +
-              `꒰ঌ **Time remaining:** \`${h}h ${m}m ${s}s\` ໒꒱\n\n` +
-              `🔥 **Current streak:** ${userData.dailyStreak || 0} days`
+              `> You've already claimed today.\n\n` +
+              `> Time remaining: **${h}h ${m}m ${s}s**\n` +
+              `> Current streak: **${userData.dailyStreak || 0}** days`
             )
-            .setFooter({ text: 'System • Daily Rewards' }),
+            .setFooter({ text: message.guild?.name || 'Shiro' }),
         ],
       });
     }
@@ -66,7 +72,7 @@ module.exports = {
 
     // ── base coins ────────────────────────────────────────────
     let coins        = Math.floor(DAILY_BASE * streakMult * rankMult);
-    const lines      = [`💰 **Daily coins:** ${DAILY_BASE} × ${streakMult}× streak × ${rankMult.toFixed(2)}× rank = **${coins}**`];
+    const lines      = [`> ${CDOTSWIRL} Daily coins: ${DAILY_BASE} × ${streakMult}× streak × ${rankMult.toFixed(2)}× rank = **${coins}**`];
     const newBadges  = [];
     let bonusKey     = null;
     let bonusSilv    = 0;
@@ -79,7 +85,7 @@ module.exports = {
       userData.inventory = userData.inventory || {};
       userData.inventory[bonusKey] = (userData.inventory[bonusKey] || 0) + 1;
       userData.lastWeekly = new Date();
-      lines.push(`🎁 **Weekly bonus:** +${WEEKLY_BONUS_COINS} coins + 1 ${bonusKey} key`);
+      lines.push(`> ${CPRESENT} Weekly bonus: +${WEEKLY_BONUS_COINS} coins + 1 ${bonusKey} key`);
     }
 
     // ── monthly bonus ─────────────────────────────────────────
@@ -96,7 +102,7 @@ module.exports = {
         userData.unlockedBadges.push('moon_badge');
         newBadges.push(MONTHLY_BADGE);
       }
-      lines.push(`🌙 **Monthly bonus:** +${MONTHLY_BONUS_COINS} coins + ${bonusSilv} SILV token!`);
+      lines.push(`> ${CMOON} Monthly bonus: +${MONTHLY_BONUS_COINS} coins + ${bonusSilv} SILV token`);
     }
 
     // ── apply ─────────────────────────────────────────────────
@@ -132,39 +138,24 @@ module.exports = {
     const streakBar = progressBar(streak % nextMilestone || streak, nextMilestone);
 
     // ── embed ─────────────────────────────────────────────────
-    const embedColor = brokeStreak ? COLOR.WARNING : COLOR.WIN;
-    const embed = new EmbedBuilder()
-      .setColor(embedColor)
-      .setTitle('˗ˏˋ 𐙚 🎁 𝔇𝔞𝔦𝔩𝔶 ℛ𝕖𝕨𝕒𝕣𝕕 𝔠𝔩𝔞𝔦𝔪𝔢𝔡! 𐙚 ˎˊ˗')
-      .setDescription(lines.join('\n'))
-      .addFields(
-        {
-          name: '🔥 Streak',
-          value:
-            `**${streak}** days  ${brokeStreak ? '_(streak reset)_' : ''}\n` +
-            `${streakBar} → next milestone: **${nextMilestone}** days`,
-          inline: false,
-        },
-        {
-          name: '💰 New Balance',
-          value: `**${userData.balance.toLocaleString()}** coins`,
-          inline: true,
-        },
-        {
-          name: '⏩ Next Streak Bonus',
-          value: (() => {
-            const t = STREAK_TIERS.find(t => t.days > streak);
-            return t ? `${t.multiplier}× at **${t.days}** days` : '🏆 Max multiplier!';
-          })(),
-          inline: true,
-        },
-      )
-      .setFooter({ text: `System • Daily Rewards${newBadges.length ? ' • New badge unlocked!' : ''}` })
-      .setTimestamp();
+    const nextBonus = (() => {
+      const t = STREAK_TIERS.find(t => t.days > streak);
+      return t ? `${t.multiplier}× at **${t.days}** days` : 'Max multiplier reached';
+    })();
 
-    if (newBadges.length) {
-      embed.addFields({ name: '🏅 Badge Awarded', value: newBadges.join(', '), inline: false });
-    }
+    const embed = new EmbedBuilder()
+      .setColor(BLACK)
+      .setTitle('DAILY REWARD CLAIMED')
+      .setDescription(
+        lines.join('\n') + '\n\n' +
+        `__**Streak**__\n` +
+        `> **${streak}** days${brokeStreak ? ' *(reset)*' : ''}\n` +
+        `> ${streakBar} → next milestone: **${nextMilestone}** days\n\n` +
+        `> New balance: **${userData.balance.toLocaleString()}** coins\n` +
+        `> ${CSTAR} Next streak bonus: ${nextBonus}` +
+        (newBadges.length ? `\n\n> Badge awarded: ${newBadges.join(', ')}` : '')
+      )
+      .setFooter({ text: message.guild?.name || 'Shiro' });
 
     return message.channel.send({ embeds: [embed] });
   },

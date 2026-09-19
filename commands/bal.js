@@ -1,8 +1,12 @@
 // commands/bal.js
 const { EmbedBuilder } = require('discord.js');
-const { COLOR } = require('../utils/config');
-const { xpProgress, progressBar, levelFromXP } = require('../utils/xp');
-const { getRank, getNextRank } = require('../utils/prestige');
+const { xpProgress, progressBar } = require('../utils/xp');
+const { getRank } = require('../utils/prestige');
+
+const SILV_ICON  = '<:SILV_TOKEN:1447678878448484555>';
+const WHITESWIRL = '<a:cwhiteswirl:1512869492492079184>';
+const CSTAR      = '<a:cstar:1545032606603812954>';
+const BLACK      = 0x000000;
 
 module.exports = {
   name: 'bal',
@@ -15,7 +19,7 @@ module.exports = {
     let data = userData;
     if (target.id !== message.author.id) {
       data = await getUserData(target.id);
-      if (!data) return message.channel.send('❌ No data for that user.');
+      if (!data) return message.channel.send('No data for that user.');
     }
 
     const balance = data.balance || 0;
@@ -27,20 +31,19 @@ module.exports = {
     return message.channel.send({
       embeds: [
         new EmbedBuilder()
-          .setTitle('˗ˏˋ 𐙚 💰 ℬ𝒶𝓁𝒶𝓃𝒸𝑒 𐙚 ˎˊ˗')
-          .setColor(COLOR.DEFAULT)
+          .setTitle('BALANCE')
+          .setColor(BLACK)
           .setThumbnail(target.displayAvatarURL({ dynamic: true }))
-          .addFields(
-            { name: '💰 Coins',         value: `**${balance.toLocaleString()}**`,               inline: true },
-            { name: '💎 SILV',           value: `**${silv}** _(= ${silv * 10} Robux value)_`,   inline: true },
-            { name: '📈 Level',          value: `**${level}**`,                                  inline: true },
-            { name: '⭐ Rank',           value: rank.name,                                        inline: true },
-            { name: '🔥 Streak',         value: `${data.dailyStreak || 0} days`,                inline: true },
-            { name: '🏦 Total Earned',   value: `${(data.totalEarned||0).toLocaleString()}`,    inline: true },
-            { name: `📈 XP Progress (Lv ${level})`, value: `${xpBar} ${current}/${needed}`,    inline: false },
+          .setDescription(
+            `> **${target.username}**\n\n` +
+            `> Coins: **${balance.toLocaleString()}**\n` +
+            `> ${SILV_ICON} SILV: **${silv}** *(= ${silv * 10} Robux)*\n` +
+            `> ${CSTAR} Level **${level}** · ${WHITESWIRL} Rank **${rank.name}**\n` +
+            `> Streak: **${data.dailyStreak || 0}** days · Total earned: **${(data.totalEarned || 0).toLocaleString()}**\n\n` +
+            `__**XP Progress**__ *(Lv ${level})*\n` +
+            `> ${xpBar} ${current}/${needed}`
           )
-          .setFooter({ text: 'System • Balance' })
-          .setTimestamp(),
+          .setFooter({ text: message.guild?.name || 'Shiro' }),
       ],
     });
   },
