@@ -2,12 +2,12 @@
 const { EmbedBuilder } = require('discord.js');
 const mongoose = require('mongoose');
 const {
-  ESSENCES, TITLES, BADGES, BUNDLES, UTILITY_ITEMS,
+  ESSENCES, TITLES, BADGES, BUNDLES, UTILITY_ITEMS, SPELLS,
   COLOR,
 } = require('../utils/config');
 const { activateEssence } = require('../utils/essences');
 const { trackStat, checkAchievements } = require('../utils/achievements');
-const { awardPoints } = require('../utils/sentinelDb');
+const { awardPoints, grantItem } = require('../utils/sentinelDb');
 
 const SILV_KEY  = 'Silv token';
 const SILV_ICON = '<:SILV_TOKEN:1447678878448484555>';
@@ -74,6 +74,7 @@ module.exports = {
     if (sub === 'cosmetics' || sub === 'cos') return showCosmeticsShop({ message });
     if (sub === 'utility' || sub === 'util') return showUtilityShop({ message });
     if (sub === 'aether' || sub === 'ae')    return showAetherShop({ message, userData });
+    if (sub === 'spells' || sub === 'sp')    return showSpellShop({ message });
     return showMainShop({ message });
   },
 };
@@ -97,6 +98,7 @@ async function showMainShop({ message }) {
       `🎨 \`.sh cosmetics\`— Titles & Badges (SILV)\n` +
       `🛠 \`.sh utility\`  — Utility items (coins)\n` +
       `✦ \`.sh aether\`   — Aether packs (coins)\n` +
+      `🔮 \`.sh spells\`   — SILV race spells (SILV)\n` +
       `🗃 \`.sh items\`    — Admin-added items\n\n` +
       `**Buying:** \`.sh buy <item_id> [amount]\``
     )
@@ -210,6 +212,24 @@ async function showAetherShop({ message, userData }) {
   });
 }
 
+async function showSpellShop({ message }) {
+  let desc = '꒰ঌ Spells are cast in SILV with `,cast <spell> @member` ໒꒱\n꒰ঌ Purchased here, delivered to your Sentinel inventory instantly ໒꒱\n\n';
+  for (const [id, s] of Object.entries(SPELLS)) {
+    desc += `${s.emoji} **${s.name}** \`${id}\`${s.raceLocked ? ` *(${s.raceLocked}s only)*` : ''}\n`;
+    desc += `> ${s.effect}\n`;
+    desc += `> **Cost:** ${s.silvCost} ${SILV_ICON}\n\n`;
+  }
+  return message.channel.send({
+    embeds: [
+      new EmbedBuilder()
+        .setColor('#2b2d31')
+        .setTitle('˗ˏˋ 𐙚 🔮 𝔖𝔭𝔢𝔩𝔩 𝔖𝔥𝔬𝔭 𐙚 ˎˊ˗')
+        .setDescription(desc)
+        .setFooter({ text: `Buy: .sh buy <spell_id>  |  e.g. .sh buy shield` }),
+    ],
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  BUY HANDLER
 // ─────────────────────────────────────────────────────────────────────────────
@@ -244,6 +264,36 @@ async function handleBuy({ message, args, userData, saveUserData }) {
             `-# Check your Aether with \`,pts\` in SILV.`
           )
           .setFooter({ text: 'System • Aether Exchange' })
+          .setTimestamp(),
+      ],
+    });
+  }
+
+  // ── SPELL (delivered to Sentinel's user_inventory, cast with `,cast`) ────
+  if (SPELLS[itemId]) {
+    if (!message.guild) return message.channel.send('❌ Must be used in a server.');
+    const s    = SPELLS[itemId];
+    const cost = s.silvCost * amount;
+    if (silv < cost) return notEnoughSilv(message, cost, silv);
+
+    userData.inventory[SILV_KEY] = silv - cost;
+    userData.stats = userData.stats || {};
+    userData.stats.silvSpent = (userData.stats.silvSpent || 0) + cost;
+    await saveUserData({ inventory: userData.inventory, stats: userData.stats });
+    await trackStat(userData, 'silvSpent', 0, { message, saveUserData });
+    await grantItem(message.guild.id, message.author.id, itemId, amount);
+
+    return message.channel.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor('#2b2d31')
+          .setTitle('˗ˏˋ 𐙚 🔮 𝔖𝔭𝔢𝔩𝔩 𝔻𝔢𝔩𝔦𝔳𝔢𝔯𝔢𝔡 𐙚 ˎˊ˗')
+          .setDescription(
+            `꒰ঌ **${amount}× ${s.emoji} ${s.name}** added to your SILV inventory ໒꒱\n\n` +
+            `${SILV_ICON} SILV spent: **${cost}**\n\n` +
+            `-# Use \`,cast ${itemId} @member\` in SILV to cast it.`
+          )
+          .setFooter({ text: 'System • Spell Shop' })
           .setTimestamp(),
       ],
     });

@@ -45,4 +45,25 @@ async function awardPoints(guildId, userId, points) {
   }
 }
 
-module.exports = { awardPoints };
+/**
+ * Grant an item into Sentinel's user_inventory table (used for spells).
+ * Silent no-op if SENTINEL_DB_URL is not set or DB is unreachable.
+ */
+async function grantItem(guildId, userId, item, qty = 1) {
+  if (!item || qty <= 0) return;
+  const pool = _getPool();
+  if (!pool) return;
+  try {
+    await pool.query(
+      `INSERT INTO user_inventory (guild_id, user_id, item, quantity)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (guild_id, user_id, item)
+       DO UPDATE SET quantity = user_inventory.quantity + EXCLUDED.quantity`,
+      [guildId.toString(), userId.toString(), item, qty],
+    );
+  } catch (err) {
+    console.error('[sentinel-db] grantItem failed:', err.message);
+  }
+}
+
+module.exports = { awardPoints, grantItem };
