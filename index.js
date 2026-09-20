@@ -233,6 +233,28 @@ async function savePrefix(p) {
 const cooldowns = new Map();
 const COOLDOWN_MS = 5000;
 
+// Per-user in-flight lock — the 5s per-command cooldown above blocks spamming
+// the SAME command twice, but cooldowns are tracked per command name, so two
+// DIFFERENT balance-touching commands (e.g. .sh buy + .tip) fired in the same
+// instant aren't blocked by it. Since every command independently reads
+// userData fresh and writes it back later, two commands racing in that gap
+// could both read the same pre-spend balance and both succeed.
+//
+// This closes it for "quick" commands (resolve in one pass, no waiting on
+// user interaction) by only allowing one in flight per user at a time.
+// Long-running interactive commands (duel challenges, blackjack, mines,
+// trade, minigames waiting on reactions/collectors for up to several
+// minutes) are deliberately EXCLUDED — locking for their whole duration
+// would stop a player from checking .bal or buying something while they
+// have a pending duel, which is normal, legitimate concurrent use. Those
+// commands already guard against their own specific races via their own
+// active-game Maps (activeGames/activeDuels/SESSIONS/activeTrades/etc.).
+const usersInFlight = new Set();
+const LOCK_EXEMPT_COMMANDS = new Set([
+  'duel', 'blackjack', 'mines', 'minesweeper', 'trade',
+  'hl', 'hangman', 'wordscramble', 'guess', 'cipher',
+]);
+
 // Load commands dynamically (exclude keydrop.js)
 const commandsPath = path.join(__dirname, 'commands');
 let commandsModule = null;
@@ -519,6 +541,16 @@ client.on('messageCreate', async (message) => {
   timestamps.set(message.author.id, now);
   setTimeout(() => timestamps.delete(message.author.id), COOLDOWN_MS);
 
+  // Per-user in-flight lock (see declaration above) — skip for long-running
+  // interactive commands, apply to everything else.
+  const useLock = !LOCK_EXEMPT_COMMANDS.has(command.name);
+  if (useLock) {
+    if (usersInFlight.has(message.author.id)) {
+      return message.channel.send('⏳ Finish your current command first.');
+    }
+    usersInFlight.add(message.author.id);
+  }
+
   // Execute command
   try {
     const userData = await getUserData(message.author.id);
@@ -551,6 +583,8 @@ client.on('messageCreate', async (message) => {
       .setColor('Red')
       .setTimestamp();
     message.channel.send({ embeds: [errorEmbed] });
+  } finally {
+    if (useLock) usersInFlight.delete(message.author.id);
   }
 });
 
