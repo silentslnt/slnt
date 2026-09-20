@@ -24,11 +24,11 @@ module.exports = {
     // START GAME
     if (sub === 'start') {
       if (!isAdmin(message)) {
-        return message.channel.send('❌ Only authorized users can start a word scramble.');
+        return message.channel.send('Only authorized users can start a word scramble.');
       }
 
       if (activeScramble) {
-        return message.channel.send('❌ A word scramble game is already active.');
+        return message.channel.send('A word scramble game is already active.');
       }
 
       const word = args.slice(1).join('').toLowerCase();
@@ -39,7 +39,7 @@ module.exports = {
       }
 
       if (!/^[a-z]+$/.test(word)) {
-        return message.channel.send('❌ Word can only contain letters (no spaces or digits).');
+        return message.channel.send('Word can only contain letters (no spaces or digits).');
       }
 
       await message.delete().catch(() => {});
@@ -54,30 +54,18 @@ module.exports = {
       const gameChannel = client.channels.cache.get(GAME_CHANNEL_ID);
       if (!gameChannel) {
         activeScramble = null;
-        return message.channel.send('❌ Game channel not found. Check GAME_CHANNEL_ID.');
+        return message.channel.send('Game channel not found. Check GAME_CHANNEL_ID.');
       }
 
-      const infoBlock =
-        '╭──────────────────────────────╮\n' +
-        '│         Word Scramble        │\n' +
-        '╰──────────────────────────────╯';
-
       const embed = new EmbedBuilder()
-        .setTitle('˗ˏˋ 𐙚 🧩 Word Scramble 𐙚 ˎˊ˗')
+        .setColor(0x000000)
+        .setTitle('WORD SCRAMBLE')
         .setDescription(
-          [
-            infoBlock,
-            '',
-            'Unscramble the letters below.',
-            '',
-            `**${scrambled.toUpperCase()}**`,
-            '',
-            'Type your answer in chat. First correct answer wins.',
-          ].join('\n')
+          `> Unscramble the letters below.\n\n` +
+          `> **${scrambled.toUpperCase()}**\n\n` +
+          `-# Type your answer in chat — first correct answer wins.`
         )
-        .setColor('#F5E6FF')
-        .setFooter({ text: 'No hints. Good luck.' })
-        .setTimestamp();
+        .setFooter({ text: 'No hints. Good luck.' });
 
       await gameChannel.send({ embeds: [embed] });
 
@@ -90,23 +78,13 @@ module.exports = {
 
         await updateUserBalance(winnerId, reward);
 
-        const winBlock =
-          '╭──────────────────────────────╮\n' +
-          '│         Word Solved          │\n' +
-          '╰──────────────────────────────╯';
-
         const winEmbed = new EmbedBuilder()
-          .setTitle('˗ˏˋ 𐙚 🎉 Winner 𐙚 ˎˊ˗')
+          .setColor(0x000000)
+          .setTitle('WORD SOLVED')
           .setDescription(
-            [
-              winBlock,
-              '',
-              `${m.author} solved the word **${word.toUpperCase()}**.`,
-              `Reward: **${reward}** coins.`,
-            ].join('\n')
-          )
-          .setColor('#C1FFD7')
-          .setTimestamp();
+            `> ${m.author} solved the word **${word.toUpperCase()}**.\n` +
+            `> Reward: **${reward.toLocaleString()}** coins.`
+          );
 
         await gameChannel.send({ embeds: [winEmbed] });
 
@@ -115,22 +93,10 @@ module.exports = {
 
       collector.on('end', collected => {
         if (!collected.size && activeScramble) {
-          const timeoutBlock =
-            '╭──────────────────────────────╮\n' +
-            '│           Time Up            │\n' +
-            '╰──────────────────────────────╯';
-
           const loseEmbed = new EmbedBuilder()
-            .setTitle('˗ˏˋ 𐙚 ⏱️ No Winner 𐙚 ˎˊ˗')
-            .setDescription(
-              [
-                timeoutBlock,
-                '',
-                `No one solved the scramble. The word was **${word.toUpperCase()}**.`,
-              ].join('\n')
-            )
-            .setColor('#FFB3C6')
-            .setTimestamp();
+            .setColor(0x000000)
+            .setTitle('TIME UP')
+            .setDescription(`> No one solved the scramble. The word was **${word.toUpperCase()}**.`);
 
           gameChannel.send({ embeds: [loseEmbed] });
           activeScramble = null;
@@ -143,35 +109,23 @@ module.exports = {
     // CANCEL GAME
     if (sub === 'cancel') {
       if (!isAdmin(message)) {
-        return message.channel.send('❌ Only authorized users can cancel a scramble.');
+        return message.channel.send('Only authorized users can cancel a scramble.');
       }
       if (!activeScramble) {
-        return message.channel.send('❌ No active scramble to cancel.');
+        return message.channel.send('No active scramble to cancel.');
       }
 
       activeScramble = null;
       const gameChannel = client.channels.cache.get(GAME_CHANNEL_ID);
       if (gameChannel) {
-        const cancelBlock =
-          '╭──────────────────────────────╮\n' +
-          '│        Scramble Cancelled    │\n' +
-          '╰──────────────────────────────╯';
-
-        const cancelEmbed = new EmbedBuilder()
-          .setTitle('˗ˏˋ 𐙚 ❌ Game Cancelled 𐙚 ˎˊ˗')
-          .setDescription(
-            [
-              cancelBlock,
-              '',
-              'The current word scramble has been cancelled.',
-            ].join('\n')
-          )
-          .setColor('#FFB3C6')
-          .setTimestamp();
-
-        await gameChannel.send({ embeds: [cancelEmbed] });
+        await gameChannel.send({
+          embeds: [new EmbedBuilder()
+            .setColor(0x000000)
+            .setTitle('GAME CANCELLED')
+            .setDescription('> The current word scramble has been cancelled.')],
+        });
       }
-      return message.channel.send('✅ Scramble cancelled.');
+      return message.channel.send('Scramble cancelled.');
     }
 
     // HELP / DEFAULT

@@ -5,16 +5,20 @@ const { isAdmin } = require('../utils/permissions');
 const activeGamesMap = new Map();
 
 const hangmanStages = [
-  '``````',
-  '``````',
-  '``````',
-  '``````',
-  '``````',
-  '``````',
-  '``````'
+  '```\n\n\n\n\n\n=======```',
+  '```\n |\n |\n |\n |\n |\n=======```',
+  '```  ______\n |\n |\n |\n |\n |\n=======```',
+  '```  ______\n |    |\n |    O\n |\n |\n |\n=======```',
+  '```  ______\n |    |\n |    O\n |    |\n |\n |\n=======```',
+  '```  ______\n |    |\n |    O\n |   /|\\\n |\n |\n=======```',
+  '```  ______\n |    |\n |    O\n |   /|\\\n |   / \\\n |\n=======```',
 ];
 
 const GAME_CHANNEL_ID = '1401925188991582338'; // Your game channel ID
+
+function embed(title, desc, color = 0x000000) {
+  return new EmbedBuilder().setColor(color).setTitle(title).setDescription(desc);
+}
 
 module.exports = {
   name: 'hangman',
@@ -25,11 +29,11 @@ module.exports = {
     // START GAME
     if (sub === 'start') {
       if (!isAdmin(message)) {
-        return message.channel.send('❌ Only admins can start a hangman game.');
+        return message.channel.send('Only admins can start a hangman game.');
       }
 
       if (activeGamesMap.has(GAME_CHANNEL_ID)) {
-        return message.channel.send('❌ A hangman game is already active in the game channel!');
+        return message.channel.send('A hangman game is already active in the game channel.');
       }
 
       const word = args.slice(1).join(' ').toLowerCase();
@@ -38,7 +42,7 @@ module.exports = {
       }
 
       if (!/^[a-z\s]+$/.test(word)) {
-        return message.channel.send('❌ Word can only contain letters and spaces.');
+        return message.channel.send('Word can only contain letters and spaces.');
       }
 
       // delete admin command message
@@ -46,7 +50,7 @@ module.exports = {
 
       const gameChannel = client.channels.cache.get(GAME_CHANNEL_ID);
       if (!gameChannel) {
-        return message.channel.send('❌ Game channel not found! Please check GAME_CHANNEL_ID.');
+        return message.channel.send('Game channel not found — check GAME_CHANNEL_ID.');
       }
 
       activeGamesMap.set(GAME_CHANNEL_ID, {
@@ -59,42 +63,27 @@ module.exports = {
 
       const lettersCount = word.replace(/\s/g, '').length;
 
-      const topBlock =
-        '╭──────────────────────────────╮\n' +
-        '│  🎮 New celestial hangman game has begun! │\n' +
-        '╰──────────────────────────────╯';
-
-      const startEmbed = new EmbedBuilder()
-        .setTitle('˗ˏˋ 𐙚 🎮 𝔠𝔢𝔩𝔢𝔰𝔱𝔦𝔞𝔩 𝔥𝔞𝔫𝔤𝔪𝔞𝔫 𝔰𝔱𝔞𝔯𝔱𝔢𝔡 𐙚 ˎˊ˗')
-        .setDescription(
-          [
-            topBlock,
-            '',
-            '꒰ঌ An admin has summoned a secret word from the heavens ໒꒱',
-            '',
-            `${getWordDisplay(GAME_CHANNEL_ID)}`,
-            '',
-            `This word has **${lettersCount}** letter(s) (spaces not counted).`,
-            '',
-            'Type `.hangman guess <letter>` in this channel to start guessing!'
-          ].join('\n')
-        )
-        .addFields({ name: 'Wrong Guesses', value: '0/6', inline: true })
-        .setColor('#F5E6FF')
-        .setTimestamp();
-
-      await gameChannel.send({ embeds: [startEmbed] });
+      await gameChannel.send({
+        embeds: [embed(
+          'HANGMAN STARTED',
+          `${hangmanStages[0]}\n` +
+          `> An admin has hidden a secret word.\n\n` +
+          `${getWordDisplay(GAME_CHANNEL_ID)}\n\n` +
+          `> This word has **${lettersCount}** letter(s) (spaces not counted).\n\n` +
+          `-# Type \`.hangman guess <letter>\` in this channel to guess.`
+        ).addFields({ name: 'Wrong Guesses', value: '0/6', inline: true })],
+      });
       return;
     }
 
     // GUESS LETTER
     if (sub === 'guess') {
       if (message.channel.id !== GAME_CHANNEL_ID) {
-        return message.channel.send(`❌ Hangman guesses must be made in <#${GAME_CHANNEL_ID}>!`);
+        return message.channel.send(`Hangman guesses must be made in <#${GAME_CHANNEL_ID}>.`);
       }
 
       if (!activeGamesMap.has(GAME_CHANNEL_ID)) {
-        return message.channel.send('❌ No active hangman game.');
+        return message.channel.send('No active hangman game.');
       }
 
       const game = activeGamesMap.get(GAME_CHANNEL_ID);
@@ -105,7 +94,7 @@ module.exports = {
       }
 
       if (game.guessed.has(guess)) {
-        return message.channel.send(`❌ Letter **${guess.toUpperCase()}** already guessed!`);
+        return message.channel.send(`Letter **${guess.toUpperCase()}** already guessed.`);
       }
 
       game.guessed.add(guess);
@@ -114,147 +103,82 @@ module.exports = {
         const display = getWordDisplay(GAME_CHANNEL_ID);
 
         if (!display.includes('_')) {
-          const reward = 1000; // reward
+          const reward = 1000;
           userData.balance = (userData.balance || 0) + reward;
           await saveUserData({ balance: userData.balance });
 
           const lettersCount = game.word.replace(/\s/g, '').length;
 
-          const winBlock =
-            '╭──────────────────────────────╮\n' +
-            '│  🎉 WORD COMPLETED – YOU WIN │\n' +
-            '╰──────────────────────────────╯';
-
-          const winEmbed = new EmbedBuilder()
-            .setTitle('˗ˏˋ 𐙚 🎉 𝔤𝔞𝔪𝔢 𝔠𝔬𝔪𝔭𝔩𝔢𝔱𝔢! 𐙚 ˎˊ˗')
-            .setDescription(
-              [
-                winBlock,
-                '',
-                `${message.author} has unveiled the heavenly word!`,
-                '',
-                `**Word:** ${game.word.toUpperCase()} ( **${lettersCount}** letters )`,
-                '',
-                `꒰ঌ ${message.author} earned **${reward}** kan for their wisdom ໒꒱`,
-                '',
-                `💰 **New Balance:** ${userData.balance} kan`
-              ].join('\n')
-            )
-            .setColor('#C1FFD7')
-            .setTimestamp();
-
-          message.channel.send({ embeds: [winEmbed] });
+          message.channel.send({
+            embeds: [embed(
+              'WORD COMPLETED — YOU WIN',
+              `> ${message.author} revealed the word.\n\n` +
+              `> **${game.word.toUpperCase()}** (${lettersCount} letters)\n\n` +
+              `> +**${reward.toLocaleString()}** coins\n` +
+              `> New balance: **${userData.balance.toLocaleString()}** coins`
+            )],
+          });
           activeGamesMap.delete(GAME_CHANNEL_ID);
           return;
         }
 
         const lettersCount = game.word.replace(/\s/g, '').length;
 
-        const correctBlock =
-          '╭──────────────────────────────╮\n' +
-          `│  ✅ Letter **${guess.toUpperCase()}** is correct │\n` +
-          '╰──────────────────────────────╯';
-
-        const correctEmbed = new EmbedBuilder()
-          .setTitle('˗ˏˋ 𐙚 ✅ 𝔠𝔬𝔯𝔯𝔢𝔠𝔱 𝔩𝔢𝔱𝔱𝔢𝔯 𐙚 ˎˊ˗')
-          .setDescription(
-            [
-              correctBlock,
-              '',
-              `${display}`,
-              '',
-              `This word has **${lettersCount}** letter(s) (spaces not counted).`
-            ].join('\n')
-          )
-          .addFields(
+        return message.channel.send({
+          embeds: [embed(
+            'CORRECT LETTER',
+            `> **${guess.toUpperCase()}** is in the word.\n\n` +
+            `${display}\n\n` +
+            `> This word has **${lettersCount}** letter(s) (spaces not counted).`
+          ).addFields(
             { name: 'Wrong Guesses', value: `${game.wrongGuesses}/${game.maxWrongs}`, inline: true },
-            {
-              name: 'Guessed Letters',
-              value: Array.from(game.guessed).join(', ').toUpperCase() || 'None',
-              inline: true
-            }
-          )
-          .setColor('#C1FFD7')
-          .setTimestamp();
-
-        return message.channel.send({ embeds: [correctEmbed] });
+            { name: 'Guessed Letters', value: Array.from(game.guessed).join(', ').toUpperCase() || 'None', inline: true },
+          )],
+        });
       } else {
         game.wrongGuesses++;
 
         if (game.wrongGuesses >= game.maxWrongs) {
-          const loseBlock =
-            '╭──────────────────────────────╮\n' +
-            '│  💀 MAX STRIKES – GAME OVER │\n' +
-            '╰──────────────────────────────╯';
-
-          const loseEmbed = new EmbedBuilder()
-            .setTitle('˗ˏˋ 𐙚 💀 𝔤𝔞𝔪𝔢 𝔬𝔳𝔢𝔯 𐙚 ˎˊ˗')
-            .setDescription(
-              [
-                loseBlock,
-                '',
-                `${hangmanStages[game.wrongGuesses]}`,
-                '',
-                `**The word was:** ${game.word.toUpperCase()}`
-              ].join('\n')
-            )
-            .setColor('#FFB3C6')
-            .setTimestamp();
-
-          message.channel.send({ embeds: [loseEmbed] });
+          message.channel.send({
+            embeds: [embed(
+              'GAME OVER',
+              `${hangmanStages[game.wrongGuesses]}\n> The word was: **${game.word.toUpperCase()}**`
+            )],
+          });
           activeGamesMap.delete(GAME_CHANNEL_ID);
           return;
         }
 
         const lettersCount = game.word.replace(/\s/g, '').length;
 
-        const wrongBlock =
-          '╭──────────────────────────────╮\n' +
-          `│  ❌ Letter **${guess.toUpperCase()}** is wrong │\n` +
-          '╰──────────────────────────────╯';
-
-        const wrongEmbed = new EmbedBuilder()
-          .setTitle('˗ˏˋ 𐙚 ❌ 𝔴𝔯𝔬𝔫𝔤 𝔩𝔢𝔱𝔱𝔢𝔯 𐙚 ˎˊ˗')
-          .setDescription(
-            [
-              wrongBlock,
-              '',
-              `${hangmanStages[game.wrongGuesses]}`,
-              '',
-              `${getWordDisplay(GAME_CHANNEL_ID)}`,
-              '',
-              `This word has **${lettersCount}** letter(s) (spaces not counted).`
-            ].join('\n')
-          )
-          .addFields(
+        return message.channel.send({
+          embeds: [embed(
+            'WRONG LETTER',
+            `${hangmanStages[game.wrongGuesses]}\n` +
+            `${getWordDisplay(GAME_CHANNEL_ID)}\n\n` +
+            `> This word has **${lettersCount}** letter(s) (spaces not counted).`
+          ).addFields(
             { name: 'Wrong Guesses', value: `${game.wrongGuesses}/${game.maxWrongs}`, inline: true },
-            {
-              name: 'Guessed Letters',
-              value: Array.from(game.guessed).join(', ').toUpperCase() || 'None',
-              inline: true
-            }
-          )
-          .setColor('#FFB3C6')
-          .setTimestamp();
-
-        return message.channel.send({ embeds: [wrongEmbed] });
+            { name: 'Guessed Letters', value: Array.from(game.guessed).join(', ').toUpperCase() || 'None', inline: true },
+          )],
+        });
       }
     }
 
     // CANCEL GAME
     if (sub === 'cancel') {
       if (!isAdmin(message)) {
-        return message.channel.send('❌ Only admins can cancel.');
+        return message.channel.send('Only admins can cancel.');
       }
 
       if (!activeGamesMap.has(GAME_CHANNEL_ID)) {
-        return message.channel.send('❌ No active game.');
+        return message.channel.send('No active game.');
       }
 
       activeGamesMap.delete(GAME_CHANNEL_ID);
       const gameChannel = client.channels.cache.get(GAME_CHANNEL_ID);
-      if (gameChannel) gameChannel.send('✅ Hangman game cancelled by an admin.');
-      return message.channel.send('✅ Game cancelled.');
+      if (gameChannel) gameChannel.send('Hangman game cancelled by an admin.');
+      return message.channel.send('Game cancelled.');
     }
 
     // HELP
