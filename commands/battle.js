@@ -140,7 +140,12 @@ module.exports = {
         currentRound: 0,
         status: 'setup',
         challengerReady: false,
-        opponentReady: false
+        opponentReady: false,
+        // Every message the bot sends for this battle (setup + every attack)
+        // gets tracked here and deleted once the match ends, so a long fight
+        // doesn't leave a dozen messages flooding the channel — only the
+        // final BATTLE ENDED result stays, same pattern as ,duel.
+        messageLog: [],
       };
 
       activeBattles.set(message.channel.id, battleState);
@@ -159,7 +164,9 @@ module.exports = {
           `> \`.battle cancel\` — cancel battle`
         );
 
-      return message.channel.send({ embeds: [embed] });
+      const challengeMsg = await message.channel.send({ embeds: [embed] });
+      battleState.messageLog.push(challengeMsg);
+      return;
     }
 
     // Check if there's an active battle
@@ -269,7 +276,7 @@ module.exports = {
         battle.opponentReady = true;
       }
 
-      message.channel.send(`${message.author.username} is ready.`);
+      battle.messageLog.push(await message.channel.send(`${message.author.username} is ready.`));
 
       if (battle.challengerReady && battle.opponentReady) {
         battle.status = 'active';
@@ -287,7 +294,7 @@ module.exports = {
             `> Round 1 — ${challenger.username}'s turn begins.`
           );
 
-        await message.channel.send({ embeds: [startEmbed] });
+        battle.messageLog.push(await message.channel.send({ embeds: [startEmbed] }));
 
         const currentChar = battle.challengerTeam[0];
         const movesList = currentChar.moves.map((m, i) =>
@@ -299,7 +306,8 @@ module.exports = {
           .setTitle(`${currentChar.name} — HP: ${currentChar.currentHealth}/${currentChar.maxHealth}`)
           .setDescription(`__**Choose your move**__\n${movesList}\n\n-# Type \`.battle attack <move number>\` to attack.`);
 
-        return message.channel.send({ embeds: [moveEmbed] });
+        battle.messageLog.push(await message.channel.send({ embeds: [moveEmbed] }));
+        return;
       }
 
       return;
@@ -342,6 +350,7 @@ module.exports = {
       if (!defender) {
         const winner = await message.client.users.fetch(userId);
         const loser = await message.client.users.fetch(isChallenger ? battle.opponent : battle.challenger);
+        const log = battle.messageLog;
 
         activeBattles.delete(message.channel.id);
 
@@ -350,7 +359,9 @@ module.exports = {
           .setTitle('BATTLE ENDED')
           .setDescription(`> ${winner} triumphs over ${loser}.`);
 
-        return message.channel.send({ embeds: [winEmbed] });
+        const result = await message.channel.send({ embeds: [winEmbed] });
+        for (const old of log) { try { await old.delete(); } catch { /* best-effort cleanup */ } }
+        return result;
       }
 
       move.usesRemaining--;
@@ -382,14 +393,15 @@ module.exports = {
           );
       }
 
-      await message.channel.send({ embeds: [actionEmbed] });
+      battle.messageLog.push(await message.channel.send({ embeds: [actionEmbed] }));
 
       if (!isDodged && defender.currentHealth === 0) {
-        await message.channel.send(`**${defender.name}** has been defeated.`);
+        battle.messageLog.push(await message.channel.send(`**${defender.name}** has been defeated.`));
 
         if (defenderTeam.every(c => c.currentHealth === 0)) {
           const winner = await message.client.users.fetch(userId);
           const loser = await message.client.users.fetch(isChallenger ? battle.opponent : battle.challenger);
+          const log = battle.messageLog;
 
           activeBattles.delete(message.channel.id);
 
@@ -398,7 +410,9 @@ module.exports = {
             .setTitle('BATTLE ENDED')
             .setDescription(`> ${winner} wins the duel against ${loser}.`);
 
-          return message.channel.send({ embeds: [winEmbed] });
+          const result = await message.channel.send({ embeds: [winEmbed] });
+          for (const old of log) { try { await old.delete(); } catch { /* best-effort cleanup */ } }
+          return result;
         }
       }
 
@@ -422,7 +436,8 @@ module.exports = {
           `-# Type \`.battle attack <move number>\` to attack.`
         );
 
-      return message.channel.send({ embeds: [nextTurnEmbed] });
+      battle.messageLog.push(await message.channel.send({ embeds: [nextTurnEmbed] }));
+      return;
     }
 
     // CANCEL BATTLE
