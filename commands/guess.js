@@ -54,15 +54,13 @@ module.exports = {
       guessGameState.channelId = message.channel.id;
 
       const startEmbed = new EmbedBuilder()
-        .setColor('#F5E6FF')
-        .setTitle('˗ˏˋ 𐙚 🔮 𝔊𝔲𝔢𝔰𝔰𝔦𝔫𝔤 𝔊𝔞𝔪𝔢 𝔖𝔱𝔞𝔯𝔱𝔢𝔡 𐙚 ˎˊ˗')
+        .setColor(0x000000)
+        .setTitle('GUESSING GAME STARTED')
         .setDescription(
-          [
-            '꒰ঌ A number has been chosen between **1** and **500** ໒꒱',
-            '',
-            'Type your guesses in this channel and see who receives the prize.'
-          ].join('\n')
-        );
+          '> A number has been chosen between **1** and **500**.\n\n' +
+          '> Type your guesses in this channel — closest guess wins.'
+        )
+        .setFooter({ text: message.guild?.name || 'Shiro' });
 
       return message.channel.send({ embeds: [startEmbed] });
     }
@@ -81,9 +79,10 @@ module.exports = {
       guessGameState.channelId = null;
 
       const stopEmbed = new EmbedBuilder()
-        .setColor('#F5E6FF')
-        .setTitle('˗ˏˋ 𐙚 ⏹️ 𝔊𝔲𝔢𝔰𝔰𝔦𝔫𝔤 𝔊𝔞𝔪𝔢 𝔈𝔫𝔡𝔢𝔡 𐙚 ˎˊ˗')
-        .setDescription('꒰ঌ The number has been sealed away for now ໒꒱');
+        .setColor(0x000000)
+        .setTitle('GUESSING GAME ENDED')
+        .setDescription('> The number has been sealed away for now.')
+        .setFooter({ text: message.guild?.name || 'Shiro' });
 
       return message.channel.send({ embeds: [stopEmbed] });
     }

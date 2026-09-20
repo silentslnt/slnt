@@ -21,9 +21,10 @@ module.exports = {
       return message.channel.send({
         embeds: [
           new EmbedBuilder()
-            .setColor('Red')
-            .setTitle('❌ Invalid Bet Amount')
-            .setDescription('**Usage:** `.cipher <amount>`\n\n**Example:** `.cipher 500`'),
+            .setColor(0x000000)
+            .setTitle('INVALID BET AMOUNT')
+            .setDescription('> Usage: `.cipher <amount>`\n> Example: `.cipher 500`')
+            .setFooter({ text: message.guild?.name || 'Shiro' }),
         ],
       });
     }
@@ -33,9 +34,10 @@ module.exports = {
       return message.channel.send({
         embeds: [
           new EmbedBuilder()
-            .setColor('Orange')
-            .setTitle('⚠️ Challenge Already Active')
-            .setDescription('You already have an active cipher challenge! Finish it first or wait for the timer to expire.'),
+            .setColor(0x000000)
+            .setTitle('CHALLENGE ALREADY ACTIVE')
+            .setDescription('> You already have an active cipher challenge — finish it first or wait for the timer to expire.')
+            .setFooter({ text: message.guild?.name || 'Shiro' }),
         ],
       });
     }
@@ -47,21 +49,21 @@ module.exports = {
       return message.channel.send({
         embeds: [
           new EmbedBuilder()
-            .setColor('Red')
-            .setTitle('💰 Insufficient Balance')
+            .setColor(0x000000)
+            .setTitle('INSUFFICIENT BALANCE')
             .setDescription(
-              `You don't have enough coins to bet!\n\n` +
-              `**Your Balance:** ${dbUser.balance} coins\n` +
-              `**Bet Amount:** ${betAmount} coins\n` +
-              `**Needed:** ${betAmount - dbUser.balance} more coins`
-            ),
+              `> Your balance: **${dbUser.balance.toLocaleString()}** coins\n` +
+              `> Bet amount: **${betAmount.toLocaleString()}** coins\n` +
+              `> Needed: **${(betAmount - dbUser.balance).toLocaleString()}** more`
+            )
+            .setFooter({ text: message.guild?.name || 'Shiro' }),
         ],
       });
     }
 
     // Deduct bet
     dbUser.balance -= betAmount;
-    await saveUserData({ ...dbUser });
+    await saveUserData({ balance: dbUser.balance });
 
     // Possible secret messages (20)
     const messages = [
@@ -103,40 +105,28 @@ module.exports = {
 
     // Challenge embed
     const challengeEmbed = new EmbedBuilder()
-      .setColor('#FF6B35')
-      .setTitle('🔐 CIPHER CHALLENGE ACTIVATED!')
+      .setColor(0x000000)
+      .setTitle('CIPHER CHALLENGE')
       .setDescription(
-        `${message.author} has entered the **Cipher Arena**!\n\n` +
-        `💰 **Bet Amount:** ${betAmount} coins *(deducted)*\n` +
-        `⏰ **Time Limit:** 2 minutes\n` +
-        `⚡ **Speed Bonus:** Under 60s → 3x reward\n` +
-        `❌ **Fail:** Lose your bet if you run out of time or attempts\n\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `**The secret message has been encoded with three ciphers.**\n` +
-        `Type the **decoded message** directly in this channel (no command needed).`
+        `> ${message.author} entered the Cipher Arena.\n\n` +
+        `> Bet: **${betAmount.toLocaleString()}** coins *(deducted)*\n` +
+        `> Time limit: **2 minutes**\n` +
+        `> Speed bonus: under 60s → 3x reward\n` +
+        `> Fail: lose your bet if you run out of time\n\n` +
+        `__**The secret message has been encoded with three ciphers**__\n` +
+        `> Type the decoded message directly in this channel (no command needed).`
       )
       .addFields(
+        { name: 'Cipher #1 — Binary', value: `\`\`\`${ciphers.binary}\`\`\`` },
+        { name: 'Cipher #2 — Reverse', value: `\`\`\`${ciphers.reverse}\`\`\`` },
+        { name: 'Cipher #3 — Atbash', value: `\`\`\`${ciphers.atbash}\`\`\`` },
         {
-          name: '🔢 Cipher #1: Binary',
-          value: `\`\`\`${ciphers.binary}\`\`\``,
-        },
-        {
-          name: '🔄 Cipher #2: Reverse',
-          value: `\`\`\`${ciphers.reverse}\`\`\``,
-        },
-        {
-          name: '🔀 Cipher #3: Atbash',
-          value: `\`\`\`${ciphers.atbash}\`\`\``,
-        },
-        {
-          name: '💎 Reward Breakdown',
-          value:
-            `✅ **Clear < 2 min:** ${baseReward} coins (2x)\n` +
-            `⚡ **Clear < 60s:** ${speedReward} coins (3x)`,
+          name: 'Reward Breakdown',
+          value: `> Clear < 2 min: **${baseReward.toLocaleString()}** coins (2x)\n` +
+                 `> Clear < 60s: **${speedReward.toLocaleString()}** coins (3x)`,
         },
       )
-      .setFooter({ text: 'Hint: Work out all three ciphers to find the true message.' })
-      .setTimestamp();
+      .setFooter({ text: 'Work out all three ciphers to find the true message.' });
 
     await message.channel.send({ embeds: [challengeEmbed] });
 
@@ -165,16 +155,15 @@ module.exports = {
       const latestUser = await getUserData(userId);
 
       const failEmbed = new EmbedBuilder()
-        .setColor('Red')
-        .setTitle('⏰ TIME EXPIRED!')
+        .setColor(0x000000)
+        .setTitle('TIME EXPIRED')
         .setDescription(
-          `${message.author}, you ran out of time!\n\n` +
-          `**The correct answer was:** \`${upperSecret}\`\n\n` +
-          `💀 **Lost:** ${betAmount} coins\n` +
-          `💳 **Current Balance:** ${latestUser.balance} coins\n` +
-          `*The forge is unforgiving. Try again later.*`
+          `> ${message.author}, you ran out of time.\n\n` +
+          `> The correct answer was: \`${upperSecret}\`\n` +
+          `> Lost: **${betAmount.toLocaleString()}** coins\n` +
+          `> Balance: **${latestUser.balance.toLocaleString()}** coins`
         )
-        .setTimestamp();
+        .setFooter({ text: message.guild?.name || 'Shiro' });
 
       message.channel.send({ embeds: [failEmbed] });
     }, timeLimit);

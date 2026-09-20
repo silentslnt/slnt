@@ -7,7 +7,7 @@ module.exports = {
     const chars = userData.characters || [];
 
     if (chars.length === 0) {
-      return message.channel.send('❌ You don\'t have any characters yet! Use `.roll` to get one.');
+      return message.channel.send("You don't have any characters yet! Use `.roll` to get one.");
     }
 
     const uniqueChars = [];
@@ -30,23 +30,15 @@ module.exports = {
     let description = '';
     for (const tier of ['S+', 'S', 'A', 'B', 'C', 'D']) {
       if (grouped[tier]) {
-        description +=
-          `\n✧˚₊‧ **${tier} Tier** ‧₊˚✧\n` +
-          `${grouped[tier].join(', ')}\n`;
+        description += `\n__**${tier} Tier**__\n> ${grouped[tier].join(', ')}\n`;
       }
     }
 
     const embed = new EmbedBuilder()
-      .setTitle(`˗ˏˋ 𐙚 ${message.author.username}'𝕤 ℭ𝔥𝔞𝔯𝔞𝔠𝔱𝔢𝔯 ℭ𝔬𝔩𝔩𝔢𝔠𝔱𝔦𝔬𝔫 𐙚 ˎˊ˗`)
-      .setDescription(
-        description ||
-        '꒰ঌ No characters found in your celestial archive ໒꒱'
-      )
-      .setColor('#F5E6FF')
-      .setFooter({
-        text: `${uniqueChars.length} unique characters • ${chars.length} total pulls`
-      })
-      .setTimestamp();
+      .setTitle(`${message.author.username.toUpperCase()}'S CHARACTER COLLECTION`)
+      .setDescription(description || '> No characters found. Use `.roll` to get one.')
+      .setColor(0x000000)
+      .setFooter({ text: `${uniqueChars.length} unique characters · ${chars.length} total pulls` });
 
     return message.channel.send({ embeds: [embed] });
   }
