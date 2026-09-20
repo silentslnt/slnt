@@ -2,7 +2,7 @@ const { EmbedBuilder } = require('discord.js');
 
 // Map item names to emojis
 const itemEmojis = {
-  'silv token': '<:SILV_TOKEN:1447678878448484555>',
+  'silv token': '<:zzsilvtoken:1486364646796431427>',
   'common': '⚪',
   'uncommon': '🟢',
   'rare': '🔵',

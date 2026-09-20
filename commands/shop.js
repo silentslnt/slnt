@@ -10,7 +10,7 @@ const { awardPoints, grantItem } = require('../utils/sentinelDb');
 const { isAdmin } = require('../utils/permissions');
 
 const SILV_KEY  = 'Silv token';
-const SILV_ICON = '<:SILV_TOKEN:1447678878448484555>';
+const SILV_ICON = '<:zzsilvtoken:1486364646796431427>';
 const CHECK     = '<:check:1547659779877642360>';
 const XMARK     = '<:xmark:1547659816783061153>';
 const SPARKLE   = '<a:csparkle:1512498380142674010>';

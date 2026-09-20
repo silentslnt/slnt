@@ -3,7 +3,7 @@ const { EmbedBuilder } = require('discord.js');
 const { xpProgress, progressBar } = require('../utils/xp');
 const { getRank } = require('../utils/prestige');
 
-const SILV_ICON  = '<:SILV_TOKEN:1447678878448484555>';
+const SILV_ICON  = '<:zzsilvtoken:1486364646796431427>';
 const WHITESWIRL = '<a:cwhiteswirl:1512869492492079184>';
 const CSTAR      = '<a:cstar:1545032606603812954>';
 const BLACK      = 0x000000;
