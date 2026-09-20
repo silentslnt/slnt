@@ -5,7 +5,6 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
 
 const BLACK = 0x000000;
-const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
 const { getMultiplier } = require('../utils/essences');
 const { addXP } = require('../utils/xp');
@@ -92,12 +91,9 @@ function buildEmbed(session, status = '', guildName = 'Shiro') {
 module.exports = {
   name: 'mines',
   aliases: ['mine', 'mn'],
-  adminOnly: true,
   description: 'Mines game. `.mines <bet> [mine count 1-24]`',
 
   async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
-    if (!await requireAdmin(message)) return;
-
     const userId = message.author.id;
 
     // If player already has a session, remind them

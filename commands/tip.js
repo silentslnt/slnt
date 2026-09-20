@@ -1,6 +1,5 @@
 // commands/tip.js — Tip coins to another player
 const { EmbedBuilder } = require('discord.js');
-const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
 
 const BLACK = 0x000000;
@@ -8,12 +7,9 @@ const BLACK = 0x000000;
 module.exports = {
   name: 'tip',
   aliases: ['send'],
-  adminOnly: true,
   description: 'Send coins to another player. `.tip @user <amount>`',
 
   async execute({ message, args, userData, saveUserData, updateUserBalance, logAdminAction }) {
-    if (!await requireAdmin(message)) return;
-
     const target = message.mentions.users.first();
     // Support both ".tip @user 500" and ".tip 500 @user"
     const amountArg = args.find(a => !a.startsWith('<@'));

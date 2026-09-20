@@ -5,7 +5,6 @@ const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
 const CHECK = '<:check:1547659779877642360>';
 const XMARK = '<:xmark:1547659816783061153>';
 const BLACK = 0x000000;
-const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
 const { getMultiplier, getLuckBonus } = require('../utils/essences');
 const { addXP } = require('../utils/xp');
@@ -33,12 +32,9 @@ const PAYOUT = { red: 2, black: 2, number: 36, green: 18 };
 module.exports = {
   name: 'roulette',
   aliases: ['rl', 'spin'],
-  adminOnly: true,
   description: 'Bet on red, black, green, or a number. `.rl <bet> <red|black|green|0-36>`',
 
   async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
-    if (!await requireAdmin(message)) return;
-
     const betArg    = args[0];
     const choiceRaw = (args[1] || '').toLowerCase();
     const bet       = parseBet(betArg, userData.balance || 0);

@@ -7,7 +7,6 @@ const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
 const CHECK = '<:check:1547659779877642360>';
 const XMARK = '<:xmark:1547659816783061153>';
 const BLACK = 0x000000;
-const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
 const { getMultiplier } = require('../utils/essences');
 const { addXP } = require('../utils/xp');
@@ -69,12 +68,9 @@ const BUCKET_BARS = ['🟥','🟧','🟨','🟩','🟦','🟪','⬜','🔵','⬜
 module.exports = {
   name: 'plinko',
   aliases: ['pl'],
-  adminOnly: true,
   description: 'Drop a ball through Plinko pegs. `.plinko <bet> [low|medium|high]`',
 
   async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
-    if (!await requireAdmin(message)) return;
-
     const betArg  = args[0];
     const riskArg = (args[1] || 'medium').toLowerCase();
     const bet     = parseBet(betArg, userData.balance || 0);

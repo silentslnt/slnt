@@ -1,7 +1,6 @@
 // commands/invest.js
 const { EmbedBuilder } = require('discord.js');
 const { INVESTMENT_CAP, INVESTMENT_RETURN } = require('../utils/config');
-const { requireAdmin } = require('../utils/permissions');
 const { progressBar } = require('../utils/xp');
 const { trackStat } = require('../utils/achievements');
 
@@ -12,12 +11,9 @@ const LOCK_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 module.exports = {
   name: 'invest',
   aliases: ['vault', 'iv'],
-  adminOnly: true,
   description: 'Lock coins in the vault for 24h to earn 10% profit. `.invest <amount|all>`',
 
   async execute({ message, args, userData, saveUserData }) {
-    if (!await requireAdmin(message)) return;
-
     const sub = (args[0] || '').toLowerCase();
     const guildName = message.guild?.name || 'Shiro';
 

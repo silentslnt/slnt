@@ -1,5 +1,4 @@
 const { EmbedBuilder } = require('discord.js');
-const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
 const { announceWin } = require('../utils/winAnnouncer');
 
@@ -29,11 +28,8 @@ function getResult(player, bot) {
 
 module.exports = {
   name: 'rps',
-  adminOnly: true,
   description: 'Play rock paper scissors and double your bet if you win! `.rps <amount|all> <r|p|s>`',
   async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
-    if (!await requireAdmin(message)) return;
-
     if (typeof userData.balance !== 'number') userData.balance = 0;
     const bet = parseBet(args[0], userData.balance);
     const choiceMap = { r: 'rock', p: 'paper', s: 'scissors' };

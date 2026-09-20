@@ -3,7 +3,6 @@ const { EmbedBuilder } = require('discord.js');
 const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
 
 const BLACK = 0x000000;
-const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
 const { getMultiplier, getLuckBonus } = require('../utils/essences');
 const { addXP } = require('../utils/xp');
@@ -16,12 +15,9 @@ const SPIN_FRAMES = ['🪙', '✨', '💫', '⭐', '🪙'];
 module.exports = {
   name: 'coinflip',
   aliases: ['cf'],
-  adminOnly: true,
   description: 'Flip a coin. `.cf <amount|all|max> <h|t>`',
 
   async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
-    if (!await requireAdmin(message)) return;
-
     const betArg  = args[0];
     const sideArg = (args[1] || '').toLowerCase();
     const bet     = parseBet(betArg, userData.balance || 0);

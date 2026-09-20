@@ -1,6 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
 const { MAX_BET } = require('../utils/config');
-const { requireAdmin } = require('../utils/permissions');
 const { announceWin } = require('../utils/winAnnouncer');
 
 const BLACK = 0x000000;
@@ -32,11 +31,8 @@ function gridDisplay(grid, picks) {
 
 module.exports = {
   name: 'minesweeper',
-  adminOnly: true,
   description: 'Play a personalized minesweeper! Usage: .minesweeper start <size> <mines> <bet>',
   async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
-    if (!await requireAdmin(message)) return;
-
     const sub = (args[0] || '').toLowerCase();
     const userId = message.author.id;
 

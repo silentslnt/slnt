@@ -1,7 +1,6 @@
 // commands/duel.js
 const { EmbedBuilder } = require('discord.js');
 const { XP_PER_WIN, XP_PER_GAME } = require('../utils/config');
-const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
 const { addXP } = require('../utils/xp');
 const { trackStat, checkAchievements } = require('../utils/achievements');
@@ -12,12 +11,9 @@ const activeDuels = new Map();
 module.exports = {
   name: 'duel',
   aliases: ['dl'],
-  adminOnly: true,
   description: 'Challenge someone to a coin duel. `.duel @user <amount|all>`',
 
   async execute({ message, args, userData, saveUserData, getUserData, saveSpecificUserData, logAdminAction }) {
-    if (!await requireAdmin(message)) return;
-
     const challenger = message.author;
     const opponent   = message.mentions.users.first();
     const bet        = parseBet(args[1], userData.balance || 0);

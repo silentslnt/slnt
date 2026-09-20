@@ -1,5 +1,4 @@
 const { EmbedBuilder } = require('discord.js');
-const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
 const { announceWin } = require('../utils/winAnnouncer');
 
@@ -8,11 +7,8 @@ const BLACK = 0x000000;
 module.exports = {
   name: 'hl',
   aliases: ['highlow'],
-  adminOnly: true,
   description: 'Play Higher or Lower: guess if the next number will be higher or lower! `.hl <amount|all>`',
   async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
-    if (!await requireAdmin(message)) return;
-
     if (typeof userData.balance !== 'number') userData.balance = 0;
     const bet = parseBet(args[0], userData.balance);
 

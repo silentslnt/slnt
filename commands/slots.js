@@ -4,7 +4,6 @@ const mongoose = require('mongoose');
 const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
 
 const BLACK = 0x000000;
-const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
 const { getMultiplier, getLuckBonus } = require('../utils/essences');
 const { addXP } = require('../utils/xp');
@@ -64,12 +63,9 @@ const SPIN_FRAMES = [
 module.exports = {
   name: 'slots',
   aliases: ['sl', 's'],
-  adminOnly: true,
   description: 'Spin the slots. `.sl <amount|all|max>`',
 
   async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
-    if (!await requireAdmin(message)) return;
-
     const bet = parseBet(args[0], userData.balance || 0);
     if (!bet) {
       return message.channel.send({

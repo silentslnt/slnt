@@ -1,7 +1,6 @@
 // commands/gift.js
 const { EmbedBuilder } = require('discord.js');
 const { GIFT_DAILY_CAP } = require('../utils/config');
-const { requireAdmin } = require('../utils/permissions');
 
 const PRESENT = '<:cpresent:1512497697381154826>';
 const BLACK   = 0x000000;
@@ -10,12 +9,9 @@ const DAY_MS  = 24 * 60 * 60 * 1000;
 module.exports = {
   name: 'gift',
   aliases: ['give', 'gft'],
-  adminOnly: true,
   description: 'Gift coins to another user. `.gift @user <amount>` (daily cap: 10,000)',
 
   async execute({ message, args, userData, saveUserData, getUserData, saveSpecificUserData, logAdminAction }) {
-    if (!await requireAdmin(message)) return;
-
     const target = message.mentions.users.first();
     const amount = parseInt(args[1] || args[0] || '', 10);
 
