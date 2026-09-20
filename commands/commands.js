@@ -1,7 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { isAdmin } = require('../utils/permissions');
 
-// Global bot state (in-memory, resets on restart)
+// Global bot state (in-memory, resets on restart — fails open to enabled)
 let commandsEnabled = true;
 
 function canToggleCommands(member) {
@@ -17,6 +17,14 @@ function setCommandsEnabled(state) {
   commandsEnabled = state;
 }
 
+function embed(title, desc, guild) {
+  return new EmbedBuilder()
+    .setColor(0x000000)
+    .setTitle(title)
+    .setDescription(desc)
+    .setFooter({ text: guild?.name || 'Shiro' });
+}
+
 module.exports = {
   name: 'commands',
   description: 'Toggle bot commands on/off (admin only)',
@@ -25,19 +33,7 @@ module.exports = {
 
     if (!canToggleCommands(member)) {
       return message.channel.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor('#F5E6FF')
-            .setTitle('˗ˏˋ 𐙚 𝔸𝕔𝕔𝕖𝕤𝕤 𝔻𝕖𝕟𝕚𝕖𝕕 𐙚 ˎˊ˗')
-            .setDescription(
-              [
-                '꒰ঌ 𝔒𝔫𝔩𝔶 𝔞𝔡𝔪𝔦𝔫𝔰 𝔠𝔞𝔫 𝔱𝔬𝔤𝔤𝔩𝔢 𝔠𝔬𝔪𝔪𝔞𝔫𝔡𝔰 ໒꒱',
-                '',
-                'You need the admin role or be whitelisted.',
-              ].join('\n')
-            )
-            .setFooter({ text: 'System • Permission Check' }),
-        ],
+        embeds: [embed('ACCESS DENIED', '> Only admins can toggle commands.', message.guild)],
       });
     }
 
@@ -45,115 +41,50 @@ module.exports = {
 
     if (!action || !['on', 'off', 'status'].includes(action)) {
       return message.channel.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor('#F5E6FF')
-            .setTitle('✧˚₊‧ 𝕀𝕟𝕧𝕒𝕝𝕚𝕕 𝕌𝕤𝕒𝕘𝕖 ‧₊˚✧')
-            .setDescription(
-              [
-                'Usage: `.commands <on|off|status>`',
-                '',
-                'Examples:',
-                '• `.commands off` - Disable all commands',
-                '• `.commands on` - Enable all commands',
-                '• `.commands status` - Check current status',
-                '',
-                `**Current status:** ${commandsEnabled ? '✅ Enabled' : '❌ Disabled'}`,
-              ].join('\n')
-            )
-            .setFooter({ text: 'System • Usage Hint' }),
-        ],
+        embeds: [embed(
+          'COMMANDS — USAGE',
+          `> Usage: \`.commands <on|off|status>\`\n\n` +
+          `> \`.commands off\` — disable all commands\n` +
+          `> \`.commands on\` — enable all commands\n` +
+          `> \`.commands status\` — check current status\n\n` +
+          `-# Current status: ${commandsEnabled ? 'Enabled' : 'Disabled'}`,
+          message.guild,
+        )],
       });
     }
 
     if (action === 'status') {
       return message.channel.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor('#F5E6FF')
-            .setTitle('✧˚₊‧ 🤖 ℂ𝕠𝕞𝕞𝕒𝕟𝕕 𝕊𝕪𝕤𝕥𝕖𝕞 𝕊𝕥𝕒𝕥𝕦𝕤 ‧₊˚✧')
-            .setDescription(
-              [
-                `**Commands are currently:** ${commandsEnabled ? '✅ **ENABLED**' : '❌ **DISABLED**'}`,
-                '',
-                commandsEnabled
-                  ? 'All users can use bot commands.'
-                  : 'Only admins can use bot commands.',
-              ].join('\n')
-            )
-            .setFooter({ text: 'System • Status Check' })
-            .setTimestamp(),
-        ],
+        embeds: [embed(
+          'COMMAND SYSTEM STATUS',
+          `> Commands are currently **${commandsEnabled ? 'ENABLED' : 'DISABLED'}**.\n\n` +
+          `-# ${commandsEnabled ? 'All users can use bot commands.' : 'Only admins can use bot commands.'}`,
+          message.guild,
+        )],
       });
     }
 
     if (action === 'off') {
       if (!commandsEnabled) {
-        return message.channel.send({
-          embeds: [
-            new EmbedBuilder()
-              .setColor('#F5E6FF')
-              .setTitle('✧˚₊‧ ⚠️ 𝔸𝕝𝕣𝕖𝕒𝕕𝕪 𝔻𝕚𝕤𝕒𝕓𝕝𝕖𝕕 ‧₊˚✧')
-              .setDescription('Commands are already disabled.')
-              .setFooter({ text: 'System • Status Check' }),
-          ],
-        });
+        return message.channel.send({ embeds: [embed('ALREADY DISABLED', '> Commands are already disabled.', message.guild)] });
       }
-
       commandsEnabled = false;
-
       return message.channel.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor('#F5E6FF')
-            .setTitle('✧˚₊‧ 🔒 ℂ𝕠𝕞𝕞𝕒𝕟𝕕𝕤 𝔻𝕚𝕤𝕒𝕓𝕝𝕖𝕕 ‧₊˚✧')
-            .setDescription(
-              [
-                '꒰ঌ 𝔱𝔥𝔢 𝔟𝔬𝔱 𝔥𝔞𝔰 𝔟𝔢𝔢𝔫 𝔰𝔦𝔩𝔢𝔫𝔠𝔢𝔡 ໒꒱',
-                '',
-                'All bot commands are now **disabled**.',
-                'Only admins can still use commands.',
-                '',
-                '**Silent mode:** Bot will not respond to non-admins.',
-              ].join('\n')
-            )
-            .setFooter({ text: 'System • Commands Disabled' })
-            .setTimestamp(),
-        ],
+        embeds: [embed(
+          'COMMANDS DISABLED',
+          '> All bot commands are now **disabled**. Only admins can still use commands.',
+          message.guild,
+        )],
       });
     }
 
     if (action === 'on') {
       if (commandsEnabled) {
-        return message.channel.send({
-          embeds: [
-            new EmbedBuilder()
-              .setColor('#F5E6FF')
-              .setTitle('✧˚₊‧ ⚠️ 𝔸𝕝𝕣𝕖𝕒𝕕𝕪 𝔼𝕟𝕒𝕓𝕝𝕖𝕕 ‧₊˚✧')
-              .setDescription('Commands are already enabled.')
-              .setFooter({ text: 'System • Status Check' }),
-          ],
-        });
+        return message.channel.send({ embeds: [embed('ALREADY ENABLED', '> Commands are already enabled.', message.guild)] });
       }
-
       commandsEnabled = true;
-
       return message.channel.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor('#F5E6FF')
-            .setTitle('✧˚₊‧ ✅ ℂ𝕠𝕞𝕞𝕒𝕟𝕕𝕤 𝔼𝕟𝕒𝕓𝕝𝕖𝕕 ‧₊˚✧')
-            .setDescription(
-              [
-                '꒰ঌ 𝔱𝔥𝔢 𝔟𝔬𝔱 𝔥𝔞𝔰 𝔞𝔴𝔞𝔨𝔢𝔫𝔢𝔡 ໒꒱',
-                '',
-                'All bot commands are now **enabled**.',
-                'Everyone can use commands again.',
-              ].join('\n')
-            )
-            .setFooter({ text: 'System • Commands Enabled' })
-            .setTimestamp(),
-        ],
+        embeds: [embed('COMMANDS ENABLED', '> All bot commands are now **enabled**. Everyone can use commands again.', message.guild)],
       });
     }
   },
