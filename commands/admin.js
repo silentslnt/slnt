@@ -41,14 +41,33 @@ module.exports = {
 
     // ===== LOGS CHANNEL SETUP =====
     if (subcommand === 'logs') {
-      const channel = message.mentions.channels.first();
+      let channel = message.mentions.channels.first();
+
+      // `.admin logs auto` — find-or-create a #economy-logs channel, same
+      // convenience Sentinel's logging auto-setup gives for its own routes.
+      if (!channel && args[1]?.toLowerCase() === 'auto') {
+        if (!message.guild) return message.channel.send('Must be used in a server.');
+        channel = message.guild.channels.cache.find(c => c.name === 'economy-logs' && c.isTextBased?.());
+        if (!channel) {
+          try {
+            channel = await message.guild.channels.create({
+              name: 'economy-logs',
+              topic: 'Auto-posted gift/duel/tip/lottery/shop/admin/trade activity — set by .admin logs',
+            });
+          } catch (e) {
+            return message.channel.send('Missing permission to create channels. Mention an existing channel instead: `.admin logs #channel`');
+          }
+        }
+      }
+
       if (!channel) {
         const current = getEconomyLogsChannel();
         return message.channel.send(
-          `Usage: \`.admin logs <#channel>\`\n` +
+          `Usage: \`.admin logs <#channel>\` or \`.admin logs auto\` to create one\n` +
           `Currently ${current ? `posting to <#${current}>` : 'not set — economy actions are only viewable via `.adminlogs`'}.`
         );
       }
+
       await setEconomyLogsChannel(channel.id);
       await logAdminAction(message.author.id, message.author.username, 'admin', 'Set Logs Channel', null, null, `#${channel.name}`);
       return message.channel.send(`Economy/moderation logs will now auto-post to ${channel}.`);
