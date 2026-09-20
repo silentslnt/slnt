@@ -154,8 +154,9 @@ Keydrop: 2.5% chance per message in keydrop channel. Toggleable with .tkd.
 - `> text` blockquotes for body content
 - `-# text` for small footnotes
 - Real custom server emojis in the body — never generic/random ones
-- Reskinned: shop.js, help.js, bal.js, daily.js, achievements.js, leaderboard.js, missions.js, invest.js, profile.js, duel.js, gift.js, blackjack.js, slots.js, coinflip.js, roulette.js, dice.js, rps.js, hl.js, minesweeper.js, mines.js, plinko.js, trade.js, tip.js, lottery.js, adminlogs.js
-- **Not yet reskinned** (still old lavender/Fraktur style — `utils/permissions.js`'s deny embed, `utils/achievements.js`'s achievement-unlock embed, and any command not in the list above): `open.js`, `claim.js`, `mysterybox.js`, `characterroll.js`, `battle.js`, `characters.js`, `charinfo.js`, `cipher.js`, `hangman.js`, `ws.js`, `guess.js`, `keydrop.js`, `prefix.js`, `inventory.js`, `setchannel.js`, `togkey.js`, `testrole.js`, `commands.js` — reskin these next, keeping the "no ugly random emojis" rule.
+- **Reskin complete** as of 2026-09-20 — every command file uses this style: shop.js, help.js, bal.js, daily.js, achievements.js, leaderboard.js, missions.js, invest.js, profile.js, duel.js, gift.js, blackjack.js, slots.js, coinflip.js, roulette.js, dice.js, rps.js, hl.js, minesweeper.js, mines.js, plinko.js, trade.js, tip.js, lottery.js, adminlogs.js, inventory.js, open.js, claim.js, mysterybox.js, prefix.js, togkey.js, cipher.js, characters.js, guess.js, testrole.js, commands.js, hangman.js, ws.js, keydrop.js, characterroll.js, battle.js.
+- **Still old style** (shared utilities, not per-command files): `utils/permissions.js`'s deny embed, `utils/achievements.js`'s achievement-unlock embed. Reskin these if touched next.
+- hangman.js's ASCII gallows art was literally empty placeholder backticks (7 identical blank blocks) before this pass — added real progressive stage art.
 - Old style for reference (now legacy, don't use for new work): Win #C1FFD7 / Loss #FFB3C6 / Warning #FFD580 / Prestige #FFD700, title format `˗ˏˋ 𐙚 TITLE 𐙚 ˎˊ˗`, flavor text `꒰ঌ text here ໒꒱`
 
 ---
