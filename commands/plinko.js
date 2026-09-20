@@ -72,7 +72,7 @@ module.exports = {
   adminOnly: true,
   description: 'Drop a ball through Plinko pegs. `.plinko <bet> [low|medium|high]`',
 
-  async execute({ message, args, userData, saveUserData, client }) {
+  async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
     if (!await requireAdmin(message)) return;
 
     const betArg  = args[0];
@@ -157,6 +157,7 @@ module.exports = {
         payout,
         multiplier: finalMulti,
         detail: `${riskArg} risk · bucket ${bucket + 1}/17`,
+        logAdminAction,
       }).catch(() => {});
     }
   },

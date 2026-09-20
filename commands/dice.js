@@ -2,6 +2,7 @@ const { EmbedBuilder } = require('discord.js');
 const { awardPoints } = require('../utils/sentinelDb');
 const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
+const { announceWin } = require('../utils/winAnnouncer');
 
 const BLACK = 0x000000;
 
@@ -10,7 +11,7 @@ module.exports = {
   aliases: ['d'],
   adminOnly: true,
   description: 'Roll a die and win rewards based on your roll! `.dice <amount|all>`',
-  async execute({ message, args, userData, saveUserData }) {
+  async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
     if (!await requireAdmin(message)) return;
 
     if (typeof userData.balance !== 'number') userData.balance = 0;
@@ -61,5 +62,14 @@ module.exports = {
       .setFooter({ text: message.guild?.name || 'Shiro' });
 
     message.channel.send({ embeds: [embed] });
+
+    if (reward > 0 && client) {
+      announceWin(client, {
+        userId: message.author.id, username: message.author.username,
+        avatarURL: message.author.displayAvatarURL({ dynamic: true }),
+        game: 'dice', bet, payout: reward, multiplier: bet > 0 ? reward / bet : 0,
+        logAdminAction,
+      }).catch(() => {});
+    }
   }
 };

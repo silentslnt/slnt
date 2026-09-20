@@ -95,7 +95,7 @@ module.exports = {
   adminOnly: true,
   description: 'Mines game. `.mines <bet> [mine count 1-24]`',
 
-  async execute({ message, args, userData, saveUserData, client }) {
+  async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
     if (!await requireAdmin(message)) return;
 
     const userId = message.author.id;
@@ -195,6 +195,7 @@ module.exports = {
             payout: finalPay,
             multiplier: multi,
             detail: `${session.revealed.size - mines} tiles revealed, ${mines} mines survived`,
+            logAdminAction,
           }).catch(() => {});
         }
 

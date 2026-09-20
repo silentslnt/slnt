@@ -1,6 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { MAX_BET } = require('../utils/config');
 const { requireAdmin } = require('../utils/permissions');
+const { announceWin } = require('../utils/winAnnouncer');
 
 const BLACK = 0x000000;
 
@@ -33,7 +34,7 @@ module.exports = {
   name: 'minesweeper',
   adminOnly: true,
   description: 'Play a personalized minesweeper! Usage: .minesweeper start <size> <mines> <bet>',
-  async execute({ message, args, userData, saveUserData }) {
+  async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
     if (!await requireAdmin(message)) return;
 
     const sub = (args[0] || '').toLowerCase();
@@ -138,6 +139,16 @@ module.exports = {
           .setFooter({ text: message.guild?.name || 'Shiro' });
         message.channel.send({ embeds: [embed] });
         userGames.delete(userId);
+
+        if (client) {
+          announceWin(client, {
+            userId, username: message.author.username,
+            avatarURL: message.author.displayAvatarURL({ dynamic: true }),
+            game: 'minesweeper', bet: game.bet, payout, multiplier: 5,
+            detail: `all ${safeTiles} safe tiles cleared`,
+            logAdminAction,
+          }).catch(() => {});
+        }
         return;
       }
 

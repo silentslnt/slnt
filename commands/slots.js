@@ -10,6 +10,7 @@ const { getMultiplier, getLuckBonus } = require('../utils/essences');
 const { addXP } = require('../utils/xp');
 const { trackStat, checkAchievements } = require('../utils/achievements');
 const { awardPoints } = require('../utils/sentinelDb');
+const { announceWin } = require('../utils/winAnnouncer');
 
 // ── Jackpot state (persisted per guild in MongoDB meta collection) ────────────
 const metaSchema = new mongoose.Schema({ key: { type: String, unique: true }, value: mongoose.Schema.Types.Mixed });
@@ -66,7 +67,7 @@ module.exports = {
   adminOnly: true,
   description: 'Spin the slots. `.sl <amount|all|max>`',
 
-  async execute({ message, args, userData, saveUserData }) {
+  async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
     if (!await requireAdmin(message)) return;
 
     const bet = parseBet(args[0], userData.balance || 0);
@@ -189,5 +190,15 @@ module.exports = {
       });
 
     await spinMsg.edit({ embeds: [embed] });
+
+    if (payout > 0 && client) {
+      announceWin(client, {
+        userId: message.author.id, username: message.author.username,
+        avatarURL: message.author.displayAvatarURL({ dynamic: true }),
+        game: 'slots', bet, payout, multiplier: bet > 0 ? payout / bet : 0,
+        detail: isJackpot ? 'JACKPOT' : undefined,
+        logAdminAction,
+      }).catch(() => {});
+    }
   },
 };

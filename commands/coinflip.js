@@ -9,6 +9,7 @@ const { getMultiplier, getLuckBonus } = require('../utils/essences');
 const { addXP } = require('../utils/xp');
 const { trackStat, checkAchievements } = require('../utils/achievements');
 const { awardPoints } = require('../utils/sentinelDb');
+const { announceWin } = require('../utils/winAnnouncer');
 
 const SPIN_FRAMES = ['🪙', '✨', '💫', '⭐', '🪙'];
 
@@ -18,7 +19,7 @@ module.exports = {
   adminOnly: true,
   description: 'Flip a coin. `.cf <amount|all|max> <h|t>`',
 
-  async execute({ message, args, userData, saveUserData }) {
+  async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
     if (!await requireAdmin(message)) return;
 
     const betArg  = args[0];
@@ -140,5 +141,15 @@ module.exports = {
       });
 
     await spinMsg.edit({ embeds: [embed] });
+
+    if (won && client) {
+      announceWin(client, {
+        userId: message.author.id, username: message.author.username,
+        avatarURL: message.author.displayAvatarURL({ dynamic: true }),
+        game: 'coinflip', bet, payout, multiplier: bet > 0 ? payout / bet : 0,
+        detail: cfStreak > 0 && cfStreak % 5 === 0 ? `${cfStreak}-flip streak bonus` : undefined,
+        logAdminAction,
+      }).catch(() => {});
+    }
   },
 };

@@ -36,7 +36,7 @@ module.exports = {
   adminOnly: true,
   description: 'Bet on red, black, green, or a number. `.rl <bet> <red|black|green|0-36>`',
 
-  async execute({ message, args, userData, saveUserData, client }) {
+  async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
     if (!await requireAdmin(message)) return;
 
     const betArg    = args[0];
@@ -144,6 +144,7 @@ module.exports = {
         payout,
         multiplier: finalMulti,
         detail: `bet ${betLabel}, landed ${result.num} ${COLOR_LABEL[result.color]}`,
+        logAdminAction,
       }).catch(() => {});
     }
   },

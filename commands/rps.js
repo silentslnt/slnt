@@ -1,6 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
+const { announceWin } = require('../utils/winAnnouncer');
 
 const BLACK = 0x000000;
 
@@ -30,7 +31,7 @@ module.exports = {
   name: 'rps',
   adminOnly: true,
   description: 'Play rock paper scissors and double your bet if you win! `.rps <amount|all> <r|p|s>`',
-  async execute({ message, args, userData, saveUserData }) {
+  async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
     if (!await requireAdmin(message)) return;
 
     if (typeof userData.balance !== 'number') userData.balance = 0;
@@ -50,14 +51,16 @@ module.exports = {
 
     const botChoice = getBotChoice();
     const outcome = getResult(playerChoice, botChoice);
+    const won = outcome === 'win';
+    const payout = won ? bet * 2 : (outcome === 'draw' ? bet : 0);
 
     let resultLine = `> You: ${choices[playerChoice]} **${playerChoice}**  ·  Bot: ${choices[botChoice]} **${botChoice}**\n\n`;
 
-    if (outcome === 'win') {
-      userData.balance += bet * 2;
-      resultLine += `> **Victory!** Reward: **${(bet * 2).toLocaleString()}**`;
+    if (won) {
+      userData.balance += payout;
+      resultLine += `> **Victory!** Reward: **${payout.toLocaleString()}**`;
     } else if (outcome === 'draw') {
-      userData.balance += bet;
+      userData.balance += payout;
       resultLine += `> **Draw.** Bet refunded.`;
     } else {
       resultLine += `> **You lose.**`;
@@ -72,5 +75,14 @@ module.exports = {
     await saveUserData({ balance: userData.balance });
 
     message.channel.send({ embeds: [embed] });
+
+    if (won && client) {
+      announceWin(client, {
+        userId: message.author.id, username: message.author.username,
+        avatarURL: message.author.displayAvatarURL({ dynamic: true }),
+        game: 'rps', bet, payout, multiplier: bet > 0 ? payout / bet : 0,
+        logAdminAction,
+      }).catch(() => {});
+    }
   },
 };

@@ -1,6 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { requireAdmin } = require('../utils/permissions');
 const { parseBet } = require('../utils/parseBet');
+const { announceWin } = require('../utils/winAnnouncer');
 
 const BLACK = 0x000000;
 
@@ -9,7 +10,7 @@ module.exports = {
   aliases: ['highlow'],
   adminOnly: true,
   description: 'Play Higher or Lower: guess if the next number will be higher or lower! `.hl <amount|all>`',
-  async execute({ message, args, userData, saveUserData }) {
+  async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
     if (!await requireAdmin(message)) return;
 
     if (typeof userData.balance !== 'number') userData.balance = 0;
@@ -74,6 +75,16 @@ module.exports = {
         .setFooter({ text: message.guild?.name || 'Shiro' });
 
       await message.channel.send({ embeds: [endEmbed] });
+
+      if (won && client) {
+        announceWin(client, {
+          userId: message.author.id, username: message.author.username,
+          avatarURL: message.author.displayAvatarURL({ dynamic: true }),
+          game: 'highlow', bet, payout, multiplier: bet > 0 ? payout / bet : 0,
+          detail: `${streakCount}-round streak`,
+          logAdminAction,
+        }).catch(() => {});
+      }
     }
 
     collector.on('collect', async (reaction, user) => {

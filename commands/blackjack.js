@@ -9,6 +9,7 @@ const { getMultiplier, getLuckBonus, getActiveEssenceSummary } = require('../uti
 const { addXP } = require('../utils/xp');
 const { trackStat, checkAchievements } = require('../utils/achievements');
 const { awardPoints } = require('../utils/sentinelDb');
+const { announceWin } = require('../utils/winAnnouncer');
 
 const activeGames = new Set();
 
@@ -34,7 +35,7 @@ module.exports = {
   adminOnly: true,
   description: 'Play blackjack. `.bj <amount|all>`',
 
-  async execute({ message, args, userData, saveUserData }) {
+  async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
     if (!await requireAdmin(message)) return;
 
     const bet = parseBet(args[0], userData.balance || 0);
@@ -180,6 +181,17 @@ module.exports = {
         .setFooter({ text: frenzyMult > 1 ? `${frenzyMult}× Frenzy Essence active` : (message.guild?.name || 'Shiro') });
 
       await message.channel.send({ embeds: [finalEmbed] });
+
+      if (won && client) {
+        announceWin(client, {
+          userId, username: message.author.username,
+          avatarURL: message.author.displayAvatarURL({ dynamic: true }),
+          game: 'blackjack', bet, payout, multiplier: bet > 0 ? payout / bet : 0,
+          detail: naturalBJ ? 'Natural Blackjack' : undefined,
+          logAdminAction,
+        }).catch(() => {});
+      }
+
       await finalize(won, payout);
     }
 
