@@ -20,11 +20,9 @@ module.exports = {
     // If claimKey returned false, either there is no key or it was already claimed
     if (!success) {
       const replyEmbed = new EmbedBuilder()
-        .setColor('#F5E6FF')
-        .setTitle('✧˚₊‧ ❌ 𝔠𝔞𝔫’𝔱 𝔠𝔩𝔞𝔦𝔪 𝔞 𝔨𝔢𝔶 ‧₊˚✧')
-        .setDescription(
-          '꒰ঌ There is no claimable key right now, or it has already been claimed ໒꒱'
-        );
+        .setColor(0x000000)
+        .setTitle('CAN\'T CLAIM')
+        .setDescription('> There is no claimable key right now, or it has already been claimed.');
 
       const replyMsg = await message.reply({ embeds: [replyEmbed] });
 
@@ -38,11 +36,9 @@ module.exports = {
 
     // Optional personal success message (public announce is done in keydrop.js)
     const successEmbed = new EmbedBuilder()
-      .setColor('#C1FFD7')
-      .setTitle('˗ˏˋ 𐙚 🔑 𝔎𝔢𝔶 𝔠𝔩𝔞𝔦𝔪𝔢𝔡 𐙚 ˎˊ˗')
-      .setDescription(
-        '꒰ঌ You successfully claimed the key! It has been gently placed into your inventory ໒꒱'
-      );
+      .setColor(0x000000)
+      .setTitle('KEY CLAIMED')
+      .setDescription('> Added to your inventory.');
 
     const successMsg = await message.reply({ embeds: [successEmbed] });
 

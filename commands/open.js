@@ -76,35 +76,21 @@ module.exports = {
       });
 
       const embed = new EmbedBuilder()
-        .setColor('#F5E6FF')
-        .setTitle('˗ˏˋ 𐙚 🔑 𝔎𝔢𝔶𝔰 𝔬𝔭𝔢𝔫𝔢𝔡! 𐙚 ˎˊ˗')
+        .setColor(0x000000)
+        .setTitle('KEYS OPENED')
         .setDescription(
-          [
-            `${message.author} opened **${amount} ${rarityKey}** key${amount > 1 ? 's' : ''}.`,
-            '',
-            `꒰ঌ The heavens grant you **${totalReward}** coins ໒꒱`
-          ].join('\n')
+          `> Opened **${amount} ${rarityKey}** key${amount > 1 ? 's' : ''}.\n` +
+          `> Reward: **${totalReward.toLocaleString()}** coins\n\n` +
+          `> Keys remaining: **${userData.inventory[rarityKey] || 0}**\n` +
+          `> New balance: **${userData.balance.toLocaleString()}** coins`
         )
-        .addFields(
-          {
-            name: '🔑 Keys Remaining',
-            value: `**${userData.inventory[rarityKey] || 0}**`,
-            inline: true
-          },
-          {
-            name: '💰 New Balance',
-            value: `**${userData.balance}** coins`,
-            inline: true
-          }
-        )
-        .setTimestamp()
-        .setFooter({ text: 'System • Key Vault' });
+        .setFooter({ text: message.guild?.name || 'Shiro' });
 
       await message.channel.send({ embeds: [embed] });
 
     } catch (error) {
       console.error('Error in open command:', error);
-      message.channel.send('❌ Something went wrong while opening your key(s).');
+      message.channel.send('Something went wrong while opening your key(s).');
     }
   }
 };

@@ -1,6 +1,14 @@
 const { EmbedBuilder } = require('discord.js');
 const { isAdmin } = require('../utils/permissions');
 
+function embed(title, desc, guild) {
+  return new EmbedBuilder()
+    .setColor(0x000000)
+    .setTitle(title)
+    .setDescription(desc)
+    .setFooter({ text: guild?.name || 'Shiro' });
+}
+
 module.exports = {
   name: 'tkd',
   description: 'Toggle automatic keydrops on/off (admin only)',
@@ -15,116 +23,56 @@ module.exports = {
     if (!action || !['on', 'off', 'status'].includes(action)) {
       const currentStatus = keydrop.areKeydropsEnabled();
       return message.channel.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor('#F5E6FF')
-            .setTitle('✧˚₊‧ 𝕀𝕟𝕧𝕒𝕝𝕚𝕕 𝕌𝕤𝕒𝕘𝕖 ‧₊˚✧')
-            .setDescription(
-              [
-                'Usage: `.togglekeydrops <on|off|status>`',
-                '',
-                'Examples:',
-                '• `.togglekeydrops off` - Disable automatic keydrops',
-                '• `.togglekeydrops on` - Enable automatic keydrops',
-                '• `.togglekeydrops status` - Check current status',
-                '',
-                `**Current status:** ${currentStatus ? '✅ Enabled' : '❌ Disabled'}`,
-              ].join('\n')
-            )
-            .setFooter({ text: 'System • Usage Hint' }),
-        ],
+        embeds: [embed(
+          'KEYDROPS — USAGE',
+          `> Usage: \`.tkd <on|off|status>\`\n\n` +
+          `> \`.tkd off\` — disable automatic keydrops\n` +
+          `> \`.tkd on\` — enable automatic keydrops\n` +
+          `> \`.tkd status\` — check current status\n\n` +
+          `-# Current status: ${currentStatus ? 'Enabled' : 'Disabled'}`,
+          message.guild,
+        )],
       });
     }
 
     if (action === 'status') {
       const currentStatus = keydrop.areKeydropsEnabled();
       return message.channel.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor('#F5E6FF')
-            .setTitle('✧˚₊‧ 🔑 𝕂𝕖𝕪𝕕𝕣𝕠𝕡 𝕊𝕪𝕤𝕥𝕖𝕞 𝕊𝕥𝕒𝕥𝕦𝕤 ‧₊˚✧')
-            .setDescription(
-              [
-                `**Keydrops are currently:** ${currentStatus ? '✅ **ENABLED**' : '❌ **DISABLED**'}`,
-                '',
-                currentStatus
-                  ? 'Keys will automatically drop in the keydrop channel.'
-                  : 'Automatic key drops are paused.',
-              ].join('\n')
-            )
-            .setFooter({ text: 'System • Keydrop Status' })
-            .setTimestamp(),
-        ],
+        embeds: [embed(
+          'KEYDROP STATUS',
+          `> Keydrops are currently **${currentStatus ? 'ENABLED' : 'DISABLED'}**.\n\n` +
+          `-# ${currentStatus ? 'Keys will automatically drop in the keydrop channel.' : 'Automatic key drops are paused.'}`,
+          message.guild,
+        )],
       });
     }
 
     if (action === 'off') {
       if (!keydrop.areKeydropsEnabled()) {
-        return message.channel.send({
-          embeds: [
-            new EmbedBuilder()
-              .setColor('#F5E6FF')
-              .setTitle('✧˚₊‧ ⚠️ 𝔸𝕝𝕣𝕖𝕒𝕕𝕪 𝔻𝕚𝕤𝕒𝕓𝕝𝕖𝕕 ‧₊˚✧')
-              .setDescription('Keydrops are already disabled.')
-              .setFooter({ text: 'System • Status Check' }),
-          ],
-        });
+        return message.channel.send({ embeds: [embed('ALREADY DISABLED', '> Keydrops are already disabled.', message.guild)] });
       }
-
       keydrop.setKeydropsEnabled(false);
-
       return message.channel.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor('#F5E6FF')
-            .setTitle('✧˚₊‧ 🔒 𝕂𝕖𝕪𝕕𝕣𝕠𝕡𝕤 𝔻𝕚𝕤𝕒𝕓𝕝𝕖𝕕 ‧₊˚✧')
-            .setDescription(
-              [
-                '꒰ঌ 𝔱𝔥𝔢 𝔠𝔢𝔩𝔢𝔰𝔱𝔦𝔞𝔩 𝔨𝔢𝔶𝔰 𝔥𝔞𝔳𝔢 𝔰𝔱𝔬𝔭𝔭𝔢𝔡 𝔣𝔞𝔩𝔩𝔦𝔫𝔤 ໒꒱',
-                '',
-                'Automatic keydrops are now **disabled**.',
-                'Keys will not drop automatically.',
-                '',
-                '**Note:** Admin-spawned keys still work.',
-              ].join('\n')
-            )
-            .setFooter({ text: 'System • Keydrops Disabled' })
-            .setTimestamp(),
-        ],
+        embeds: [embed(
+          'KEYDROPS DISABLED',
+          `> Automatic keydrops are now **disabled**.\n\n` +
+          `-# Admin-spawned keys still work.`,
+          message.guild,
+        )],
       });
     }
 
     if (action === 'on') {
       if (keydrop.areKeydropsEnabled()) {
-        return message.channel.send({
-          embeds: [
-            new EmbedBuilder()
-              .setColor('#F5E6FF')
-              .setTitle('✧˚₊‧ ⚠️ 𝔸𝕝𝕣𝕖𝕒𝕕𝕪 𝔼𝕟𝕒𝕓𝕝𝕖𝕕 ‧₊˚✧')
-              .setDescription('Keydrops are already enabled.')
-              .setFooter({ text: 'System • Status Check' }),
-          ],
-        });
+        return message.channel.send({ embeds: [embed('ALREADY ENABLED', '> Keydrops are already enabled.', message.guild)] });
       }
-
       keydrop.setKeydropsEnabled(true);
-
       return message.channel.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor('#F5E6FF')
-            .setTitle('✧˚₊‧ ✅ 𝕂𝕖𝕪𝕕𝕣𝕠𝕡𝕤 𝔼𝕟𝕒𝕓𝕝𝕖𝕕 ‧₊˚✧')
-            .setDescription(
-              [
-                '꒰ঌ 𝔱𝔥𝔢 𝔠𝔢𝔩𝔢𝔰𝔱𝔦𝔞𝔩 𝔨𝔢𝔶𝔰 𝔴𝔦𝔩𝔩 𝔣𝔞𝔩𝔩 𝔞𝔤𝔞𝔦𝔫 ໒꒱',
-                '',
-                'Automatic keydrops are now **enabled**.',
-                'Keys will start dropping in the keydrop channel.',
-              ].join('\n')
-            )
-            .setFooter({ text: 'System • Keydrops Enabled' })
-            .setTimestamp(),
-        ],
+        embeds: [embed(
+          'KEYDROPS ENABLED',
+          '> Automatic keydrops are now **enabled**.\n\n-# Keys will start dropping in the keydrop channel.',
+          message.guild,
+        )],
       });
     }
   },

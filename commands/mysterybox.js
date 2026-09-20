@@ -61,16 +61,10 @@ module.exports = {
       return message.channel.send({
         embeds: [
           new EmbedBuilder()
-            .setColor('#F5E6FF')
-            .setTitle('✧˚₊‧ 📦 ℕ𝕠 𝕄𝕪𝕤𝕥𝕖𝕣𝕪 𝔹𝕠𝕩 ‧₊˚✧')
-            .setDescription(
-              [
-                '꒰ঌ 𝔶𝔬𝔲 𝔡𝔬𝔫\'𝔱 𝔥𝔞𝔳𝔢 𝔞𝔫𝔶 𝔪𝔶𝔰𝔱𝔢𝔯𝔶 𝔟𝔬𝔵𝔢𝔰 ໒꒱',
-                '',
-                'You need a **Mystery Box** to open!',
-              ].join('\n')
-            )
-            .setFooter({ text: 'System • Inventory Check' }),
+            .setColor(0x000000)
+            .setTitle('NO MYSTERY BOX')
+            .setDescription('> You need a **Mystery Box** to open.')
+            .setFooter({ text: message.guild?.name || 'Shiro' }),
         ],
       });
     }
@@ -146,19 +140,13 @@ module.exports = {
     return message.channel.send({
       embeds: [
         new EmbedBuilder()
-          .setColor('#F5E6FF')
-          .setTitle('✧˚₊‧ 📦 𝕄𝕪𝕤𝕥𝕖𝕣𝕪 𝔹𝕠𝕩 𝕆𝕡𝕖𝕟𝕖𝕕 ‧₊˚✧')
+          .setColor(0x000000)
+          .setTitle('MYSTERY BOX OPENED')
           .setDescription(
-            [
-              '꒰ঌ 𝔱𝔥𝔢 𝔟𝔬𝔵 𝔯𝔢𝔳𝔢𝔞𝔩𝔰 𝔦𝔱𝔰 𝔱𝔯𝔢𝔞𝔰𝔲𝔯𝔢 ໒꒱',
-              '',
-              `${rewardEmoji} You received: ${rewardMessage}`,
-              '',
-              `**Remaining Mystery Boxes:** ${userData.inventory[MYSTERY_BOX_KEY] || 0}`,
-            ].join('\n')
+            `> You received: ${rewardMessage}\n\n` +
+            `> Remaining Mystery Boxes: **${userData.inventory[MYSTERY_BOX_KEY] || 0}**`
           )
-          .setFooter({ text: 'System • Mystery Box Opened' })
-          .setTimestamp(),
+          .setFooter({ text: message.guild?.name || 'Shiro' }),
       ],
     });
   },

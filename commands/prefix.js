@@ -9,10 +9,10 @@ module.exports = {
       return message.channel.send({
         embeds: [
           new EmbedBuilder()
-            .setColor('#F5E6FF')
-            .setTitle('˗ˏˋ 𐙚 𝔸𝕔𝕔𝕖𝕤𝕤 𝔻𝕖𝕟𝕚𝕖𝕕 𐙚 ˎˊ˗')
-            .setDescription('꒰ঌ 𝔒𝔫𝔩𝔶 𝔞𝔡𝔪𝔦𝔫𝔰 𝔠𝔞𝔫 𝔠𝔥𝔞𝔫𝔤𝔢 𝔱𝔥𝔢 𝔭𝔯𝔢𝔣𝔦𝔵 ໒꒱')
-            .setFooter({ text: 'System • Permission Check' }),
+            .setColor(0x000000)
+            .setTitle('ACCESS DENIED')
+            .setDescription('> Only admins can change the prefix.')
+            .setFooter({ text: message.guild?.name || 'Shiro' }),
         ],
       });
     }
@@ -23,10 +23,14 @@ module.exports = {
       return message.channel.send({
         embeds: [
           new EmbedBuilder()
-            .setColor('#F5E6FF')
-            .setTitle('✧˚₊‧ 𝕀𝕟𝕧𝕒𝕝𝕚𝕕 𝕌𝕤𝕒𝕘𝕖 ‧₊˚✧')
-            .setDescription(`Current prefix: \`${prefix}\`\n\nUsage: \`${prefix}prefix <new prefix>\`\nExample: \`${prefix}prefix ,\``)
-            .setFooter({ text: 'System • Prefix Help' }),
+            .setColor(0x000000)
+            .setTitle('PREFIX')
+            .setDescription(
+              `> Current prefix: \`${prefix}\`\n\n` +
+              `> Usage: \`${prefix}prefix <new prefix>\`\n` +
+              `> Example: \`${prefix}prefix ,\``
+            )
+            .setFooter({ text: message.guild?.name || 'Shiro' }),
         ],
       });
     }
@@ -35,10 +39,10 @@ module.exports = {
       return message.channel.send({
         embeds: [
           new EmbedBuilder()
-            .setColor('#F5E6FF')
-            .setTitle('✧˚₊‧ 𝕀𝕟𝕧𝕒𝕝𝕚𝕕 ℙ𝕣𝕖𝕗𝕚𝕩 ‧₊˚✧')
-            .setDescription('Prefix must be 3 characters or fewer.')
-            .setFooter({ text: 'System • Validation' }),
+            .setColor(0x000000)
+            .setTitle('INVALID PREFIX')
+            .setDescription('> Prefix must be 3 characters or fewer.')
+            .setFooter({ text: message.guild?.name || 'Shiro' }),
         ],
       });
     }
@@ -48,17 +52,13 @@ module.exports = {
     return message.channel.send({
       embeds: [
         new EmbedBuilder()
-          .setColor('#C1FFD7')
-          .setTitle('˗ˏˋ 𐙚 ℙ𝕣𝕖𝕗𝕚𝕩 𝕌𝕡𝕕𝕒𝕥𝕖𝕕 𐙚 ˎˊ˗')
+          .setColor(0x000000)
+          .setTitle('PREFIX UPDATED')
           .setDescription(
-            [
-              `꒰ঌ 𝔗𝔥𝔢 𝔭𝔯𝔢𝔣𝔦𝔵 𝔥𝔞𝔰 𝔟𝔢𝔢𝔫 𝔠𝔥𝔞𝔫𝔤𝔢𝔡 ໒꒱`,
-              '',
-              `New prefix: \`${newPrefix}\``,
-              `Example: \`${newPrefix}help\``,
-            ].join('\n'),
+            `> New prefix: \`${newPrefix}\`\n` +
+            `> Example: \`${newPrefix}help\``
           )
-          .setFooter({ text: `System • Changed by ${message.author.username}` }),
+          .setFooter({ text: `Changed by ${message.author.username}` }),
       ],
     });
   },
