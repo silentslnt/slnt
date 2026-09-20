@@ -241,7 +241,39 @@ client.once('clientReady', async () => {
   } catch(e) { console.error('Failed to register slash commands:', e.message); }
 
   await recoverCipherChallenges();
+
+  setInterval(refreshLiveLeaderboards, 5 * 60 * 1000);
+  refreshLiveLeaderboards();
 });
+
+// Refreshes every .livelb board on a 5-minute interval. Reads fresh from
+// Mongo each tick (not an in-memory cache) so whatever .livelb last set is
+// always what gets refreshed, including right after a restart with no extra
+// recovery step needed.
+async function refreshLiveLeaderboards() {
+  const LiveLeaderboard = require('./models/liveLeaderboard.js');
+  const { buildLeaderboardEmbed } = require('./commands/leaderboard.js');
+
+  let boards;
+  try {
+    boards = await LiveLeaderboard.find({});
+  } catch (err) {
+    console.error('Failed to load live leaderboards:', err.message);
+    return;
+  }
+
+  for (const board of boards) {
+    try {
+      const channel = await client.channels.fetch(board.channelId);
+      const msg = await channel.messages.fetch(board.messageId);
+      const embed = await buildLeaderboardEmbed(board.category, client);
+      await msg.edit({ embeds: [embed] });
+    } catch (err) {
+      // Channel or message gone — clean up so we stop trying every 5 minutes.
+      await LiveLeaderboard.deleteOne({ category: board.category }).catch(() => {});
+    }
+  }
+}
 
 // Restores commands/cipher.js's in-flight challenges after a restart. The bet
 // is deducted the moment a challenge starts, so losing the in-memory Map to a
