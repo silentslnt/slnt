@@ -18,7 +18,7 @@ function findInventoryItem(inventory, itemName) {
 module.exports = {
   name: 'trade',
   description: 'Trade items and currency with other users',
-  async execute({ message, args, userData, saveUserData, getUserData, client }) {
+  async execute({ message, args, userData, saveUserData, getUserData, client, logAdminAction }) {
     const sub = (args[0] || '').toLowerCase();
     const userId = message.author.id;
 
@@ -55,37 +55,26 @@ module.exports = {
         partnerOffer: { currency: 0, items: {} },
         initiatorConfirmed: false,
         partnerConfirmed: false,
-        status: 'open',
+        status: 'open', // open -> completing -> deleted from map on success/cancel
       });
 
       activeTrades.set(targetUser.id, activeTrades.get(userId));
 
-      const headerBlock =
-        '╭──────────────────────────────╮\n' +
-        '│        Trade Started        │\n' +
-        '╰──────────────────────────────╯';
-
       const embed = new EmbedBuilder()
-        .setTitle('˗ˏˋ 𐙚 🤝 Trade Session 𐙚 ˎˊ˗')
+        .setTitle('TRADE SESSION')
         .setDescription(
-          [
-            headerBlock,
-            '',
-            `${message.author} wants to trade with ${targetUser}.`,
-            '',
-            '**Commands:**',
-            '`.trade offer currency <amount>` - Offer coins',
-            '`.trade offer item <item name> <amount>` - Offer inventory items',
-            '`.trade remove currency <amount>` - Remove coins from offer',
-            '`.trade remove item <item name> <amount>` - Remove items from offer',
-            '`.trade view` - View current offers',
-            '`.trade confirm` - Confirm your side',
-            '`.trade cancel` - Cancel trade',
-          ].join('\n')
+          `> ${message.author} wants to trade with ${targetUser}.\n\n` +
+          '__**Commands**__\n' +
+          '> `.trade offer currency <amount>` — offer coins\n' +
+          '> `.trade offer item <item name> <amount>` — offer inventory items\n' +
+          '> `.trade remove currency <amount>` — remove coins from offer\n' +
+          '> `.trade remove item <item name> <amount>` — remove items from offer\n' +
+          '> `.trade view` — view current offers\n' +
+          '> `.trade confirm` — confirm your side\n' +
+          '> `.trade cancel` — cancel trade'
         )
-        .setColor('#F5E6FF')
-        .setTimestamp()
-        .setFooter({ text: 'System • Trading Desk' });
+        .setColor(0x000000)
+        .setFooter({ text: message.guild?.name || 'Shiro' });
 
       return message.channel.send({ embeds: [embed] });
     }
@@ -287,41 +276,37 @@ module.exports = {
           .map(([k, v]) => `${v}x ${k}`)
           .join(', ') || 'None';
 
-      const offerBlock =
-        '╭──────────────────────────────╮\n' +
-        '│      Current Trade View      │\n' +
-        '╰──────────────────────────────╯';
-
       const embed = new EmbedBuilder()
-        .setTitle('˗ˏˋ 𐙚 🤝 Trade Overview 𐙚 ˎˊ˗')
-        .setDescription(
-          [
-            offerBlock,
-            '',
-            'Both players must confirm with `.trade confirm` to finish the trade.',
-          ].join('\n')
-        )
+        .setTitle('TRADE OVERVIEW')
+        .setDescription('-# Both players must confirm with `.trade confirm` to finish the trade.')
         .addFields(
           {
             name: `${initiator.username}'s Offer ${trade.initiatorConfirmed ? '✅' : '❌'}`,
-            value: `**Coins:** ${trade.initiatorOffer.currency}\n**Items:** ${initiatorItems}`,
+            value: `Coins: **${trade.initiatorOffer.currency}**\nItems: ${initiatorItems}`,
             inline: false,
           },
           {
             name: `${partner.username}'s Offer ${trade.partnerConfirmed ? '✅' : '❌'}`,
-            value: `**Coins:** ${trade.partnerOffer.currency}\n**Items:** ${partnerItems}`,
+            value: `Coins: **${trade.partnerOffer.currency}**\nItems: ${partnerItems}`,
             inline: false,
           }
         )
-        .setColor('#F5E6FF')
-        .setTimestamp()
-        .setFooter({ text: 'System • Trading Desk' });
+        .setColor(0x000000)
+        .setFooter({ text: message.guild?.name || 'Shiro' });
 
       return message.channel.send({ embeds: [embed] });
     }
 
     // CONFIRM TRADE
     if (sub === 'confirm') {
+      // Already being fulfilled (or done) — block re-entry. Without this, a
+      // player spamming .trade confirm while the first confirm's async
+      // fulfillment (several awaits below) is still in flight could re-enter
+      // this branch a second time and double-execute the transfer.
+      if (trade.status !== 'open') {
+        return message.channel.send('This trade is already being processed.');
+      }
+
       const isInitiator = userId === trade.initiator;
 
       if (isInitiator) {
@@ -332,9 +317,13 @@ module.exports = {
 
       if (!trade.initiatorConfirmed || !trade.partnerConfirmed) {
         return message.channel.send(
-          `✅ ${message.author.username} confirmed. Waiting for the other person to confirm.`
+          `${message.author.username} confirmed. Waiting for the other person to confirm.`
         );
       }
+
+      // Both confirmed — lock the trade synchronously (no await above this
+      // line since the flags were set) before doing any async work.
+      trade.status = 'completing';
 
       // Both confirmed - execute trade
       const initiatorData = await getUserData(trade.initiator);
@@ -438,23 +427,18 @@ module.exports = {
       const initiator = await client.users.fetch(trade.initiator);
       const partner = await client.users.fetch(trade.partner);
 
-      const doneBlock =
-        '╭──────────────────────────────╮\n' +
-        '│        Trade Complete        │\n' +
-        '╰──────────────────────────────╯';
+      const initiatorItemsSummary = Object.entries(trade.initiatorOffer.items).map(([k, v]) => `${v}x ${k}`).join(', ') || 'nothing';
+      const partnerItemsSummary   = Object.entries(trade.partnerOffer.items).map(([k, v]) => `${v}x ${k}`).join(', ') || 'nothing';
+      await logAdminAction(
+        initiator.id, initiator.username, 'trade', 'Trade Completed', partner.id, partner.username,
+        `${initiator.username} gave ${trade.initiatorOffer.currency} coins + ${initiatorItemsSummary} / ${partner.username} gave ${trade.partnerOffer.currency} coins + ${partnerItemsSummary}`,
+      );
 
       const embed = new EmbedBuilder()
-        .setTitle('˗ˏˋ 𐙚 ✅ Trade Completed 𐙚 ˎˊ˗')
-        .setDescription(
-          [
-            doneBlock,
-            '',
-            `Trade between ${initiator} and ${partner} finished successfully.`,
-          ].join('\n')
-        )
-        .setColor('#C1FFD7')
-        .setTimestamp()
-        .setFooter({ text: 'System • Trading Desk' });
+        .setTitle('TRADE COMPLETED')
+        .setDescription(`> Trade between ${initiator} and ${partner} finished successfully.`)
+        .setColor(0x000000)
+        .setFooter({ text: message.guild?.name || 'Shiro' });
 
       message.channel.send({ embeds: [embed] });
 
@@ -471,23 +455,11 @@ module.exports = {
       activeTrades.delete(trade.initiator);
       activeTrades.delete(trade.partner);
 
-      const cancelBlock =
-        '╭──────────────────────────────╮\n' +
-        '│         Trade Cancelled      │\n' +
-        '╰──────────────────────────────╯';
-
       const embed = new EmbedBuilder()
-        .setTitle('˗ˏˋ 𐙚 ❌ Trade Cancelled 𐙚 ˎˊ˗')
-        .setDescription(
-          [
-            cancelBlock,
-            '',
-            `Trade between ${initiator} and ${partner} was cancelled.`,
-          ].join('\n')
-        )
-        .setColor('#FFB3C6')
-        .setTimestamp()
-        .setFooter({ text: 'System • Trading Desk' });
+        .setTitle('TRADE CANCELLED')
+        .setDescription(`> Trade between ${initiator} and ${partner} was cancelled.`)
+        .setColor(0x000000)
+        .setFooter({ text: message.guild?.name || 'Shiro' });
 
       return message.channel.send({ embeds: [embed] });
     }

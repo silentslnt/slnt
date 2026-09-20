@@ -15,7 +15,7 @@ module.exports = {
   name: 'admin',
   description:
     'Admin commands: give/remove currency, silv tokens, keys, or inventory items; reset user data, spawn keys.',
-  async execute({ message, args, getUserData, keydrop, logAdminAction }) {
+  async execute({ message, args, getUserData, keydrop, logAdminAction, setEconomyLogsChannel, getEconomyLogsChannel }) {
     // Currency/item creation panel — whitelist only, not just the admin role.
     if (!await requireWhitelisted(message)) return;
 
@@ -29,7 +29,7 @@ module.exports = {
               [
                 '꒰ঌ 𝔄𝔡𝔪𝔦𝔫 𝔓𝔞𝔫𝔢𝔩 ໒꒱',
                 '',
-                'Valid commands: give, remove, reset, spawn',
+                'Valid commands: give, remove, reset, spawn, logs',
               ].join('\n'),
             )
             .setFooter({ text: 'System • Admin Help' }),
@@ -38,6 +38,21 @@ module.exports = {
     }
 
     const subcommand = args[0].toLowerCase();
+
+    // ===== LOGS CHANNEL SETUP =====
+    if (subcommand === 'logs') {
+      const channel = message.mentions.channels.first();
+      if (!channel) {
+        const current = getEconomyLogsChannel();
+        return message.channel.send(
+          `Usage: \`.admin logs <#channel>\`\n` +
+          `Currently ${current ? `posting to <#${current}>` : 'not set — economy actions are only viewable via `.adminlogs`'}.`
+        );
+      }
+      await setEconomyLogsChannel(channel.id);
+      await logAdminAction(message.author.id, message.author.username, 'admin', 'Set Logs Channel', null, null, `#${channel.name}`);
+      return message.channel.send(`Economy/moderation logs will now auto-post to ${channel}.`);
+    }
 
     // ===== GIVE / REMOVE =====
     if (subcommand === 'give' || subcommand === 'remove') {
@@ -538,31 +553,52 @@ module.exports = {
     // ===== RESET =====
     if (subcommand === 'reset') {
       const userMention = message.mentions.users.first();
+      // Field name is whichever non-mention arg follows "reset", e.g. `.admin reset @user xp`
+      const fieldArg = args.slice(1).find(a => !a.startsWith('<@'))?.toLowerCase() || null;
+
+      const FIELD_RESETS = {
+        balance:      { balance: 0 },
+        inventory:    { inventory: {} },
+        xp:           { xp: 0 },
+        streak:       { dailyStreak: 0, lastDaily: null },
+        prestige:     { prestige: 0 },
+        achievements: { achievements: [] },
+        badges:       { unlockedBadges: [] },
+        titles:       { unlockedTitles: [], equippedTitle: null },
+        vault:        { vault: null },
+        essences:     { activeEssences: {} },
+        stats:        { stats: {} },
+        missions:     { missionDate: '', missionProgress: {} },
+      };
+
       if (!userMention) {
         return message.channel.send({
           embeds: [
             new EmbedBuilder()
               .setColor('#F5E6FF')
               .setTitle('✧˚₊‧ 𝕀𝕟𝕧𝕒𝕝𝕚𝕕 𝕌𝕤𝕒𝕘𝕖 ‧₊˚✧')
-              .setDescription('Usage: `.admin reset <@user>`')
+              .setDescription(
+                'Usage: `.admin reset <@user> [field]`\n\n' +
+                `Omit \`field\` for a full wipe. Valid fields: ${Object.keys(FIELD_RESETS).join(', ')}`
+              )
               .setFooter({ text: 'System • Usage Hint' }),
           ],
         });
       }
+      if (fieldArg && !FIELD_RESETS[fieldArg]) {
+        return message.channel.send(`Unknown field \`${fieldArg}\`. Valid fields: ${Object.keys(FIELD_RESETS).join(', ')}`);
+      }
+
       const userId = userMention.id;
       const targetData = await getUserData(userId);
-      if (
-        !targetData ||
-        (targetData.balance === 0 &&
-          Object.keys(targetData.inventory || {}).length === 0)
-      ) {
+      if (!targetData) {
         return message.channel.send({
           embeds: [
             new EmbedBuilder()
               .setColor('#F5E6FF')
               .setTitle('✧˚₊‧ 𝕌𝕤𝕖𝕣 ℕ𝕠𝕥 𝔽𝕠𝕦𝕟𝕕 ‧₊˚✧')
               .setDescription(
-                `No significant data found for user ${userMention.username}.`,
+                `No data found for user ${userMention.username}.`,
               )
               .setFooter({ text: 'System • Data Check' }),
           ],
@@ -570,11 +606,34 @@ module.exports = {
       }
 
       const User = require('mongoose').model('User');
-      await User.updateOne(
-        { userId },
-        { $set: { balance: 0, inventory: {} } },
-        { upsert: true },
-      );
+
+      if (fieldArg) {
+        // Single-field reset — leaves everything else untouched.
+        await User.updateOne({ userId }, { $set: FIELD_RESETS[fieldArg] });
+
+        await logAdminAction(
+          message.author.id, message.author.username, 'admin', 'Reset Field',
+          userId, userMention.username, `Reset \`${fieldArg}\` only`,
+        );
+
+        return message.channel.send({
+          embeds: [
+            new EmbedBuilder()
+              .setColor('#F5E6FF')
+              .setTitle('✧˚₊‧ 𝔽𝕚𝕖𝕝𝕕 ℝ𝕖𝕤𝕖𝕥 ‧₊˚✧')
+              .setDescription(`Reset **${fieldArg}** for ${userMention.username}. Everything else is untouched.`)
+              .setFooter({ text: 'System • Admin Action Logged' }),
+          ],
+        });
+      }
+
+      // Full wipe — delete the whole document rather than $set-ing known
+      // fields, so it genuinely resets everything (XP, prestige, streak,
+      // achievements, vault, essences, titles, badges, stats, all of it)
+      // instead of only the fields this command happens to remember to
+      // clear. getUserData recreates a fresh document with schema defaults
+      // on their next command.
+      await User.deleteOne({ userId });
 
       await logAdminAction(
         message.author.id,
@@ -583,7 +642,7 @@ module.exports = {
         'Reset User',
         userId,
         userMention.username,
-        'Balance and inventory reset',
+        'Full data reset — all fields',
       );
 
       return message.channel.send({

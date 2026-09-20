@@ -24,6 +24,14 @@ async function saveVouchConfig(c) {
   winAnnouncer.updateCfg(c);
   try { await fs.promises.writeFile(VOUCH_CONFIG_FILE, JSON.stringify(c, null, 2)); } catch(e) {}
 }
+
+// ── Economy/moderation log channel (auto-posts every logAdminAction call) ──
+function getEconomyLogsChannel() {
+  return vouchConfig.economyLogsChannelId || null;
+}
+async function setEconomyLogsChannel(channelId) {
+  await saveVouchConfig({ ...vouchConfig, economyLogsChannelId: channelId });
+}
 const PENDING_VOUCHES = new Map();
 const PENDING_SETUP   = new Map();
 const VOUCH_DEFAULTS = {
@@ -81,6 +89,27 @@ async function logAdminAction(
     await log.save();
   } catch (error) {
     console.error('Error logging admin action:', error);
+  }
+
+  // Auto-post to the configured moderation log channel, if set.
+  const channelId = getEconomyLogsChannel();
+  if (!channelId) return;
+  try {
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (!channel) return;
+    const target = targetUsername ? ` → **${targetUsername}**` : '';
+    const detailsText = details ? ` \`${details}\`` : '';
+    await channel.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x000000)
+          .setTitle('ECONOMY LOG')
+          .setDescription(`> **${adminUsername}** used \`.${command}\` — ${action}${target}${detailsText}`)
+          .setTimestamp(),
+      ],
+    });
+  } catch (error) {
+    console.error('Error posting economy log:', error);
   }
 }
 
@@ -511,6 +540,8 @@ client.on('messageCreate', async (message) => {
       client,
       logAdminAction,
       AdminLog,
+      getEconomyLogsChannel,
+      setEconomyLogsChannel,
     });
   } catch (error) {
     console.error(`Error executing ${command.name}:`, error);
