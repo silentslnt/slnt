@@ -29,7 +29,7 @@ module.exports = {
               [
                 '꒰ঌ 𝔄𝔡𝔪𝔦𝔫 𝔓𝔞𝔫𝔢𝔩 ໒꒱',
                 '',
-                'Valid commands: give, remove, reset, spawn, logs',
+                'Valid commands: give, remove, reset, spawn, logs, wipeall',
               ].join('\n'),
             )
             .setFooter({ text: 'System • Admin Help' }),
@@ -38,6 +38,52 @@ module.exports = {
     }
 
     const subcommand = args[0].toLowerCase();
+
+    // ===== MASS WIPE (balance + inventory, ALL users, bot-wide) =====
+    if (subcommand === 'wipeall') {
+      const confirmArg = (args[1] || '').toLowerCase();
+      if (confirmArg !== 'confirm') {
+        return message.channel.send({
+          embeds: [
+            new EmbedBuilder()
+              .setColor('#F5E6FF')
+              .setTitle('✧˚₊‧ ⚠️ Confirm Mass Wipe ‧₊˚✧')
+              .setDescription(
+                'This sets **balance to 0** and **inventory to {}** for **every user in the database** — coins, SILV, keys, spells, items, everything in inventory.\n\n' +
+                'XP, level, prestige, streak, and achievements are **not** touched.\n\n' +
+                'This cannot be undone. Run `.admin wipeall confirm` to proceed.'
+              )
+              .setFooter({ text: 'System • Destructive Action Guard' }),
+          ],
+        });
+      }
+
+      const User = require('mongoose').model('User');
+      const result = await User.updateMany({}, { $set: { balance: 0, inventory: {} } });
+
+      await logAdminAction(
+        message.author.id,
+        message.author.username,
+        'admin',
+        'Mass Wipe',
+        null,
+        null,
+        `${result.modifiedCount} users reset — balance + inventory only`,
+      );
+
+      return message.channel.send({
+        embeds: [
+          new EmbedBuilder()
+            .setColor('#F5E6FF')
+            .setTitle('✧˚₊‧ Mass Wipe Complete ‧₊˚✧')
+            .setDescription(
+              `Reset balance and inventory for **${result.modifiedCount}** users.\n\n` +
+              '꒰ঌ XP, level, prestige, streak, and achievements were left untouched ໒꒱'
+            )
+            .setFooter({ text: 'System • Admin Action Logged' }),
+        ],
+      });
+    }
 
     // ===== LOGS CHANNEL SETUP =====
     if (subcommand === 'logs') {
