@@ -11,6 +11,7 @@ const {
 const keydrop = require('./commands/keydrop.js');
 const winAnnouncer = require('./utils/winAnnouncer.js');
 const { syncMissionProgress } = require('./utils/missions.js');
+const CipherChallenge = require('./models/cipherChallenge.js');
 
 // ── Vouch system config ────────────────────────────────────────
 const VOUCH_CONFIG_FILE = path.join(__dirname, 'vouch-config.json');
@@ -236,7 +237,86 @@ client.once('clientReady', async () => {
     );
     console.log('✅ Slash commands registered (/vouch, /setup vouch, /setup wins)');
   } catch(e) { console.error('Failed to register slash commands:', e.message); }
+
+  await recoverCipherChallenges();
 });
+
+// Restores commands/cipher.js's in-flight challenges after a restart. The bet
+// is deducted the moment a challenge starts, so losing the in-memory Map to a
+// restart used to strand that bet in an unwinnable, unresolvable limbo —
+// no way to submit the answer, and no failure message either. Still-valid
+// challenges get their remaining timer re-armed (fully resumable, can still
+// be won); already-expired ones are resolved as a loss the same way the
+// normal timeout does. `attempts` resets to what was last persisted (0) since
+// that's a low-stakes counter, not worth writing to Mongo on every keystroke.
+async function recoverCipherChallenges() {
+  let rows;
+  try {
+    rows = await CipherChallenge.find({});
+  } catch (err) {
+    console.error('Failed to load cipher challenges for recovery:', err.message);
+    return;
+  }
+  if (!rows.length) return;
+
+  global.activeChallenges = global.activeChallenges || new Map();
+  const { EmbedBuilder: Embed } = require('discord.js');
+
+  for (const row of rows) {
+    const elapsed = Date.now() - row.startTime;
+    const remaining = row.timeLimit - elapsed;
+
+    if (remaining <= 0) {
+      await CipherChallenge.deleteOne({ userId: row.userId }).catch(() => {});
+      try {
+        const channel = await client.channels.fetch(row.channelId);
+        const latestUser = await getUserData(row.userId);
+        await channel.send({
+          embeds: [new Embed()
+            .setColor(0x000000)
+            .setTitle('TIME EXPIRED')
+            .setDescription(
+              `> <@${row.userId}>, your cipher challenge expired while the bot was restarting.\n\n` +
+              `> The correct answer was: \`${row.answer}\`\n` +
+              `> Lost: **${row.betAmount.toLocaleString()}** coins\n` +
+              `> Balance: **${latestUser.balance.toLocaleString()}** coins`
+            )],
+        });
+      } catch { /* channel/user may be gone — bet loss already stands either way */ }
+      continue;
+    }
+
+    const challenge = {
+      userId: row.userId, channelId: row.channelId, answer: row.answer,
+      startTime: row.startTime, timeLimit: row.timeLimit, speedBonus: row.speedBonus,
+      betAmount: row.betAmount, baseReward: row.baseReward, speedReward: row.speedReward,
+      attempts: row.attempts || 0,
+    };
+    challenge.timeoutId = setTimeout(async () => {
+      if (!global.activeChallenges || !global.activeChallenges.has(row.userId)) return;
+      global.activeChallenges.delete(row.userId);
+      await CipherChallenge.deleteOne({ userId: row.userId }).catch(() => {});
+      try {
+        const channel = await client.channels.fetch(row.channelId);
+        const latestUser = await getUserData(row.userId);
+        await channel.send({
+          embeds: [new Embed()
+            .setColor(0x000000)
+            .setTitle('TIME EXPIRED')
+            .setDescription(
+              `> <@${row.userId}>, you ran out of time.\n\n` +
+              `> The correct answer was: \`${row.answer}\`\n` +
+              `> Lost: **${row.betAmount.toLocaleString()}** coins\n` +
+              `> Balance: **${latestUser.balance.toLocaleString()}** coins`
+            )],
+        });
+      } catch { /* best-effort */ }
+    }, remaining);
+
+    global.activeChallenges.set(row.userId, challenge);
+  }
+  console.log(`Recovered ${rows.length} in-flight cipher challenge(s) after restart.`);
+}
 
 // ── Prefix config ─────────────────────────────────────────────
 const PREFIX_FILE = path.join(__dirname, 'prefix.json');
@@ -395,6 +475,7 @@ client.on('messageCreate', async (message) => {
 
           // Remove challenge
           global.activeChallenges.delete(userId);
+          await CipherChallenge.deleteOne({ userId }).catch(() => {});
 
           // Calculate profit
           const profit = finalReward - challenge.betAmount;
@@ -425,6 +506,7 @@ client.on('messageCreate', async (message) => {
           // Too many wrong attempts
           clearTimeout(challenge.timeoutId);
           global.activeChallenges.delete(userId);
+          await CipherChallenge.deleteOne({ userId }).catch(() => {});
 
           const userData = await getUserData(userId);
           const failEmbed = new EmbedBuilder()

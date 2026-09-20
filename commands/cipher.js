@@ -1,5 +1,6 @@
 // commands/cipher.js
 const { EmbedBuilder } = require('discord.js');
+const CipherChallenge = require('../models/cipherChallenge');
 
 module.exports = {
   name: 'cipher',
@@ -151,6 +152,7 @@ module.exports = {
       if (!global.activeChallenges || !global.activeChallenges.has(userId)) return;
 
       global.activeChallenges.delete(userId);
+      await CipherChallenge.deleteOne({ userId }).catch(() => {});
 
       const latestUser = await getUserData(userId);
 
@@ -170,6 +172,14 @@ module.exports = {
 
     challenge.timeoutId = timeoutId;
     global.activeChallenges.set(userId, challenge);
+
+    // Persisted so a bot restart mid-challenge doesn't strand the player's
+    // already-deducted bet in an unwinnable, unresolvable limbo — see
+    // models/cipherChallenge.js and the startup recovery in index.js.
+    await CipherChallenge.create({
+      userId, channelId: message.channel.id, answer: upperSecret,
+      startTime, timeLimit, speedBonus, betAmount, baseReward, speedReward,
+    }).catch(() => {});
   },
 };
 
