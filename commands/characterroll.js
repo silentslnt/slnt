@@ -273,7 +273,7 @@ module.exports = {
 
     if (userData.balance < cost) {
       return message.channel.send(
-        `❌ You need **${cost}** coins to roll! Your balance: **${userData.balance}**`
+        `You need **${cost.toLocaleString()}** coins to roll. Your balance: **${userData.balance.toLocaleString()}**`
       );
     }
 
@@ -282,12 +282,9 @@ module.exports = {
 
     // Animation embed
     const animationEmbed = new EmbedBuilder()
-      .setTitle('˗ˏˋ 𐙚 ✨ 𝔯𝔬𝔩𝔩𝔦𝔫𝔤... ✨ 𐙚 ˎˊ˗')
-      .setDescription(
-        '⠀\n꒰ঌ spinning the celestial wheel ໒꒱\n⠀'
-      )
-      .setColor('#F5E6FF')
-      .setTimestamp();
+      .setColor(0x000000)
+      .setTitle('ROLLING...')
+      .setDescription('> Spinning the wheel.');
 
     const animMsg = await message.channel.send({ embeds: [animationEmbed] });
 
@@ -298,14 +295,9 @@ module.exports = {
       await animMsg.edit({
         embeds: [
           new EmbedBuilder()
-            .setTitle('˗ˏˋ 𐙚 ✨ 𝔯𝔬𝔩𝔩𝔦𝔫𝔤... ✨ 𐙚 ˎˊ˗')
-            .setDescription(
-              `${frame} ${frame} ${frame}\n` +
-              '꒰ঌ spinning the celestial wheel ໒꒱\n' +
-              `${frame} ${frame} ${frame}`
-            )
-            .setColor('#F5E6FF')
-            .setTimestamp()
+            .setColor(0x000000)
+            .setTitle('ROLLING...')
+            .setDescription(`> ${frame} ${frame} ${frame} Spinning the wheel. ${frame} ${frame} ${frame}`)
         ]
       });
       await new Promise(resolve => setTimeout(resolve, 300));
@@ -316,7 +308,7 @@ module.exports = {
     const availableChars = getCharactersByTier(tier);
 
     if (availableChars.length === 0) {
-      return message.channel.send('⚠️ No characters available in this tier.');
+      return message.channel.send('No characters available in this tier.');
     }
 
     const charName = availableChars[Math.floor(Math.random() * availableChars.length)];
@@ -329,9 +321,9 @@ module.exports = {
     if (isDuplicate) {
       refundAmount = duplicateRefunds[tier] || 400;
       userData.balance += refundAmount;
-      statusText = `\n💰 **Duplicate!** Refunded **${refundAmount}** coins.`;
+      statusText = `Duplicate — refunded **${refundAmount.toLocaleString()}** coins.`;
     } else {
-      statusText = '\n✨ **New character unlocked!**';
+      statusText = 'New character unlocked.';
     }
 
     userData.characters.push({
@@ -347,31 +339,19 @@ module.exports = {
       characters: userData.characters
     });
 
-    const movesText = char.moves.map(m => `• **${m.name}** (${m.damage})`).join('\n');
-
-    const tierColor = rarityRates.find(r => r.name === tier)?.color || '#808080';
+    const movesText = char.moves.map(m => `> **${m.name}** (${m.damage})`).join('\n');
 
     const resultEmbed = new EmbedBuilder()
-      .setTitle(`${isDuplicate ? '🔄' : '🎉'} ${isDuplicate ? 'You got a duplicate!' : 'You rolled: ' + charName + '!'}`)
+      .setColor(0x000000)
+      .setTitle(isDuplicate ? 'DUPLICATE PULL' : `ROLLED: ${charName.toUpperCase()}`)
       .setDescription(
-        [
-          `✧˚₊‧════════════════════╮ 𐙚 ╭════════════════════‧₊˚✧`,
-          '',
-          `📺 **Series:** ${char.series}`,
-          `✨ **Tier:** ${char.tier}`,
-          statusText,
-          '',
-          `**𝔞𝔯𝔠𝔞𝔫𝔞𝔦𝔯𝔞𝔦𝔱𝔬𝔰:**`,
-          movesText,
-          '',
-          `💰 **New Balance:** ${userData.balance} coins`,
-          '',
-          '✧˚₊‧════════════════════╮ 𐙚 ╭════════════════════‧₊˚✧'
-        ].join('\n')
+        `> Series: **${char.series}**\n` +
+        `> Tier: **${char.tier}**\n` +
+        `> ${statusText}\n\n` +
+        `__**Moves**__\n${movesText}\n\n` +
+        `-# New balance: **${userData.balance.toLocaleString()}** coins`
       )
-      .setColor(tierColor)
-      .setTimestamp()
-      .setFooter({ text: 'System • Gacha Pull' });
+      .setFooter({ text: 'Gacha Pull' });
 
     await animMsg.edit({ embeds: [resultEmbed] });
   }
