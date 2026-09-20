@@ -56,11 +56,9 @@ async function handleKeyDrop(message, client) {
       const channel = client.channels.cache.get(currentKey.channelId);
       if (channel) {
         const expireEmbed = new EmbedBuilder()
-          .setTitle('✧˚₊‧ 🔒 𝕂𝕖𝕪 𝔼𝕩𝕡𝕚𝕣𝕖𝕕 ‧₊˚✧')
-          .setDescription(`The **${currentKey.rarity}** key expired.`)
-          .setColor('#F5E6FF')
-          .setFooter({ text: 'System • Keydrop Control' })
-          .setTimestamp();
+          .setColor(0x000000)
+          .setTitle('KEY EXPIRED')
+          .setDescription(`> The **${currentKey.rarity}** key expired.`);
         await channel.send({ embeds: [expireEmbed] });
       }
       currentKey = null;
@@ -79,17 +77,9 @@ async function handleKeyDrop(message, client) {
     };
 
     const dropEmbed = new EmbedBuilder()
-      .setTitle('✧˚₊‧ 🔑 𝕂𝕖𝕪 𝔻𝕣𝕠𝕡𝕡𝕖𝕕 ‧₊˚✧')
-      .setDescription(
-        [
-          '˗ˏˋ 𐙚 𝔞 𝔠𝔢𝔩𝔢𝔰𝔱𝔦𝔞𝔩 𝔨𝔢𝔶 𝔣𝔞𝔩𝔩𝔰 𝔣𝔯𝔬𝔪 𝔱𝔥𝔢 𝔰𝔨𝔶 𐙚 ˎˊ˗',
-          '',
-          `A **${rarityName}** key dropped! Type \`.redeem\` to claim it!`
-        ].join('\n')
-      )
-      .setColor('#F5E6FF')
-      .setFooter({ text: 'System • Keydrop Control' })
-      .setTimestamp();
+      .setColor(0x000000)
+      .setTitle('KEY DROPPED')
+      .setDescription(`> A **${rarityName}** key dropped! Type \`.redeem\` to claim it.`);
 
     await message.channel.send({ embeds: [dropEmbed] });
   }
@@ -99,19 +89,10 @@ async function handleKeyDrop(message, client) {
 async function setKeydropChannel(message, args) {
   if (!canManageKeydrop(message)) {
     return message.channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor('#F5E6FF')
-          .setTitle('˗ˏˋ 𐙚 𝔸𝕔𝕔𝕖𝕤𝕤 𝔻𝕖𝕟𝕚𝕖𝕕 𐙚 ˎˊ˗')
-          .setDescription(
-            [
-              '꒰ঌ 𝔒𝔫𝔩𝔶 𝔞𝔡𝔪𝔦𝔫𝔰 𝔠𝔞𝔫 𝔠𝔥𝔞𝔫𝔤𝔢 𝔨𝔢𝔶𝔡𝔯𝔬𝔭 𝔰𝔢𝔱𝔱𝔦𝔫𝔤𝔰 ໒꒱',
-              '',
-              'You need the admin role or be whitelisted.',
-            ].join('\n')
-          )
-          .setFooter({ text: 'System • Permission Check' }),
-      ],
+      embeds: [new EmbedBuilder()
+        .setColor(0x000000)
+        .setTitle('ACCESS DENIED')
+        .setDescription('> You need the admin role or be whitelisted to change keydrop settings.')],
     });
   }
 
@@ -119,36 +100,24 @@ async function setKeydropChannel(message, args) {
 
   if (!channelId) {
     return message.channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor('#F5E6FF')
-          .setTitle('✧˚₊‧ 𝕀𝕟𝕧𝕒𝕝𝕚𝕕 𝕌𝕤𝕒𝕘𝕖 ‧₊˚✧')
-          .setDescription(
-            [
-              'Usage: `.setchannel <channel_id>`',
-              '',
-              'Example: `.setchannel 1401925188991582338`',
-              '',
-              `**Current keydrop channel:** <#${activeKeydropChannel}>`,
-            ].join('\n')
-          )
-          .setFooter({ text: 'System • Usage Hint' }),
-      ],
+      embeds: [new EmbedBuilder()
+        .setColor(0x000000)
+        .setTitle('SETCHANNEL — USAGE')
+        .setDescription(
+          `> Usage: \`.setchannel <channel_id>\`\n` +
+          `> Example: \`.setchannel 1401925188991582338\`\n\n` +
+          `-# Current keydrop channel: <#${activeKeydropChannel}>`
+        )],
     });
   }
 
   const channel = message.client.channels.cache.get(channelId);
   if (!channel) {
     return message.channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor('#F5E6FF')
-          .setTitle('✧˚₊‧ ℂ𝕙𝕒𝕟𝕟𝕖𝕝 ℕ𝕠𝕥 𝔽𝕠𝕦𝕟𝕕 ‧₊˚✧')
-          .setDescription(
-            `Channel with ID ${channelId} not found. Make sure the ID is correct.`
-          )
-          .setFooter({ text: 'System • Channel Check' }),
-      ],
+      embeds: [new EmbedBuilder()
+        .setColor(0x000000)
+        .setTitle('CHANNEL NOT FOUND')
+        .setDescription(`> Channel with ID ${channelId} not found — check the ID.`)],
     });
   }
 
@@ -156,23 +125,14 @@ async function setKeydropChannel(message, args) {
   activeKeydropChannel = channelId;
 
   return message.channel.send({
-    embeds: [
-      new EmbedBuilder()
-        .setColor('#F5E6FF')
-        .setTitle('✧˚₊‧ 🔑 𝕂𝕖𝕪𝕕𝕣𝕠𝕡 ℂ𝕙𝕒𝕟𝕟𝕖𝕝 𝕌𝕡𝕕𝕒𝕥𝕖𝕕 ‧₊˚✧')
-        .setDescription(
-          [
-            '꒰ঌ 𝔱𝔥𝔢 𝔠𝔢𝔩𝔢𝔰𝔱𝔦𝔞𝔩 𝔭𝔞𝔱𝔥 𝔥𝔞𝔰 𝔟𝔢𝔢𝔫 𝔯𝔢𝔡𝔦𝔯𝔢𝔠𝔱𝔢𝔡 ໒꒱',
-            '',
-            `**Previous channel:** <#${oldChannelId}>`,
-            `**New channel:** <#${activeKeydropChannel}>`,
-            '',
-            'Keys will now drop in the new channel.',
-          ].join('\n')
-        )
-        .setFooter({ text: 'System • Keydrop Control' })
-        .setTimestamp(),
-    ],
+    embeds: [new EmbedBuilder()
+      .setColor(0x000000)
+      .setTitle('KEYDROP CHANNEL UPDATED')
+      .setDescription(
+        `> Previous channel: <#${oldChannelId}>\n` +
+        `> New channel: <#${activeKeydropChannel}>\n\n` +
+        `-# Keys will now drop in the new channel.`
+      )],
   });
 }
 
@@ -190,17 +150,9 @@ async function spawnKey(rarity, channelId, client) {
   const channel = client.channels.cache.get(channelId);
   if (channel) {
     const dropEmbed = new EmbedBuilder()
-      .setTitle('✧˚₊‧ 🔑 𝕂𝕖𝕪 𝕊𝕡𝕒𝕨𝕟𝕖𝕕 𝕓𝕪 𝔸𝕕𝕞𝕚𝕟 ‧₊˚✧')
-      .setDescription(
-        [
-          '꒰ঌ 𝔞 𝔰𝔥𝔦𝔫𝔦𝔫𝔤 𝔨𝔢𝔶 𝔥𝔞𝔰 𝔟𝔢𝔢𝔫 𝔠𝔞𝔩𝔩𝔢𝔡 𝔡𝔬𝔴𝔫 ໒꒱',
-          '',
-          `An **${rarity}** key has been spawned! Type \`.redeem\` to claim it!`
-        ].join('\n')
-      )
-      .setColor('#F5E6FF')
-      .setFooter({ text: 'System • Keydrop Control' })
-      .setTimestamp();
+      .setColor(0x000000)
+      .setTitle('KEY SPAWNED BY ADMIN')
+      .setDescription(`> An **${rarity}** key has been spawned! Type \`.redeem\` to claim it.`);
 
     await channel.send({ embeds: [dropEmbed] });
   }
@@ -220,17 +172,9 @@ async function claimKey(userId, addKeyToInventory, client) {
   const channel = client.channels.cache.get(currentKey.channelId);
   if (channel) {
     const claimEmbed = new EmbedBuilder()
-      .setTitle('✧˚₊‧ 🔑 𝕂𝕖𝕪 ℂ𝕝𝕒𝕚𝕞𝕖𝕕 ‧₊˚✧')
-      .setDescription(
-        [
-          `<@${userId}> claimed the **${currentKey.rarity}** key!`,
-          '',
-          'ෆ 𝔱𝔥𝔢 𝔟𝔩𝔢𝔰𝔰𝔦𝔫𝔤 𝔥𝔞𝔰 𝔟𝔢𝔢𝔫 𝔯𝔢𝔠𝔢𝔦𝔳𝔢𝔡 ෆ'
-        ].join('\n')
-      )
-      .setColor('#F5E6FF')
-      .setFooter({ text: 'System • Keydrop Control' })
-      .setTimestamp();
+      .setColor(0x000000)
+      .setTitle('KEY CLAIMED')
+      .setDescription(`> <@${userId}> claimed the **${currentKey.rarity}** key.`);
 
     await channel.send({ embeds: [claimEmbed] });
   }
