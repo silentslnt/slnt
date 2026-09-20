@@ -110,9 +110,10 @@ Sections: essences / bundles / cosmetics / utility / admin items
 - XP & Levels — every game, daily, mission. Level-up announced in channel.
 - Prestige Ranks — 6 ranks (Wanderer to Ascendant) based on total coins earned.
 - Daily Streak — 1x to 3x multiplier. Day 7: +1000 coins + key. Day 28: +10000 + 1 SILV.
-- Missions — 3 daily missions seeded by date. Reward coins + XP.
-- Achievements — 22 auto-tracked. Announce on unlock.
+- Missions — 3 daily missions seeded by date, reward coins + XP. **Fixed a long-standing bug**: `commands/missions.js` only ever read `missionProgress[id].progress`, but nothing anywhere ever wrote to it from actual gameplay — every mission's progress bar was permanently stuck at 0/N regardless of what anyone did. `utils/missions.js` (`syncMissionProgress`) is now the single source of truth: derives today's progress as `(current lifetime stat) - (stat value snapshotted at the start of today)`, called from `checkAchievements()` (persists it) and `getUserData()` in index.js (rolls the day over BEFORE any command can mutate a stat, avoiding an off-by-one on the first action of a new day).
+- Achievements — 22 auto-tracked. Announce on unlock. Same call site (`checkAchievements`) now also drives mission progress — see above.
 - Investment Vault — lock up to 5000 coins 24h, collect 10% profit.
+- Artifact Shop (`.artifact` / `.ashop`) — rare, time-gated P2W item rotation. Opens Friday 6PM UTC → Sunday midnight UTC (pure function of current time in `utils/artifactSchedule.js`, no cron dependency, self-heals across restarts). Only a random 2-5 item subset of the admin-managed pool (`ArtifactPool` in `models/artifact.js`) rolls into stock each window, each with a tiny fixed stock reserved atomically (`ArtifactWindow` + MongoDB `$gt: 0` guard) so two concurrent buyers can never both claim the last unit. Pool management (`.artifact add/remove/pool`) is whitelist-only since it defines what money can buy from nothing.
 
 ---
 
@@ -125,6 +126,11 @@ Sections: essences / bundles / cosmetics / utility / admin items
 - .rps
 - .highlow / .hl
 - .minesweeper / .mine
+- .mines / .duel / .gift / .tip / .invest
+
+**All 14 of the above (plus .duel/.gift/.tip/.invest) had a regression where every one of them required the PLAYER to already be a Discord admin just to run the command** (`adminOnly: true` + `requireAdmin()` at the top of `execute()` — reported by a player getting "Access Denied" on `.hl`). This was pure mistake, not intended — none of these need an admin check; `parseBet()`'s `MAX_BET` cap was always the real anti-abuse limit. Fixed by removing the gate from all 14 files. `lottery.js`'s `requireAdmin` on its `draw` subcommand only is correct and was left alone. **Lesson for future permission-check passes: always ask "who is this command FOR" before adding a gate — a batch fix must be sanity-checked file by file, not applied uniformly.**
+
+`dice.js`, `hl.js`, `minesweeper.js`, and `rps.js` also never called `trackStat`/`checkAchievements` at all — zero stats, zero achievements, zero mission progress from those 4 games. Fixed to match the other 6 (gamesPlayed/gamesWon/coinsWon tracked consistently across all 10 gambling games now).
 
 ---
 
@@ -141,12 +147,16 @@ Keydrop: 2.5% chance per message in keydrop channel. Toggleable with .tkd.
 ---
 
 ## Embed Style
-- Default color: #F5E6FF (lavender)
-- Win: #C1FFD7 | Loss: #FFB3C6 | Warning: #FFD580 | Prestige: #FFD700
-- Title format: ˗ˏˋ 𐙚 TITLE 𐙚 ˎˊ˗
-- Flavor text: ꒰ঌ text here ໒꒱
-- Progress bars: ▓▓▓▓▓░░░░░
-- Font: Fraktur 𝔎𝔬𝔫 for titles, Double-Struck 𝕂𝕠𝕟 for sub-labels
+**Reskinned mid-session to match Sentinel's Bleed style** — this is now the canonical style for any NEW or edited embed:
+- Color: `0x000000` (black) always, not the old lavender
+- Plain ALL-CAPS titles (no decorative unicode brackets/fonts in titles — custom emoji and fancy fonts don't render reliably in embed titles anyway)
+- `__**Label**__` for section headers in the description body
+- `> text` blockquotes for body content
+- `-# text` for small footnotes
+- Real custom server emojis in the body — never generic/random ones
+- Reskinned: shop.js, help.js, bal.js, daily.js, achievements.js, leaderboard.js, missions.js, invest.js, profile.js, duel.js, gift.js, blackjack.js, slots.js, coinflip.js, roulette.js, dice.js, rps.js, hl.js, minesweeper.js, mines.js, plinko.js, trade.js, tip.js, lottery.js, adminlogs.js
+- **Not yet reskinned** (still old lavender/Fraktur style — `utils/permissions.js`'s deny embed, `utils/achievements.js`'s achievement-unlock embed, and any command not in the list above): `open.js`, `claim.js`, `mysterybox.js`, `characterroll.js`, `battle.js`, `characters.js`, `charinfo.js`, `cipher.js`, `hangman.js`, `ws.js`, `guess.js`, `keydrop.js`, `prefix.js`, `inventory.js`, `setchannel.js`, `togkey.js`, `testrole.js`, `commands.js` — reskin these next, keeping the "no ugly random emojis" rule.
+- Old style for reference (now legacy, don't use for new work): Win #C1FFD7 / Loss #FFB3C6 / Warning #FFD580 / Prestige #FFD700, title format `˗ˏˋ 𐙚 TITLE 𐙚 ˎˊ˗`, flavor text `꒰ঌ text here ໒꒱`
 
 ---
 
@@ -166,6 +176,9 @@ Railway auto-redeploys in ~60-90 seconds.
 - Never push .env to GitHub
 - All config lives in utils/config.js — change there, not in command files
 - saveUserData = current user only. saveSpecificUserData(userId, data) for others.
+- Before adding a permission check to a command, ask "who is this FOR" — a batch fix that mechanically adds `requireAdmin`/`adminOnly` to a list of files must be sanity-checked per file. All 14 gambling/economy commands got locked to admin-only by mistake this way; see Gambling section.
+- Verify a feature end-to-end (bought → delivered → actually consumed by the thing it's supposed to affect) before building more on top of it. Cloak (Sentinel spell) and the missions progress system were both fully wired UI-and-purchase-wise but silently did nothing underneath for a long time.
+- Any new spell/item added in Sentinel's `cogs/spells.py` needs a matching entry in this repo's `utils/config.js` SPELLS in the same pass, or it exists with zero purchase path (happened with Wrath/Bloodlust).
 
 ---
 
