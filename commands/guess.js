@@ -1,8 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const { isAdmin } = require('../utils/permissions');
-
-// Shared with hangman.js/ws.js — the designated minigame channel.
-const GUESS_CHANNEL_ID = '1401925188991582338';
+const { getGameChannelId } = require('../utils/gameChannel');
 
 const guessGameState = {
   active: false,
@@ -33,6 +31,7 @@ module.exports = {
   name: 'guess',
   description: 'Guess a number game with admin controls.',
   async execute({ message, args }) {
+    const GUESS_CHANNEL_ID = getGameChannelId();
     const sub = (args[0] || '').toLowerCase();
 
     if (sub === 'start') {

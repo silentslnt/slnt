@@ -1,5 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const { isAdmin } = require('../utils/permissions');
+const { getGameChannelId } = require('../utils/gameChannel');
 
 // Track active hangman games - declared ONCE at the top
 const activeGamesMap = new Map();
@@ -14,8 +15,6 @@ const hangmanStages = [
   '```  ______\n |    |\n |    O\n |   /|\\\n |   / \\\n |\n=======```',
 ];
 
-const GAME_CHANNEL_ID = '1401925188991582338'; // Your game channel ID
-
 function embed(title, desc, color = 0x000000) {
   return new EmbedBuilder().setColor(color).setTitle(title).setDescription(desc);
 }
@@ -24,6 +23,7 @@ module.exports = {
   name: 'hangman',
   description: 'Play hangman! Admin sets word, try to guess it!',
   async execute({ message, args, userData, saveUserData, client }) {
+    const GAME_CHANNEL_ID = getGameChannelId();
     const sub = (args[0] || '').toLowerCase();
 
     // START GAME

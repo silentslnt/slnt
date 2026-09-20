@@ -12,6 +12,8 @@ const keydrop = require('./commands/keydrop.js');
 const winAnnouncer = require('./utils/winAnnouncer.js');
 const { syncMissionProgress } = require('./utils/missions.js');
 const CipherChallenge = require('./models/cipherChallenge.js');
+const { getGameChannelId } = require('./utils/gameChannel.js');
+const { KEYS_CHANNEL_ALLOWED } = require('./utils/commandRegistry.js');
 
 // ── Vouch system config ────────────────────────────────────────
 const VOUCH_CONFIG_FILE = path.join(__dirname, 'vouch-config.json');
@@ -613,11 +615,10 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // Keys channel restriction
-  const KEYS_CHANNEL_ID = '1401925188991582338';
-  const allowedInKeysChannel = ['tkd','admin','claim', 'redeem', 'hangman', 'inventory', 'inv', 'bal', 'baltop', 'profile', 'setchannel','commands','cipher'];
-
-  if (message.channel.id === KEYS_CHANNEL_ID && !allowedInKeysChannel.includes(command.name)) {
+  // Keys/game channel restriction — single source of truth now (see
+  // utils/gameChannel.js and utils/commandRegistry.js's KEYS_CHANNEL_ALLOWED
+  // comment for why this used to be two separate, disagreeing lists).
+  if (message.channel.id === getGameChannelId() && !KEYS_CHANNEL_ALLOWED.has(command.name)) {
     return;
   }
 

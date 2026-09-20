@@ -1,7 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const { isAdmin } = require('../utils/permissions');
-
-const GAME_CHANNEL_ID = '1401925188991582338';
+const { getGameChannelId } = require('../utils/gameChannel');
 
 let activeScramble = null;
 
@@ -19,6 +18,7 @@ module.exports = {
   aliases: ['ws'],
   description: 'Start a word scramble game in the game channel. Usage: .wordscramble start <word>',
   async execute({ message, args, updateUserBalance, client }) {
+    const GAME_CHANNEL_ID = getGameChannelId();
     const sub = (args[0] || '').toLowerCase();
 
     // START GAME

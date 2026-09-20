@@ -70,11 +70,23 @@ const PUBLIC_COMMANDS = new Set([
 // They are already gated inside each command file by the active game state.
 const MINIGAME_RESPONSE_COMMANDS = new Set(['hangman', 'cipher', 'ws', 'guess']);
 
-// ── Keys channel restriction ────────────────────────────────────────────────
-const KEYS_CHANNEL_ID = '1401925188991582338';
+// ── Keys/game channel restriction ───────────────────────────────────────────
+// The channel ID itself now lives in ./gameChannel.js (admin-settable via
+// .gamechannel) — this used to be its own separate hardcoded literal here,
+// a 4th independent copy of the same value duplicated across this file,
+// index.js, and (until this pass) hangman.js/ws.js/guess.js individually.
+//
+// This allowlist used to be dead — this whole file was never require()'d
+// by anything (its own header even says "Drop this into your index.js"
+// and never was). index.js enforced a SEPARATE, shorter, diverging list
+// inline instead, which meant .ws/.guess/.achievements/.leaderboard were
+// silently blocked in the game channel despite this "authoritative"-looking
+// list saying they should work. Merged both lists; this is now the one
+// index.js actually imports and enforces.
 const KEYS_CHANNEL_ALLOWED = new Set([
-  'claim', 'inventory', 'bal', 'leaderboard', 'profile', 'setchannel',
-  'help', 'cipher', 'hangman', 'ws', 'guess', 'achievements',
+  'claim', 'redeem', 'inventory', 'inv', 'bal', 'baltop', 'leaderboard',
+  'profile', 'setchannel', 'gamechannel', 'help', 'cipher', 'hangman',
+  'ws', 'guess', 'achievements', 'tkd', 'admin', 'commands',
 ]);
 
 // ── Passive income cron (call this in your ready event) ─────────────────────
@@ -90,4 +102,12 @@ function startPassiveCron(client, getUserData, saveSpecificUserData) {
   }, 60 * 60 * 1000);
 }
 
-module.exports = { COMMAND_ALIASES, PUBLIC_COMMANDS, MINIGAME_RESPONSE_COMMANDS, KEYS_CHANNEL_ID, KEYS_CHANNEL_ALLOWED, startPassiveCron };
+// NOTE: COMMAND_ALIASES and startPassiveCron below are NOT wired up anywhere
+// — this whole file was never require()'d until this pass (see comment
+// above). index.js has its own, separate, working two-pass alias loader
+// already (primary command names claimed first, then aliases only if
+// unclaimed) — COMMAND_ALIASES here would conflict with it, not complement
+// it, so it's left disconnected on purpose. startPassiveCron is an inert
+// stub (its own comment says "Patch this into your existing user loop").
+// Only KEYS_CHANNEL_ALLOWED is actually used, by index.js.
+module.exports = { COMMAND_ALIASES, PUBLIC_COMMANDS, MINIGAME_RESPONSE_COMMANDS, KEYS_CHANNEL_ALLOWED, startPassiveCron };
