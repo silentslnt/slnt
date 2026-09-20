@@ -2,6 +2,7 @@ const { EmbedBuilder } = require('discord.js');
 const { awardPoints } = require('../utils/sentinelDb');
 const { parseBet } = require('../utils/parseBet');
 const { announceWin } = require('../utils/winAnnouncer');
+const { trackStat, checkAchievements } = require('../utils/achievements');
 
 const BLACK = 0x000000;
 
@@ -48,6 +49,14 @@ module.exports = {
       const pts = roll === 6 ? 20 : roll === 5 ? 12 : 8;
       await awardPoints(message.guild.id, message.author.id, pts);
     }
+
+    await trackStat(userData, 'gamesPlayed', 1);
+    if (reward > 0) {
+      await trackStat(userData, 'gamesWon', 1);
+      await trackStat(userData, 'coinsWon', reward);
+    }
+    await saveUserData({ stats: userData.stats });
+    await checkAchievements(userData, { message, saveUserData });
 
     const embed = new EmbedBuilder()
       .setTitle('DICE TABLE')

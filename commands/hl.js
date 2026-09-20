@@ -1,6 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { parseBet } = require('../utils/parseBet');
 const { announceWin } = require('../utils/winAnnouncer');
+const { trackStat, checkAchievements } = require('../utils/achievements');
 
 const BLACK = 0x000000;
 
@@ -71,6 +72,14 @@ module.exports = {
         .setFooter({ text: message.guild?.name || 'Shiro' });
 
       await message.channel.send({ embeds: [endEmbed] });
+
+      await trackStat(userData, 'gamesPlayed', 1);
+      if (won) {
+        await trackStat(userData, 'gamesWon', 1);
+        await trackStat(userData, 'coinsWon', payout);
+      }
+      await saveUserData({ stats: userData.stats });
+      await checkAchievements(userData, { message, saveUserData });
 
       if (won && client) {
         announceWin(client, {

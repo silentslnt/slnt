@@ -10,6 +10,7 @@ const {
 } = require('discord.js');
 const keydrop = require('./commands/keydrop.js');
 const winAnnouncer = require('./utils/winAnnouncer.js');
+const { syncMissionProgress } = require('./utils/missions.js');
 
 // ── Vouch system config ────────────────────────────────────────
 const VOUCH_CONFIG_FILE = path.join(__dirname, 'vouch-config.json');
@@ -126,7 +127,25 @@ async function getUserData(userId) {
     });
     await user.save();
   }
-  return user.toObject();
+  const obj = user.toObject();
+
+  // Roll missions over for a new day BEFORE the command runs and mutates any
+  // stats — this is the one call site every command passes through, so it's
+  // the only safe place to snapshot the day's baseline pre-mutation. If we
+  // did this reactively (after a stat changes) instead, the very first
+  // action of a new day would already be included in its own baseline and
+  // silently not count toward that day's missions.
+  const prevDate = obj.missionDate;
+  syncMissionProgress(obj);
+  if (obj.missionDate !== prevDate) {
+    await User.updateOne({ userId }, { $set: {
+      missionDate:     obj.missionDate,
+      missionProgress: obj.missionProgress,
+      missionBaseline: obj.missionBaseline,
+    }});
+  }
+
+  return obj;
 }
 
 async function saveUserData(userId, userData) {

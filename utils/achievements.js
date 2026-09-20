@@ -1,5 +1,6 @@
 // utils/achievements.js
 const { ACHIEVEMENTS, COLOR } = require('./config');
+const { syncMissionProgress } = require('./missions');
 
 /**
  * Check and award any newly earned achievements.
@@ -75,6 +76,20 @@ async function checkAchievements(userData, { message, saveUserData }) {
   if (newlyEarned.length > 0) {
     userData.achievements = [...earned];
     await saveUserData({ achievements: userData.achievements });
+  }
+
+  // Every call here is a stat-changing event (game played, trade completed,
+  // profile viewed, etc.) — recompute today's mission progress from the
+  // updated stats and persist it. Without this, mission progress bars never
+  // move: nothing else in the codebase ever writes to missionProgress.
+  const prevProgress = JSON.stringify(userData.missionProgress || {});
+  syncMissionProgress(userData);
+  if (JSON.stringify(userData.missionProgress) !== prevProgress) {
+    await saveUserData({
+      missionDate:     userData.missionDate,
+      missionProgress: userData.missionProgress,
+      missionBaseline: userData.missionBaseline,
+    });
   }
 
   return newlyEarned;

@@ -1,6 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { MAX_BET } = require('../utils/config');
 const { announceWin } = require('../utils/winAnnouncer');
+const { trackStat, checkAchievements } = require('../utils/achievements');
 
 const BLACK = 0x000000;
 
@@ -114,6 +115,8 @@ module.exports = {
           .setFooter({ text: message.guild?.name || 'Shiro' });
         message.channel.send({ embeds: [embed] });
         userGames.delete(userId);
+        await trackStat(userData, 'gamesPlayed', 1);
+        await checkAchievements(userData, { message, saveUserData });
         return;
       }
 
@@ -135,6 +138,10 @@ module.exports = {
           .setFooter({ text: message.guild?.name || 'Shiro' });
         message.channel.send({ embeds: [embed] });
         userGames.delete(userId);
+        await trackStat(userData, 'gamesPlayed', 1);
+        await trackStat(userData, 'gamesWon', 1);
+        await trackStat(userData, 'coinsWon', payout - game.bet);
+        await checkAchievements(userData, { message, saveUserData });
 
         if (client) {
           announceWin(client, {
