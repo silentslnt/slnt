@@ -10,7 +10,7 @@ const {
 const { ArtifactPool, ArtifactWindow, ArtifactOverride } = require('../models/artifact');
 const { getWindow } = require('../utils/artifactSchedule');
 const { requireWhitelisted, isWhitelisted } = require('../utils/permissions');
-const { grantItem, getOwnedItems, removeItem } = require('../utils/sentinelDb');
+const { grantItem, getOwnedItems, removeItem, setArtifactEffect } = require('../utils/sentinelDb');
 
 const SILV_KEY  = 'Silv token';
 const SILV_ICON = '<:zzsilvtoken:1486364646796431427>';
@@ -69,6 +69,15 @@ async function ensureSeeded() {
   } catch (err) {
     // E11000 = another process seeded it first between our count and insert — fine.
     if (err.code !== 11000) console.error('[artifact] auto-seed failed:', err.message);
+    return;
+  }
+  // Push the 8 defaults' mechanical effects into Sentinel's Postgres too —
+  // without this, races.py would fall back to its ARTIFACT_EFFECTS dict,
+  // which is fine (it's seeded with the same 8), but pushing here means a
+  // fresh install's artifacts are live-editable from day one instead of only
+  // after the first manual seteffect edit.
+  for (const a of DEFAULT_ARTIFACTS) {
+    await setArtifactEffect(a.itemId, a.tier, a.effectKind, a.effectValue, a.drawbackKind, a.drawbackValue);
   }
 }
 
@@ -299,9 +308,10 @@ async function poolList({ message }) {
 // Sets/clears the mechanical effect on a pool item — kept separate from
 // poolAdd so admins can tune an existing artifact's numbers without
 // re-typing the full add command (and risking a typo'd description/price).
-// Valid effectKind/drawbackKind values: see docs/artifact_spell_expansion.md
-// and Sentinel's cogs/races.py ARTIFACT_EFFECTS — they must match EXACTLY or
-// the bonus silently does nothing.
+// Valid effectKind/drawbackKind values: see docs/artifact_spell_expansion.md.
+// This PUSHES to Sentinel's artifact_effects table (setArtifactEffect) in the
+// same call — that table is what races.py actually reads, so this takes
+// effect immediately in-game, not just in the shop's display text.
 async function poolSetEffect({ message, args }) {
   if (!await requireWhitelisted(message)) return;
   // .artifact seteffect <id> <relic|charm|none> <effectKind|-> <effectValue> [drawbackKind|-] [drawbackValue]
@@ -320,7 +330,13 @@ async function poolSetEffect({ message, args }) {
   };
   const doc = await ArtifactPool.findOneAndUpdate({ itemId: itemId.toLowerCase() }, update);
   if (!doc) return message.channel.send(`No pool item with id \`${itemId}\`. Add it first with \`.artifact add\`.`);
-  return message.channel.send(`Updated \`${itemId}\` — tier **${tier}**, effect \`${update.effectKind}\`=${update.effectValue}${update.drawbackKind ? `, drawback \`${update.drawbackKind}\`=${update.drawbackValue}` : ''}.`);
+  const pushed = await setArtifactEffect(
+    itemId.toLowerCase(), update.tier, update.effectKind, update.effectValue, update.drawbackKind, update.drawbackValue
+  );
+  return message.channel.send(
+    `Updated \`${itemId}\` — tier **${tier}**, effect \`${update.effectKind}\`=${update.effectValue}${update.drawbackKind ? `, drawback \`${update.drawbackKind}\`=${update.drawbackValue}` : ''}.` +
+    (pushed ? '' : '\n-# ⚠ Could not reach Sentinel\'s DB — this is only saved in Shiro right now, the in-game bonus is unchanged until the push succeeds.')
+  );
 }
 
 // Admin escape hatch for the one-Relic-at-a-time rule — removes one item
@@ -533,14 +549,22 @@ async function panel({ message }) {
       const effectValue = Number(interaction.fields.getTextInputValue('effectValue').trim()) || 0;
       const drawbackKindRaw = interaction.fields.getTextInputValue('drawbackKind').trim();
       const drawbackValue = Number(interaction.fields.getTextInputValue('drawbackValue').trim()) || 0;
+      const resolvedTier = ['relic', 'charm'].includes(tier) ? tier : 'none';
+      const resolvedEffectKind = effectKindRaw === '-' ? null : effectKindRaw;
+      const resolvedDrawbackKind = !drawbackKindRaw || drawbackKindRaw === '-' ? null : drawbackKindRaw;
       await ArtifactPool.findOneAndUpdate({ itemId }, {
-        tier: ['relic', 'charm'].includes(tier) ? tier : 'none',
-        effectKind: effectKindRaw === '-' ? null : effectKindRaw,
+        tier: resolvedTier,
+        effectKind: resolvedEffectKind,
         effectValue,
-        drawbackKind: !drawbackKindRaw || drawbackKindRaw === '-' ? null : drawbackKindRaw,
+        drawbackKind: resolvedDrawbackKind,
         drawbackValue,
       });
-      await interaction.reply({ content: `Updated \`${itemId}\`'s effect. **Remember:** this must match a real \`kind\` Sentinel's races.py ARTIFACT_EFFECTS actually reads, or it's display-only.`, ephemeral: true });
+      const pushed = await setArtifactEffect(itemId, resolvedTier, resolvedEffectKind, effectValue, resolvedDrawbackKind, drawbackValue);
+      await interaction.reply({
+        content: `Updated \`${itemId}\`'s effect — live in-game immediately.` +
+          (pushed ? '' : "\n⚠ Couldn't reach Sentinel's DB — saved in Shiro only, the in-game bonus is unchanged until this succeeds."),
+        ephemeral: true,
+      });
     } else {
       return;
     }

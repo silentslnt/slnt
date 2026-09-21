@@ -105,4 +105,30 @@ async function removeItem(guildId, userId, item) {
   }
 }
 
-module.exports = { awardPoints, grantItem, getOwnedItems, removeItem };
+/**
+ * Push an artifact's mechanical effect into Sentinel's artifact_effects
+ * table — this is what races.py's _artifact_bonus() actually reads, so an
+ * edit here takes effect immediately with no Sentinel redeploy. Mongo's
+ * ArtifactPool keeps its own copy of these same fields for display in the
+ * shop/panel; this call is what keeps Sentinel's copy live instead of
+ * requiring races.py's ARTIFACT_EFFECTS dict to be hand-edited in sync.
+ */
+async function setArtifactEffect(itemId, tier, effectKind, effectValue, drawbackKind, drawbackValue) {
+  const pool = _getPool();
+  if (!pool) return false;
+  try {
+    await pool.query(
+      `INSERT INTO artifact_effects (item_id, tier, effect_kind, effect_value, drawback_kind, drawback_value)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (item_id) DO UPDATE SET
+         tier = $2, effect_kind = $3, effect_value = $4, drawback_kind = $5, drawback_value = $6`,
+      [itemId, tier || null, effectKind || null, effectValue || 0, drawbackKind || null, drawbackValue || 0],
+    );
+    return true;
+  } catch (err) {
+    console.error('[sentinel-db] setArtifactEffect failed:', err.message);
+    return false;
+  }
+}
+
+module.exports = { awardPoints, grantItem, getOwnedItems, removeItem, setArtifactEffect };
