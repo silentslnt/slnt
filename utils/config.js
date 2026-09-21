@@ -211,6 +211,10 @@ module.exports = {
     corruption: { name: 'Corruption', emoji: '😈', effect: 'Demon only — 3h curse + drain 8% of their Aether.',   silvCost: 8, raceLocked: 'demon' },
     wrath:      { name: 'Wrath',      emoji: '🐉', effect: 'Dragon only — 1h Silence + Willpower damage + drain 12% of their Aether.',  silvCost: 8, raceLocked: 'dragon' },
     bloodlust:  { name: 'Bloodlust',  emoji: '🩸', effect: 'Vampire only — 1h Silence + Willpower damage + drain 10% of their Aether.', silvCost: 8, raceLocked: 'vampire' },
+    ward:       { name: 'Ward',       emoji: '🛡️', effect: 'Halves incoming Willpower damage for 3h — but -10% RP earned while active.', silvCost: 7 },
+    frenzy:     { name: 'Frenzy',     emoji: '💢', effect: '+20 to your next duel roll (consumed on use) — but a loss while active costs 20 extra Willpower.', silvCost: 6 },
+    ashen_pact: { name: 'Ashen Pact', emoji: '🔥', effect: 'Demon only — instant +150 Chaos, permanent +25 Despair. No undo.', silvCost: 9, raceLocked: 'demon' },
+    sanctuary:  { name: 'Sanctuary',  emoji: '✨', effect: 'Angel only — instantly clears Silence and fully restores Willpower. Own 24h cooldown.', silvCost: 9, raceLocked: 'angel' },
   },
 
   // ── SHOP UTILITY ITEMS (coin-priced) ───────────────────────
