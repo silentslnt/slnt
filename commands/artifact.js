@@ -56,11 +56,36 @@ const DEFAULT_ARTIFACTS = [
     description: "Greed always has a price — this one's just deferred.",
     priceSilv: 15, stock: 3, effectKind: 'aether_mult', effectValue: 0.12,
     drawbackKind: 'corruption_rob_fail_mult', drawbackValue: 0.10 },
+  { itemId: 'race_reset_token', name: 'Race Reset Token', emoji: '🔄', tier: 'relic',
+    description: 'Undo a choice you thought was permanent. Consumed on use via ,race reroll — no mechanical effect while owned.',
+    priceSilv: 60, stock: 1, effectKind: null, effectValue: 0,
+    drawbackKind: null, drawbackValue: 0 },
 ];
+
+// Items added to DEFAULT_ARTIFACTS after an install's pool was already
+// seeded won't retroactively appear — ensureSeeded's insertMany only runs
+// once, on an empty pool. This backfills any DEFAULT_ARTIFACTS entry that's
+// missing from an already-seeded pool, so a mid-session addition (like the
+// race reset token) doesn't require the owner to manually .artifact add it.
+async function backfillNewDefaults() {
+  for (const a of DEFAULT_ARTIFACTS) {
+    const exists = await ArtifactPool.exists({ itemId: a.itemId });
+    if (exists) continue;
+    try {
+      await ArtifactPool.create({ ...a, roleId: null, roleDays: 0, active: true });
+      await setArtifactEffect(a.itemId, a.tier, a.effectKind, a.effectValue, a.drawbackKind, a.drawbackValue);
+    } catch (err) {
+      if (err.code !== 11000) console.error(`[artifact] backfill of ${a.itemId} failed:`, err.message);
+    }
+  }
+}
 
 async function ensureSeeded() {
   const count = await ArtifactPool.countDocuments();
-  if (count > 0) return;
+  if (count > 0) {
+    await backfillNewDefaults();
+    return;
+  }
   try {
     await ArtifactPool.insertMany(
       DEFAULT_ARTIFACTS.map(a => ({ ...a, roleId: null, roleDays: 0, active: true })),
@@ -71,9 +96,9 @@ async function ensureSeeded() {
     if (err.code !== 11000) console.error('[artifact] auto-seed failed:', err.message);
     return;
   }
-  // Push the 8 defaults' mechanical effects into Sentinel's Postgres too —
+  // Push the defaults' mechanical effects into Sentinel's Postgres too —
   // without this, races.py would fall back to its ARTIFACT_EFFECTS dict,
-  // which is fine (it's seeded with the same 8), but pushing here means a
+  // which is fine (it's seeded with the same set), but pushing here means a
   // fresh install's artifacts are live-editable from day one instead of only
   // after the first manual seteffect edit.
   for (const a of DEFAULT_ARTIFACTS) {
