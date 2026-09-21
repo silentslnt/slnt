@@ -46,6 +46,80 @@ async function awardPoints(guildId, userId, points) {
 }
 
 /**
+ * Read a member's current Aether (member_points.points) — needed now that
+ * Shiro's new .store hub sells Aether-priced items (bait, points items)
+ * and has to check/display a real balance, not just add to it. Returns 0 if
+ * unreachable — callers must treat that as "can't afford it" (fail closed),
+ * never as "they have infinite/unknown Aether."
+ */
+async function getPoints(guildId, userId) {
+  const pool = _getPool();
+  if (!pool) return 0;
+  try {
+    const res = await pool.query(
+      `SELECT points FROM member_points WHERE guild_id=$1 AND user_id=$2`,
+      [guildId.toString(), userId.toString()],
+    );
+    return res.rows[0]?.points || 0;
+  } catch (err) {
+    console.error('[sentinel-db] getPoints failed:', err.message);
+    return 0;
+  }
+}
+
+/**
+ * Atomically deduct Aether if (and only if) the member has enough — the
+ * `points >= $3` guard in the WHERE clause means this can never take a
+ * balance negative even under concurrent spends, mirroring the same
+ * atomic-reservation pattern used for artifact/exchange stock. Returns
+ * true if the deduction happened, false if they couldn't afford it or the
+ * DB was unreachable (fail closed either way).
+ */
+async function spendPoints(guildId, userId, amount) {
+  if (!amount || amount <= 0) return true;
+  const pool = _getPool();
+  if (!pool) return false;
+  try {
+    const res = await pool.query(
+      `UPDATE member_points SET points = points - $3
+       WHERE guild_id=$1 AND user_id=$2 AND points >= $3`,
+      [guildId.toString(), userId.toString(), amount],
+    );
+    return res.rowCount > 0;
+  } catch (err) {
+    console.error('[sentinel-db] spendPoints failed:', err.message);
+    return false;
+  }
+}
+
+/**
+ * Grant fishing bait directly into Sentinel's member_races.fishing_bait —
+ * lets Shiro's .store sell bait without duplicating races.py's fishing
+ * logic, same "push a live write over the bridge" pattern as everything
+ * else here. Silent no-op if unreachable (caller should not have already
+ * deducted Aether when this fails — see .store's buy handler).
+ */
+async function addFishingBait(guildId, userId, amount) {
+  if (!amount || amount <= 0) return false;
+  const pool = _getPool();
+  if (!pool) return false;
+  try {
+    // rowCount stays 0 if the member has no member_races row at all (never
+    // picked a race in Sentinel) — callers MUST treat that as failure and
+    // refund the Aether they already deducted, not silently eat the charge.
+    const res = await pool.query(
+      `UPDATE member_races SET fishing_bait = fishing_bait + $3
+       WHERE guild_id=$1 AND user_id=$2`,
+      [guildId.toString(), userId.toString(), amount],
+    );
+    return res.rowCount > 0;
+  } catch (err) {
+    console.error('[sentinel-db] addFishingBait failed:', err.message);
+    return false;
+  }
+}
+
+/**
  * Grant an item into Sentinel's user_inventory table (used for spells).
  * Silent no-op if SENTINEL_DB_URL is not set or DB is unreachable.
  */
@@ -189,4 +263,7 @@ async function claimPendingSilvGrants() {
   }
 }
 
-module.exports = { awardPoints, grantItem, getOwnedItems, removeItem, setArtifactEffect, getSpellDisplay, claimPendingSilvGrants };
+module.exports = {
+  awardPoints, grantItem, getOwnedItems, removeItem, setArtifactEffect, getSpellDisplay,
+  claimPendingSilvGrants, getPoints, spendPoints, addFishingBait,
+};

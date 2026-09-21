@@ -251,6 +251,53 @@ module.exports = {
     },
   },
 
+  // ── POINTS ITEMS (SILV race system, Aether-priced) ──────────
+  // Deliberately weaker/cheaper than the SILV Artifact Shop's Relics/Charms
+  // (see commands/artifact.js) — same benefit+drawback shape (Rogue Lineage/
+  // Deepwoken inspired), reuses the SAME effect kinds races.py's
+  // _artifact_bonus() already knows how to read, so no Sentinel-side code
+  // change was needed to support this catalog — it's mechanically identical
+  // to an artifact as far as races.py is concerned, just sold differently
+  // (common, Aether, no weekly rotation/stock limit) via .store in Shiro.
+  POINTS_ITEMS: {
+    frayed_rope: {
+      name: 'Frayed Rope', emoji: '🪢', aetherCost: 300,
+      description: 'A little extra haul from ,work/,hunt/,fish, at the cost of some Race Points.',
+      effectKind: 'aether_mult', effectValue: 0.05,
+      drawbackKind: 'rp_mult', drawbackValue: -0.03,
+    },
+    lucky_penny: {
+      name: 'Lucky Penny', emoji: '🪙', aetherCost: 300,
+      description: 'A little extra Race Points from everything, at the cost of some Aether income.',
+      effectKind: 'rp_mult', effectValue: 0.05,
+      drawbackKind: 'aether_mult', drawbackValue: -0.03,
+    },
+    cracked_lens: {
+      name: 'Cracked Lens', emoji: '🔍', aetherCost: 250,
+      description: 'Notoriety travels faster — more bounty per hit, but your rob aim suffers slightly.',
+      effectKind: 'bounty_mult', effectValue: 0.08,
+      drawbackKind: 'rob_success', drawbackValue: -0.03,
+    },
+    old_bandage: {
+      name: 'Old Bandage', emoji: '🩹', aetherCost: 200,
+      description: 'Willpower regenerates a little faster, but you hit a little softer in duels.',
+      effectKind: 'willpower_regen', effectValue: 2,
+      drawbackKind: 'duel_roll', drawbackValue: -2,
+    },
+    chalk_ward: {
+      name: 'Chalk Ward', emoji: '⚪', aetherCost: 250,
+      description: 'A touch more Order from doing good, at a small cost to Race Points.',
+      effectKind: 'order_mult', effectValue: 0.06,
+      drawbackKind: 'rp_mult', drawbackValue: -0.02,
+    },
+    ashen_coin: {
+      name: 'Ashen Coin', emoji: '🖤', aetherCost: 250,
+      description: 'A touch more Chaos from dark acts, but failed robs hurt more.',
+      effectKind: 'chaos_mult', effectValue: 0.06,
+      drawbackKind: 'despair_rob_fail_mult', drawbackValue: 0.05,
+    },
+  },
+
   // ── MISSIONS POOL ──────────────────────────────────────────
   MISSIONS_POOL: [
     { id: 'win_5_games',   label: '🎮 Win 5 minigame bets',          target: 5,  field: 'gamesWon',   reward: { coins: 500  } },

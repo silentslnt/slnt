@@ -67,7 +67,7 @@ function footer(message) {
 // ─────────────────────────────────────────────────────────────────────────────
 module.exports = {
   name: 'shop',
-  aliases: ['sh', 'store'],
+  aliases: ['sh'],
   adminOnly: false,
   description: 'Browse and buy from the shop. `.sh [section] [buy <id>]`',
 
