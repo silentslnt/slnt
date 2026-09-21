@@ -6,7 +6,7 @@ const {
 } = require('../utils/config');
 const { activateEssence } = require('../utils/essences');
 const { trackStat, checkAchievements } = require('../utils/achievements');
-const { awardPoints, grantItem } = require('../utils/sentinelDb');
+const { awardPoints, grantItem, getSpellDisplay } = require('../utils/sentinelDb');
 const { isAdmin } = require('../utils/permissions');
 
 const SILV_KEY  = 'Silv token';
@@ -181,10 +181,18 @@ async function showAetherShop({ message, userData }) {
 }
 
 async function showSpellShop({ message }) {
+  // Live text from Sentinel (spells.py is the actual mechanical source of
+  // truth) takes priority — falls back to the static SPELLS[id].effect copy
+  // only if Sentinel's DB is unreachable, so the shop never breaks, but
+  // normally can't go stale the way the mute/jail and cloak-duration text
+  // did before this existed. silvCost/name/emoji stay Shiro-owned (its own
+  // economy/display choices, not Sentinel's mechanics).
+  const live = await getSpellDisplay();
   let desc = '__**Spells**__\n> Cast in SILV with `,cast <spell> @member` — delivered to your Sentinel inventory instantly.\n\n';
   for (const [id, s] of Object.entries(SPELLS)) {
+    const effectText = live[id]?.description || s.effect;
     desc += `> ${s.emoji} **${s.name}** \`${id}\`${s.raceLocked ? ` *(${s.raceLocked}s only)*` : ''}\n`;
-    desc += `> ${s.effect} · ${s.silvCost} ${SILV_ICON}\n\n`;
+    desc += `> ${effectText} · ${s.silvCost} ${SILV_ICON}\n\n`;
   }
   desc += `-# Buy: \`.sh buy <spell_id>\` — e.g. \`.sh buy shield\``;
   return message.channel.send({

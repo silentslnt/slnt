@@ -131,4 +131,25 @@ async function setArtifactEffect(itemId, tier, effectKind, effectValue, drawback
   }
 }
 
-module.exports = { awardPoints, grantItem, getOwnedItems, removeItem, setArtifactEffect };
+/**
+ * Read the live spell description/duration/race-lock text Sentinel owns
+ * (spells.py SPELL_DESCRIPTIONS, pushed into spell_display on every
+ * cog_load). Returns {} if unreachable — callers should fall back to their
+ * own static copy rather than break the shop display when Sentinel's DB
+ * is down.
+ */
+async function getSpellDisplay() {
+  const pool = _getPool();
+  if (!pool) return {};
+  try {
+    const res = await pool.query(`SELECT item_id, description, duration_sec, race_locked FROM spell_display`);
+    const out = {};
+    for (const row of res.rows) out[row.item_id] = row;
+    return out;
+  } catch (err) {
+    console.error('[sentinel-db] getSpellDisplay failed:', err.message);
+    return {};
+  }
+}
+
+module.exports = { awardPoints, grantItem, getOwnedItems, removeItem, setArtifactEffect, getSpellDisplay };
