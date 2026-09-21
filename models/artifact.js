@@ -39,7 +39,17 @@ const artifactWindowSchema = new mongoose.Schema({
   items:       [artifactWindowItemSchema],
 });
 
-const ArtifactPool   = mongoose.models.ArtifactPool   || mongoose.model('ArtifactPool', artifactPoolSchema);
-const ArtifactWindow = mongoose.models.ArtifactWindow || mongoose.model('ArtifactWindow', artifactWindowSchema);
+// Single-doc override so an admin can force the shop open outside its normal
+// Fri-Sun schedule (.artifact forceopen) — spawn it "anytime I please" per
+// direct request. When active and not expired, getWindow() returns this
+// instead of the computed weekly window.
+const artifactOverrideSchema = new mongoose.Schema({
+  key:    { type: String, default: 'singleton', unique: true },
+  endsAt: { type: Date, required: true },
+});
 
-module.exports = { ArtifactPool, ArtifactWindow };
+const ArtifactPool     = mongoose.models.ArtifactPool     || mongoose.model('ArtifactPool', artifactPoolSchema);
+const ArtifactWindow   = mongoose.models.ArtifactWindow   || mongoose.model('ArtifactWindow', artifactWindowSchema);
+const ArtifactOverride = mongoose.models.ArtifactOverride || mongoose.model('ArtifactOverride', artifactOverrideSchema);
+
+module.exports = { ArtifactPool, ArtifactWindow, ArtifactOverride };

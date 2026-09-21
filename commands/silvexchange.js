@@ -177,6 +177,17 @@ async function poolList({ message }) {
   });
 }
 
+// Exchange is always open (no schedule gate like Artifact Shop), so "spawn
+// anytime" here means forcing a fresh rotation right now instead of waiting
+// for the next UTC midnight reset.
+async function forceReroll({ message }) {
+  if (!await requireWhitelisted(message)) return;
+  const dayKey = todayKey();
+  await SilvExchangeDay.deleteOne({ dayKey });
+  await getOrCreateDay(dayKey);
+  return message.channel.send('Silv Exchange re-rolled — use `.silvexchange` to see the new stock.');
+}
+
 module.exports = {
   name: 'silvexchange',
   aliases: ['exchange', 'sx'],
@@ -187,6 +198,7 @@ module.exports = {
     if (sub === 'add')    return poolAdd({ message, args: args.slice(1) });
     if (sub === 'remove') return poolRemove({ message, args: args.slice(1) });
     if (sub === 'pool')   return poolList({ message });
+    if (sub === 'reroll') return forceReroll({ message });
     return showExchange({ message });
   },
 };

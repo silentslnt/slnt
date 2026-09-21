@@ -24,7 +24,16 @@ function _lastWindowStart(now) {
   return start;
 }
 
-function getWindow(now = new Date()) {
+async function getWindow(now = new Date()) {
+  const { ArtifactOverride } = require('../models/artifact');
+  const override = await ArtifactOverride.findOne({ key: 'singleton' });
+  if (override && override.endsAt > now) {
+    // Forced open (.artifact forceopen) — windowStart pinned to the override
+    // doc's creation time via its Mongo _id timestamp so getOrCreateWindow's
+    // per-window item rotation still works normally, just outside schedule.
+    return { start: override._id.getTimestamp(), end: override.endsAt, isOpen: true, nextStart: null, forced: true };
+  }
+
   const start = _lastWindowStart(now);
   // End = the Sunday 23:59:59.999 UTC that follows `start` (start+2 days, end of that day)
   const end = new Date(start.getTime() + 2 * DAY_MS);
@@ -33,7 +42,7 @@ function getWindow(now = new Date()) {
   // start + 7 days is always the NEXT Friday 18:00 UTC after `start`, whether
   // we're currently inside that window or past it waiting for the next one.
   const nextStart = new Date(start.getTime() + 7 * DAY_MS);
-  return { start, end, isOpen, nextStart };
+  return { start, end, isOpen, nextStart, forced: false };
 }
 
 module.exports = { getWindow };

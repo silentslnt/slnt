@@ -4,7 +4,7 @@
 // a tiny fixed stock server-wide, first-come-first-served, gone once sold out
 // until the pool rolls again next window.
 const { EmbedBuilder } = require('discord.js');
-const { ArtifactPool, ArtifactWindow } = require('../models/artifact');
+const { ArtifactPool, ArtifactWindow, ArtifactOverride } = require('../models/artifact');
 const { getWindow } = require('../utils/artifactSchedule');
 const { requireWhitelisted } = require('../utils/permissions');
 const { grantItem } = require('../utils/sentinelDb');
@@ -59,7 +59,7 @@ async function getOrCreateWindow(win) {
 }
 
 async function showShop({ message }) {
-  const win = getWindow();
+  const win = await getWindow();
 
   if (!win.isOpen) {
     const eta = fmtCountdown(win.nextStart.getTime() - Date.now());
@@ -104,7 +104,7 @@ async function showShop({ message }) {
 }
 
 async function buyArtifact({ message, args, userData, saveUserData, logAdminAction }) {
-  const win = getWindow();
+  const win = await getWindow();
   if (!win.isOpen) return message.channel.send('The Artifact Shop is closed right now.');
 
   const itemId = (args[0] || '').toLowerCase();
@@ -217,16 +217,37 @@ async function poolList({ message }) {
   });
 }
 
+// ── Force open/close (whitelist — bypasses the Fri-Sun schedule entirely) ──
+
+async function forceOpen({ message, args }) {
+  if (!await requireWhitelisted(message)) return;
+  const hours = Number(args[0]) || 24;
+  await ArtifactOverride.findOneAndUpdate(
+    { key: 'singleton' },
+    { key: 'singleton', endsAt: new Date(Date.now() + hours * 60 * 60 * 1000) },
+    { upsert: true },
+  );
+  return message.channel.send(`Artifact Shop force-opened for **${hours}h**, bypassing the normal schedule. Use \`.artifact\` to see what rolled in.`);
+}
+
+async function forceClose({ message }) {
+  if (!await requireWhitelisted(message)) return;
+  await ArtifactOverride.deleteOne({ key: 'singleton' });
+  return message.channel.send('Artifact Shop override cleared — back to the normal Fri-Sun schedule.');
+}
+
 module.exports = {
   name: 'artifact',
   aliases: ['artifacts', 'ashop'],
   description: 'Rare weekly Artifact Shop. `.artifact` to view, `.artifact buy <id>` to purchase.',
   async execute({ message, args, userData, saveUserData, logAdminAction }) {
     const sub = (args[0] || '').toLowerCase();
-    if (sub === 'buy')    return buyArtifact({ message, args: args.slice(1), userData, saveUserData, logAdminAction });
-    if (sub === 'add')    return poolAdd({ message, args: args.slice(1) });
-    if (sub === 'remove') return poolRemove({ message, args: args.slice(1) });
-    if (sub === 'pool')   return poolList({ message });
+    if (sub === 'buy')       return buyArtifact({ message, args: args.slice(1), userData, saveUserData, logAdminAction });
+    if (sub === 'add')       return poolAdd({ message, args: args.slice(1) });
+    if (sub === 'remove')    return poolRemove({ message, args: args.slice(1) });
+    if (sub === 'pool')      return poolList({ message });
+    if (sub === 'forceopen') return forceOpen({ message, args: args.slice(1) });
+    if (sub === 'forceclose') return forceClose({ message });
     return showShop({ message });
   },
 };
