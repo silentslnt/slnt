@@ -11,6 +11,7 @@ const { ArtifactPool, ArtifactWindow, ArtifactOverride } = require('../models/ar
 const { getWindow } = require('../utils/artifactSchedule');
 const { requireWhitelisted, isWhitelisted } = require('../utils/permissions');
 const { grantItem, getOwnedItems, removeItem, setArtifactEffect } = require('../utils/sentinelDb');
+const { sendShopUI } = require('../utils/shopUI');
 
 const SILV_KEY  = 'Silv token';
 const SILV_ICON = '<:zzsilvtoken:1486364646796431427>';
@@ -153,7 +154,7 @@ async function getOrCreateWindow(win) {
   return doc;
 }
 
-async function showShop({ message }) {
+async function showShop({ message, getUserData, saveSpecificUserData, logAdminAction }) {
   const win = await getWindow();
 
   if (!win.isOpen) {
@@ -175,60 +176,69 @@ async function showShop({ message }) {
   }
 
   const doc = await getOrCreateWindow(win);
-  const closesIn = fmtCountdown(win.end.getTime() - Date.now());
-
   if (!doc.items.length) {
     return message.channel.send('The Artifact Shop is open, but nothing rolled into stock this week — check back next window.');
   }
+  const closesIn = fmtCountdown(win.end.getTime() - Date.now());
 
-  let desc = `> Closes in **${closesIn}**.\n\n`;
-  for (const it of doc.items) {
-    const soldOut = it.remainingStock <= 0;
-    const tierTag = it.tier === 'relic' ? ' `RELIC — 1 max`' : it.tier === 'charm' ? ' `CHARM`' : '';
-    desc += `> ${it.emoji} **${it.name}** \`${it.itemId}\`${tierTag}${soldOut ? ' — **SOLD OUT**' : ''}\n`;
-    desc += `> ${it.description}\n`;
-    desc += `> ${it.priceSilv.toLocaleString()} ${SILV_ICON} · ${soldOut ? '0' : it.remainingStock}/${it.totalStock} left\n\n`;
-  }
-  desc += `-# Buy: \`.artifact buy <id>\` — first-come-first-served, no reservations.`;
-
-  return message.channel.send({
-    embeds: [
-      new EmbedBuilder().setColor(BLACK).setTitle('ARTIFACT SHOP').setDescription(desc)
-        .setFooter({ text: message.guild?.name || 'Shiro' }),
-    ],
+  await sendShopUI({
+    message,
+    title: 'ARTIFACT SHOP',
+    headerDesc: `> Closes in **${closesIn}**. First-come-first-served, no reservations.`,
+    footerName: message.guild?.name,
+    buyPrefix: 'art_shop_buy_',
+    getItems: async () => {
+      const win2 = await getWindow();
+      const fresh = await getOrCreateWindow(win2);
+      return fresh.items.map(it => {
+        const soldOut = it.remainingStock <= 0;
+        const tierTag = it.tier === 'relic' ? 'RELIC — 1 max' : it.tier === 'charm' ? 'CHARM' : null;
+        return {
+          id: it.itemId, name: it.name, emoji: it.emoji, soldOut,
+          valueText: `${it.description}${tierTag ? `\n\`${tierTag}\`` : ''}\n` +
+            `**${it.priceSilv.toLocaleString()}** ${SILV_ICON} · ${soldOut ? '0' : it.remainingStock}/${it.totalStock} left`,
+        };
+      });
+    },
+    onBuy: (interaction, itemId) => performArtifactPurchase({
+      userId: interaction.user.id, username: interaction.user.username,
+      guild: interaction.guild, itemId, getUserData, saveSpecificUserData, logAdminAction,
+    }),
   });
 }
 
-async function buyArtifact({ message, args, userData, saveUserData, logAdminAction }) {
+// Shared purchase core — same split as shop.js's performPurchase: always
+// re-fetches the buyer's current SILV via getUserData rather than trusting
+// a snapshot from when the shop menu opened, and returns a result object
+// instead of sending anything itself so both the button and the text
+// `.artifact buy <id>` path render it their own way.
+async function performArtifactPurchase({ userId, username, guild, itemId, getUserData, saveSpecificUserData, logAdminAction }) {
   const win = await getWindow();
-  if (!win.isOpen) return message.channel.send('The Artifact Shop is closed right now.');
-
-  const itemId = (args[0] || '').toLowerCase();
-  if (!itemId) return message.channel.send('Usage: `.artifact buy <id>`');
+  if (!win.isOpen) return { ok: false, message: 'The Artifact Shop is closed right now.' };
 
   const doc = await getOrCreateWindow(win);
   const item = doc.items.find(i => i.itemId === itemId);
-  if (!item) return message.channel.send("That artifact isn't in stock this window.");
+  if (!item) return { ok: false, message: "That artifact isn't in stock this window." };
 
-  if (item.tier === 'relic' && message.guild) {
+  if (item.tier === 'relic' && guild) {
     const relicPool = await ArtifactPool.find({ tier: 'relic' });
     const relicIds = new Set(relicPool.map(a => a.itemId));
-    const owned = await getOwnedItems(message.guild.id, message.author.id);
+    const owned = await getOwnedItems(guild.id, userId);
     const ownsOtherRelic = owned.some(i => relicIds.has(i) && i !== itemId);
     if (ownsOtherRelic) {
-      return message.channel.send(
-        `${item.emoji} **${item.name}** is a **Relic** — only one may be carried at a time. ` +
-        `You already hold a different Relic; an admin can clear it with \`.artifact clearitem @user <id>\` if you want to swap.`
-      );
+      return {
+        ok: false,
+        message: `${item.emoji} **${item.name}** is a **Relic** — only one may be carried at a time. ` +
+          `You already hold a different Relic; an admin can clear it with \`.artifact clearitem @user <id>\` if you want to swap.`,
+      };
     }
   }
 
+  const userData = await getUserData(userId);
   userData.inventory = userData.inventory || {};
   const silv = userData.inventory[SILV_KEY] || 0;
   if (silv < item.priceSilv) {
-    return message.channel.send(
-      `Not enough SILV. Need **${item.priceSilv.toLocaleString()}**, you have **${silv.toLocaleString()}**.`
-    );
+    return { ok: false, message: `Not enough SILV. Need **${item.priceSilv.toLocaleString()}**, you have **${silv.toLocaleString()}**.` };
   }
 
   // Atomic, race-safe stock reservation — the $gt: 0 guard means two concurrent
@@ -239,42 +249,54 @@ async function buyArtifact({ message, args, userData, saveUserData, logAdminActi
     { $inc: { 'items.$.remainingStock': -1 } },
   );
   if (!reserved) {
-    return message.channel.send(`${item.emoji} **${item.name}** just sold out — you were too slow.`);
+    return { ok: false, message: `${item.emoji} **${item.name}** just sold out — you were too slow.` };
   }
 
   userData.inventory[SILV_KEY] = silv - item.priceSilv;
-  await saveUserData({ inventory: userData.inventory });
+  await saveSpecificUserData(userId, { inventory: userData.inventory });
 
-  if (item.roleId && message.guild) {
+  if (item.roleId && guild) {
     try {
-      const role = await message.guild.roles.fetch(item.roleId);
-      if (role) await message.member.roles.add(role, `Artifact Shop: ${item.name}`);
+      const role = await guild.roles.fetch(item.roleId);
+      const member = await guild.members.fetch(userId);
+      if (role) await member.roles.add(role, `Artifact Shop: ${item.name}`);
     } catch { /* role grant is best-effort, purchase already succeeded */ }
   }
   // Always land in user_inventory (not just when there's no role) so Sentinel's
   // races.py ARTIFACT_EFFECTS lookup can see it — a relic/charm with BOTH a role
   // and a passive effect needs both grants, not one or the other.
-  if (message.guild && (item.effectKind || !item.roleId)) {
-    await grantItem(message.guild.id, message.author.id, itemId, 1);
+  if (guild && (item.effectKind || !item.roleId)) {
+    await grantItem(guild.id, userId, itemId, 1);
   }
 
   await logAdminAction(
-    message.author.id, message.author.username, 'artifact', 'Artifact Purchase',
+    userId, username, 'artifact', 'Artifact Purchase',
     null, null, `${item.name} for ${item.priceSilv} SILV`
   );
 
+  return {
+    ok: true,
+    title: 'ARTIFACT ACQUIRED',
+    description: `${item.emoji} **${item.name}** is yours. ${item.description} SILV spent: **${item.priceSilv.toLocaleString()}**.`,
+  };
+}
+
+// Thin wrapper for the text `.artifact buy <id>` path — same core as the
+// shop UI's Buy button.
+async function buyArtifact({ message, args, getUserData, saveSpecificUserData, logAdminAction }) {
+  const itemId = (args[0] || '').toLowerCase();
+  if (!itemId) return message.channel.send('Usage: `.artifact buy <id>`');
+
+  const result = await performArtifactPurchase({
+    userId: message.author.id, username: message.author.username,
+    guild: message.guild, itemId, getUserData, saveSpecificUserData, logAdminAction,
+  });
+
+  if (!result.ok) return message.channel.send(result.message);
   return message.channel.send({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(BLACK)
-        .setTitle('ARTIFACT ACQUIRED')
-        .setDescription(
-          `> ${item.emoji} **${item.name}** is yours.\n\n` +
-          `> ${item.description}\n\n` +
-          `-# ${SILV_ICON} SILV spent: **${item.priceSilv.toLocaleString()}**`
-        )
-        .setFooter({ text: message.guild?.name || 'Shiro' }),
-    ],
+    embeds: [new EmbedBuilder().setColor(BLACK).setTitle(result.title)
+      .setDescription(`> ${result.description}`)
+      .setFooter({ text: message.guild?.name || 'Shiro' })],
   });
 }
 
@@ -603,10 +625,10 @@ module.exports = {
   name: 'artifact',
   aliases: ['artifacts', 'ashop'],
   description: 'Rare weekly Artifact Shop. `.artifact` to view, `.artifact buy <id>` to purchase, `.artifact panel` for the admin dashboard.',
-  async execute({ message, args, userData, saveUserData, logAdminAction }) {
+  async execute({ message, args, getUserData, saveSpecificUserData, logAdminAction }) {
     await ensureSeeded();
     const sub = (args[0] || '').toLowerCase();
-    if (sub === 'buy')       return buyArtifact({ message, args: args.slice(1), userData, saveUserData, logAdminAction });
+    if (sub === 'buy')       return buyArtifact({ message, args: args.slice(1), getUserData, saveSpecificUserData, logAdminAction });
     if (sub === 'add')       return poolAdd({ message, args: args.slice(1) });
     if (sub === 'remove')    return poolRemove({ message, args: args.slice(1) });
     if (sub === 'pool')      return poolList({ message });
@@ -615,6 +637,6 @@ module.exports = {
     if (sub === 'forceopen') return forceOpen({ message, args: args.slice(1) });
     if (sub === 'forceclose') return forceClose({ message });
     if (sub === 'panel')     return panel({ message });
-    return showShop({ message });
+    return showShop({ message, getUserData, saveSpecificUserData, logAdminAction });
   },
 };
