@@ -24,6 +24,15 @@ const userSchema = new mongoose.Schema({
   // ── Missions ─────────────────────────────────────────────────────────────
   missionDate:     { type: String, default: '' },
   missionProgress: { type: Object, default: {} },
+  // missionBaseline was missing here — Mongoose's default strict mode
+  // silently dropped it on every save (the EXACT bug the comment above
+  // User's require() in index.js warns about, just a smaller-scale repeat
+  // of it for this one field). syncMissionProgress() needs this to persist
+  // to know "today's starting stat value" — without it, every command call
+  // saw an empty missionBaseline coming back from Mongo and re-baselined
+  // against the CURRENT stat value each time, so progress always read as
+  // 0 no matter how much a player had actually done that day.
+  missionBaseline: { type: Object, default: {} },
 
   // ── Inventory ─────────────────────────────────────────────────────────────
   // Keys: 'Common', 'Uncommon', 'Rare', 'Legendary', 'Mythical', 'Prismatic'
