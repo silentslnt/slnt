@@ -244,7 +244,43 @@ client.once('clientReady', async () => {
 
   setInterval(refreshLiveLeaderboards, 5 * 60 * 1000);
   refreshLiveLeaderboards();
+
+  setInterval(claimPendingSilvTokens, 60 * 1000);
+  claimPendingSilvTokens();
 });
+
+// Sentinel's ,fish command can drop an astronomically rare SILV token — it
+// can't credit SILV itself (Mongo-side currency, lives here), so it writes
+// an unclaimed row to pending_silv_grants and this poller delivers it: credit
+// the balance, DM the winner, done. Runs every minute; SKIP LOCKED on the
+// Sentinel side means this is safe even if it somehow overlaps a slow run.
+async function claimPendingSilvTokens() {
+  const { claimPendingSilvGrants } = require('./utils/sentinelDb.js');
+  let grants;
+  try {
+    grants = await claimPendingSilvGrants();
+  } catch (err) {
+    console.error('Failed to claim pending SILV grants:', err.message);
+    return;
+  }
+  for (const grant of grants) {
+    try {
+      await updateUserBalance(grant.userId, grant.amount);
+      const user = await client.users.fetch(grant.userId).catch(() => null);
+      if (user) {
+        await user.send({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0x000000)
+              .setDescription(`✨ **A SILV Token you caught fishing has been claimed.**\n\n> +\`${grant.amount.toLocaleString()}\` SILV added to your balance.`),
+          ],
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.error(`Failed to credit SILV token grant to ${grant.userId}:`, err.message);
+    }
+  }
+}
 
 // Refreshes every .livelb board on a 5-minute interval. Reads fresh from
 // Mongo each tick (not an in-memory cache) so whatever .livelb last set is

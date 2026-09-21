@@ -152,4 +152,41 @@ async function getSpellDisplay() {
   }
 }
 
-module.exports = { awardPoints, grantItem, getOwnedItems, removeItem, setArtifactEffect, getSpellDisplay };
+/**
+ * Read every unclaimed row from Sentinel's pending_silv_grants table (races.py
+ * ,fish's astronomically-rare SILV token drop — Sentinel can't credit SILV
+ * itself since that's Shiro's Mongo-side currency, so it just records the
+ * grant and leaves it for this side to actually deliver) and mark them
+ * claimed in the same pass. Returns [] if unreachable or empty — callers
+ * must not retry claiming, since marking-claimed already happened here.
+ */
+async function claimPendingSilvGrants() {
+  const pool = _getPool();
+  if (!pool) return [];
+  const client = await pool.connect().catch(() => null);
+  if (!client) return [];
+  try {
+    await client.query('BEGIN');
+    const res = await client.query(
+      `SELECT id, user_id, amount, source FROM pending_silv_grants
+       WHERE claimed = FALSE FOR UPDATE SKIP LOCKED`,
+    );
+    if (res.rows.length) {
+      const ids = res.rows.map(r => r.id);
+      await client.query(
+        `UPDATE pending_silv_grants SET claimed = TRUE WHERE id = ANY($1::bigint[])`,
+        [ids],
+      );
+    }
+    await client.query('COMMIT');
+    return res.rows.map(r => ({ userId: r.user_id.toString(), amount: r.amount, source: r.source }));
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[sentinel-db] claimPendingSilvGrants failed:', err.message);
+    return [];
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { awardPoints, grantItem, getOwnedItems, removeItem, setArtifactEffect, getSpellDisplay, claimPendingSilvGrants };
