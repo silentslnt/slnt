@@ -8,6 +8,7 @@ const { activateEssence } = require('../utils/essences');
 const { trackStat, checkAchievements } = require('../utils/achievements');
 const { awardPoints, grantItem, getSpellDisplay } = require('../utils/sentinelDb');
 const { isAdmin } = require('../utils/permissions');
+const { sendShopUI } = require('../utils/shopUI');
 
 const SILV_KEY  = 'Silv token';
 const SILV_ICON = '<:zzsilvtoken:1486364646796431427>';
@@ -70,20 +71,22 @@ module.exports = {
   adminOnly: false,
   description: 'Browse and buy from the shop. `.sh [section] [buy <id>]`',
 
-  async execute({ message, args, userData, saveUserData, logAdminAction }) {
+  async execute({ message, args, userData, saveUserData, getUserData, saveSpecificUserData, logAdminAction }) {
     const sub = (args[0] || '').toLowerCase();
+    const ctx = { message, getUserData, saveSpecificUserData, logAdminAction };
 
     // Admin-only dynamic item management
     if (sub === 'add')    return isAdmin(message) ? handleAddItem({ message, args: args.slice(1) }) : deny(message);
     if (sub === 'remove') return isAdmin(message) ? handleRemoveItem({ message, args: args.slice(1) }) : deny(message);
 
-    if (sub === 'buy')    return handleBuy({ message, args: args.slice(1), userData, saveUserData, logAdminAction });
-    if (sub === 'essences' || sub === 'ess') return showEssenceShop({ message });
-    if (sub === 'bundles' || sub === 'bun')  return showBundleShop({ message });
-    if (sub === 'cosmetics' || sub === 'cos') return showCosmeticsShop({ message });
-    if (sub === 'utility' || sub === 'util') return showUtilityShop({ message });
-    if (sub === 'aether' || sub === 'ae')    return showAetherShop({ message, userData });
-    if (sub === 'spells' || sub === 'sp')    return showSpellShop({ message });
+    if (sub === 'buy')    return handleBuy({ message, args: args.slice(1), getUserData, saveSpecificUserData, logAdminAction });
+    if (sub === 'essences' || sub === 'ess') return showEssenceShop(ctx);
+    if (sub === 'bundles' || sub === 'bun')  return showBundleShop(ctx);
+    if (sub === 'cosmetics' || sub === 'cos') return showCosmeticsShop(ctx);
+    if (sub === 'utility' || sub === 'util') return showUtilityShop(ctx);
+    if (sub === 'aether' || sub === 'ae')    return showAetherShop(ctx);
+    if (sub === 'spells' || sub === 'sp')    return showSpellShop(ctx);
+    if (sub === 'items')  return showDynamicShop(ctx);
     return showMainShop({ message });
   },
 };
@@ -113,232 +116,273 @@ async function showMainShop({ message }) {
   return message.channel.send({ embeds: [embed] });
 }
 
-async function showEssenceShop({ message }) {
-  let desc = '__**Essences**__\n> Temporary buffs, activated immediately on purchase.\n\n';
-  for (const [id, e] of Object.entries(ESSENCES)) {
-    desc += `> ${e.emoji} **${e.name}** \`${id}\`\n`;
-    desc += `> ${e.effect} · ${formatMs(e.durationMs)} · ${e.silvCost} ${SILV_ICON}\n\n`;
-  }
-  desc += `-# Buy: \`.sh buy <essence_id>\` — e.g. \`.sh buy luck_essence\``;
-  return message.channel.send({
-    embeds: [new EmbedBuilder().setColor(BLACK).setTitle('ESSENCE SHOP').setDescription(desc).setFooter(footer(message))],
+// Each buyPrefix below must be unique across every shop section so button
+// customIds from two different open shop menus (e.g. essences + spells open
+// in the same channel at once) never collide with each other.
+
+async function showEssenceShop({ message, getUserData, saveSpecificUserData, logAdminAction }) {
+  await sendShopUI({
+    message,
+    title: 'ESSENCE SHOP',
+    headerDesc: '> Temporary buffs, activated immediately on purchase.',
+    footerName: message.guild?.name,
+    buyPrefix: 'sh_ess_',
+    getItems: async () => Object.entries(ESSENCES).map(([id, e]) => ({
+      id, name: e.name, emoji: e.emoji,
+      valueText: `${e.effect}\n**${e.silvCost}** ${SILV_ICON} · ${formatMs(e.durationMs)}`,
+    })),
+    onBuy: (interaction, itemId) => performPurchase({
+      userId: interaction.user.id, username: interaction.user.username,
+      guild: interaction.guild, itemId, amount: 1,
+      getUserData, saveSpecificUserData, logAdminAction,
+    }),
   });
 }
 
-async function showBundleShop({ message }) {
-  let desc = '__**Bundles**__\n> Value packs, priced in SILV.\n\n';
-  for (const [id, b] of Object.entries(BUNDLES)) {
-    desc += `> ${PRESENT} **${b.name}** \`${id}\`\n`;
-    desc += `> ${b.description} · ${b.silvCost} ${SILV_ICON}\n\n`;
-  }
-  desc += `-# Buy: \`.sh buy <bundle_id>\` — e.g. \`.sh buy lucky_bundle\``;
-  return message.channel.send({
-    embeds: [new EmbedBuilder().setColor(BLACK).setTitle('BUNDLE SHOP').setDescription(desc).setFooter(footer(message))],
+async function showBundleShop({ message, getUserData, saveSpecificUserData, logAdminAction }) {
+  await sendShopUI({
+    message,
+    title: 'BUNDLE SHOP',
+    headerDesc: '> Value packs, priced in SILV.',
+    footerName: message.guild?.name,
+    buyPrefix: 'sh_bun_',
+    getItems: async () => Object.entries(BUNDLES).map(([id, b]) => ({
+      id, name: b.name, emoji: PRESENT,
+      valueText: `${b.description}\n**${b.silvCost}** ${SILV_ICON}`,
+    })),
+    onBuy: (interaction, itemId) => performPurchase({
+      userId: interaction.user.id, username: interaction.user.username,
+      guild: interaction.guild, itemId, amount: 1,
+      getUserData, saveSpecificUserData, logAdminAction,
+    }),
   });
 }
 
-async function showCosmeticsShop({ message }) {
-  let titleLines = '';
-  for (const [id, t] of Object.entries(TITLES)) {
-    titleLines += `> **${t.name}** \`${id}\` — ${t.silvCost} ${SILV_ICON}\n`;
-  }
-  let badgeLines = '';
-  for (const [id, b] of Object.entries(BADGES)) {
-    badgeLines += `> **${b.name}** \`${id}\` — ${b.silvCost} ${SILV_ICON}\n`;
-  }
-  const desc =
-    `__**Titles**__ *(shown on \`.profile\`)*\n${titleLines}\n` +
-    `__**Badges**__ *(shown on \`.profile\`)*\n${badgeLines}\n` +
-    `-# Buy: \`.sh buy <item_id>\` · Equip: \`.profile customize title <id>\``;
-  return message.channel.send({
-    embeds: [new EmbedBuilder().setColor(BLACK).setTitle('COSMETICS SHOP').setDescription(desc).setFooter(footer(message))],
+async function showCosmeticsShop({ message, getUserData, saveSpecificUserData, logAdminAction }) {
+  await sendShopUI({
+    message,
+    title: 'COSMETICS SHOP',
+    headerDesc: '> Titles & badges — shown on `.profile`. Equip a title with `.profile customize title <id>`.',
+    footerName: message.guild?.name,
+    buyPrefix: 'sh_cos_',
+    getItems: async () => {
+      const userData = await getUserData(message.author.id);
+      const ownedTitles = userData.unlockedTitles || [];
+      const ownedBadges = userData.unlockedBadges || [];
+      const titleItems = Object.entries(TITLES).map(([id, t]) => ({
+        id, name: t.name, emoji: '🪪',
+        valueText: `Title · **${t.silvCost}** ${SILV_ICON}${ownedTitles.includes(id) ? '\n*(owned)*' : ''}`,
+        disabled: ownedTitles.includes(id),
+      }));
+      const badgeItems = Object.entries(BADGES).map(([id, b]) => ({
+        id, name: b.name, emoji: '🎖',
+        valueText: `Badge · **${b.silvCost}** ${SILV_ICON}${ownedBadges.includes(id) ? '\n*(owned)*' : ''}`,
+        disabled: ownedBadges.includes(id),
+      }));
+      return [...titleItems, ...badgeItems];
+    },
+    onBuy: (interaction, itemId) => performPurchase({
+      userId: interaction.user.id, username: interaction.user.username,
+      guild: interaction.guild, itemId, amount: 1,
+      getUserData, saveSpecificUserData, logAdminAction,
+    }),
   });
 }
 
-async function showUtilityShop({ message }) {
-  let desc = '__**Utility Items**__\n> Consumables, priced in coins.\n\n';
-  for (const [id, item] of Object.entries(UTILITY_ITEMS)) {
-    desc += `> ${item.emoji} **${item.name}** \`${id}\`\n`;
-    desc += `> ${item.description} · ${item.coinCost.toLocaleString()} coins\n\n`;
-  }
-  desc += `-# Buy: \`.sh buy <item_id>\` — e.g. \`.sh buy insurance_slip\``;
-  return message.channel.send({
-    embeds: [new EmbedBuilder().setColor(BLACK).setTitle('UTILITY SHOP').setDescription(desc).setFooter(footer(message))],
+async function showUtilityShop({ message, getUserData, saveSpecificUserData, logAdminAction }) {
+  await sendShopUI({
+    message,
+    title: 'UTILITY SHOP',
+    headerDesc: '> Consumables, priced in coins.',
+    footerName: message.guild?.name,
+    buyPrefix: 'sh_util_',
+    getItems: async () => Object.entries(UTILITY_ITEMS).map(([id, item]) => ({
+      id, name: item.name, emoji: item.emoji,
+      valueText: `${item.description}\n**${item.coinCost.toLocaleString()}** coins`,
+    })),
+    onBuy: (interaction, itemId) => performPurchase({
+      userId: interaction.user.id, username: interaction.user.username,
+      guild: interaction.guild, itemId, amount: 1,
+      getUserData, saveSpecificUserData, logAdminAction,
+    }),
   });
 }
 
-async function showAetherShop({ message, userData }) {
-  const coins = userData.balance || 0;
-  let desc = `__**Aether Exchange**__\n> Convert Shiro coins into Aether — your community standing in SILV.\n\n> Your coins: **${coins.toLocaleString()}**\n\n`;
-  for (const [id, p] of Object.entries(AETHER_PACKS)) {
-    const bonus = id === 'aether_100' ? '' : id === 'aether_500' ? ' *(+12% value)*' : id === 'aether_1000' ? ' *(+25% value)*' : ' *(+30% value)*';
-    desc += `> ${WHITESWIRL} **${p.label}** \`${id}\`\n> ${p.coins.toLocaleString()} coins${bonus}\n\n`;
-  }
-  desc += `-# Buy: \`.sh buy <pack_id>\``;
-  return message.channel.send({
-    embeds: [new EmbedBuilder().setColor(BLACK).setTitle('AETHER EXCHANGE').setDescription(desc).setFooter(footer(message))],
+async function showAetherShop({ message, getUserData, saveSpecificUserData, logAdminAction }) {
+  await sendShopUI({
+    message,
+    title: 'AETHER EXCHANGE',
+    headerDesc: '> Convert Shiro coins into Aether — your community standing in SILV.',
+    footerName: message.guild?.name,
+    buyPrefix: 'sh_ae_',
+    getItems: async () => Object.entries(AETHER_PACKS).map(([id, p]) => {
+      const bonus = id === 'aether_100' ? '' : id === 'aether_500' ? ' (+12% value)' : id === 'aether_1000' ? ' (+25% value)' : ' (+30% value)';
+      return {
+        id, name: p.label, emoji: WHITESWIRL,
+        valueText: `**${p.coins.toLocaleString()}** coins${bonus}`,
+      };
+    }),
+    onBuy: (interaction, itemId) => performPurchase({
+      userId: interaction.user.id, username: interaction.user.username,
+      guild: interaction.guild, itemId, amount: 1,
+      getUserData, saveSpecificUserData, logAdminAction,
+    }),
   });
 }
 
-async function showSpellShop({ message }) {
-  // Live text from Sentinel (spells.py is the actual mechanical source of
-  // truth) takes priority — falls back to the static SPELLS[id].effect copy
-  // only if Sentinel's DB is unreachable, so the shop never breaks, but
-  // normally can't go stale the way the mute/jail and cloak-duration text
-  // did before this existed. silvCost/name/emoji stay Shiro-owned (its own
-  // economy/display choices, not Sentinel's mechanics).
-  const live = await getSpellDisplay();
-  let desc = '__**Spells**__\n> Cast in SILV with `,cast <spell> @member` — delivered to your Sentinel inventory instantly.\n\n';
-  for (const [id, s] of Object.entries(SPELLS)) {
-    const effectText = live[id]?.description || s.effect;
-    desc += `> ${s.emoji} **${s.name}** \`${id}\`${s.raceLocked ? ` *(${s.raceLocked}s only)*` : ''}\n`;
-    desc += `> ${effectText} · ${s.silvCost} ${SILV_ICON}\n\n`;
-  }
-  desc += `-# Buy: \`.sh buy <spell_id>\` — e.g. \`.sh buy shield\``;
-  return message.channel.send({
-    embeds: [new EmbedBuilder().setColor(BLACK).setTitle('SPELL SHOP').setDescription(desc).setFooter(footer(message))],
+async function showSpellShop({ message, getUserData, saveSpecificUserData, logAdminAction }) {
+  await sendShopUI({
+    message,
+    title: 'SPELL SHOP',
+    headerDesc: '> Cast in SILV with `,cast <spell> @member` — delivered to your Sentinel inventory instantly.',
+    footerName: message.guild?.name,
+    buyPrefix: 'sh_sp_',
+    getItems: async () => {
+      // Live text from Sentinel (spells.py is the actual mechanical source of
+      // truth) takes priority — falls back to the static SPELLS[id].effect
+      // copy only if Sentinel's DB is unreachable, so the shop never breaks.
+      const live = await getSpellDisplay();
+      return Object.entries(SPELLS).map(([id, s]) => ({
+        id, name: s.name, emoji: s.emoji,
+        valueText: `${live[id]?.description || s.effect}${s.raceLocked ? `\n*(${s.raceLocked}s only)*` : ''}\n**${s.silvCost}** ${SILV_ICON}`,
+      }));
+    },
+    onBuy: (interaction, itemId) => performPurchase({
+      userId: interaction.user.id, username: interaction.user.username,
+      guild: interaction.guild, itemId, amount: 1,
+      getUserData, saveSpecificUserData, logAdminAction,
+    }),
+  });
+}
+
+// Admin-added dynamic items (`.sh add`) — same button UI, `.sh items` to view.
+async function showDynamicShop({ message, getUserData, saveSpecificUserData, logAdminAction }) {
+  await sendShopUI({
+    message,
+    title: 'SHOP — ADMIN ITEMS',
+    headerDesc: '> Items added by server admins.',
+    footerName: message.guild?.name,
+    buyPrefix: 'sh_dyn_',
+    getItems: async () => {
+      const dbItems = await ShopItem.find({});
+      return dbItems.map(item => ({
+        id: item.itemId, name: item.name,
+        valueText: item.priceSilv > 0
+          ? `**${item.priceSilv.toLocaleString()}** ${SILV_ICON}`
+          : `**${item.priceCoins.toLocaleString()}** coins`,
+      }));
+    },
+    onBuy: (interaction, itemId) => performPurchase({
+      userId: interaction.user.id, username: interaction.user.username,
+      guild: interaction.guild, itemId, amount: 1,
+      getUserData, saveSpecificUserData, logAdminAction,
+    }),
   });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  BUY HANDLER
 // ─────────────────────────────────────────────────────────────────────────────
-async function handleBuy({ message, args, userData, saveUserData, logAdminAction }) {
-  const itemId = (args[0] || '').toLowerCase();
-  let amount = Math.max(1, parseInt(args[1] || '1', 10) || 1);
-  if (!itemId) return message.channel.send('Usage: `.sh buy <item_id> [amount]`');
-
+// Shared purchase core — used by BOTH the text `.sh buy <id>` path and every
+// button's onBuy callback, so the two paths can never drift out of sync with
+// each other the way handleBuy's old copy-pasted-per-section logic risked.
+// Always re-fetches the buyer's CURRENT data via getUserData rather than
+// trusting a userData snapshot from when a shop menu was first opened — a
+// button can sit for up to the full collector window before being clicked.
+// Returns { ok, title, description } on success or { ok: false, message } on
+// failure — never sends anything itself, callers decide how to present it.
+async function performPurchase({ userId, username, guild, itemId, amount, getUserData, saveSpecificUserData, logAdminAction }) {
+  amount = Math.max(1, amount || 1);
+  const userData = await getUserData(userId);
   userData.inventory = userData.inventory || {};
-  const silv         = userData.inventory[SILV_KEY] || 0;
-  const coins        = userData.balance || 0;
+  const silv  = userData.inventory[SILV_KEY] || 0;
+  const coins = userData.balance || 0;
+  const saveUserData = (data) => saveSpecificUserData(userId, data);
 
   // ── AETHER PACK ──────────────────────────────────────────────────────────
   if (AETHER_PACKS[itemId]) {
     const pack = AETHER_PACKS[itemId];
-    if (coins < pack.coins) return notEnoughCoins(message, pack.coins, coins);
-    if (!message.guild) return message.channel.send(`${XMARK} Must be used in a server.`);
+    if (coins < pack.coins) return notEnoughResult(pack.coins, coins, 'coins');
+    if (!guild) return { ok: false, message: 'Must be used in a server.' };
 
     userData.balance = coins - pack.coins;
     await saveUserData({ balance: userData.balance });
-    await awardPoints(message.guild.id, message.author.id, pack.pts);
-    await logAdminAction(message.author.id, message.author.username, 'shop', 'Aether Purchase', null, null, `${pack.coins.toLocaleString()} coins → ${pack.pts.toLocaleString()} Aether`);
-
-    return message.channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(BLACK)
-          .setTitle('AETHER ACQUIRED')
-          .setDescription(
-            `> ${WHITESWIRL} **+${pack.pts.toLocaleString()} Aether** added to your community standing\n\n` +
-            `> Coins spent: **${pack.coins.toLocaleString()}**\n` +
-            `> Balance: **${userData.balance.toLocaleString()}**\n\n` +
-            `-# Check your Aether with \`,pts\` in SILV.`
-          )
-          .setFooter(footer(message)),
-      ],
-    });
+    await awardPoints(guild.id, userId, pack.pts);
+    await logAdminAction(userId, username, 'shop', 'Aether Purchase', null, null, `${pack.coins.toLocaleString()} coins → ${pack.pts.toLocaleString()} Aether`);
+    return { ok: true, title: 'AETHER ACQUIRED', description: `+**${pack.pts.toLocaleString()}** Aether. Coins spent: **${pack.coins.toLocaleString()}**. Balance: **${userData.balance.toLocaleString()}**.` };
   }
 
   // ── SPELL (delivered to Sentinel's user_inventory, cast with `,cast`) ────
   if (SPELLS[itemId]) {
-    if (!message.guild) return message.channel.send(`${XMARK} Must be used in a server.`);
+    if (!guild) return { ok: false, message: 'Must be used in a server.' };
     const s    = SPELLS[itemId];
     const cost = s.silvCost * amount;
-    if (silv < cost) return notEnoughSilv(message, cost, silv);
+    if (silv < cost) return notEnoughResult(cost, silv, 'SILV');
 
     userData.inventory[SILV_KEY] = silv - cost;
     userData.stats = userData.stats || {};
     userData.stats.silvSpent = (userData.stats.silvSpent || 0) + cost;
     await saveUserData({ inventory: userData.inventory, stats: userData.stats });
-    await trackStat(userData, 'silvSpent', 0, { message, saveUserData });
-    await grantItem(message.guild.id, message.author.id, itemId, amount);
-    await logAdminAction(message.author.id, message.author.username, 'shop', 'Spell Purchase', null, null, `${amount}× ${s.name} for ${cost} SILV`);
-
-    return message.channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(BLACK)
-          .setTitle('SPELL DELIVERED')
-          .setDescription(
-            `> ${s.emoji} **${amount}× ${s.name}** added to your SILV inventory\n\n` +
-            `> ${SILV_ICON} SILV spent: **${cost}**\n\n` +
-            `-# Use \`,cast ${itemId} @member\` in SILV to cast it.`
-          )
-          .setFooter(footer(message)),
-      ],
-    });
+    await trackStat(userData, 'silvSpent', 0, { saveUserData });
+    await grantItem(guild.id, userId, itemId, amount);
+    await logAdminAction(userId, username, 'shop', 'Spell Purchase', null, null, `${amount}× ${s.name} for ${cost} SILV`);
+    return { ok: true, title: 'SPELL DELIVERED', description: `**${amount}× ${s.name}** added to your SILV inventory. SILV spent: **${cost}**. Use \`,cast ${itemId} @member\` in SILV to cast it.` };
   }
 
   // ── ESSENCE ──────────────────────────────────────────────────────────────
   if (ESSENCES[itemId]) {
     const e    = ESSENCES[itemId];
     const cost = e.silvCost * amount;
-    if (silv < cost) return notEnoughSilv(message, cost, silv);
+    if (silv < cost) return notEnoughResult(cost, silv, 'SILV');
 
     userData.inventory[SILV_KEY] = silv - cost;
     for (let i = 0; i < amount; i++) activateEssence(userData, itemId);
-
     userData.stats = userData.stats || {};
     userData.stats.silvSpent = (userData.stats.silvSpent || 0) + cost;
-
     await saveUserData({ inventory: userData.inventory, activeEssences: userData.activeEssences, stats: userData.stats });
-    await trackStat(userData, 'silvSpent', 0, { message, saveUserData });
-
-    return message.channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(BLACK)
-          .setTitle('ESSENCE ACTIVATED')
-          .setDescription(
-            `> ${e.emoji} **${e.name}** is now active\n\n` +
-            `> ${e.effect} · ${formatMs(e.durationMs)}\n\n` +
-            `-# ${SILV_KEY}: ${silv} → **${userData.inventory[SILV_KEY]}**`
-          )
-          .setFooter(footer(message)),
-      ],
-    });
+    await trackStat(userData, 'silvSpent', 0, { saveUserData });
+    return { ok: true, title: 'ESSENCE ACTIVATED', description: `**${e.name}** is now active — ${e.effect} for ${formatMs(e.durationMs)}. SILV: ${silv} → **${userData.inventory[SILV_KEY]}**.` };
   }
 
   // ── TITLE ────────────────────────────────────────────────────────────────
   if (TITLES[itemId]) {
     const t    = TITLES[itemId];
     const cost = t.silvCost;
-    if (silv < cost) return notEnoughSilv(message, cost, silv);
+    if (silv < cost) return notEnoughResult(cost, silv, 'SILV');
     userData.unlockedTitles = userData.unlockedTitles || [];
     if (userData.unlockedTitles.includes(itemId)) {
-      return message.channel.send(`${XMARK} You already own this title! Equip it with \`.profile customize title ${itemId}\``);
+      return { ok: false, message: 'You already own this title! Equip it with `.profile customize title <id>`.' };
     }
     userData.inventory[SILV_KEY] = silv - cost;
     userData.unlockedTitles.push(itemId);
     userData.stats = userData.stats || {};
     userData.stats.silvSpent = (userData.stats.silvSpent || 0) + cost;
     await saveUserData({ inventory: userData.inventory, unlockedTitles: userData.unlockedTitles, stats: userData.stats });
-    return bought(message, `**${t.name}** title`, `Equip with: \`.profile customize title ${itemId}\``);
+    return { ok: true, title: 'PURCHASE COMPLETE', description: `**${t.name}** title purchased. Equip with: \`.profile customize title ${itemId}\`.` };
   }
 
   // ── BADGE ────────────────────────────────────────────────────────────────
   if (BADGES[itemId]) {
     const b    = BADGES[itemId];
     const cost = b.silvCost;
-    if (silv < cost) return notEnoughSilv(message, cost, silv);
+    if (silv < cost) return notEnoughResult(cost, silv, 'SILV');
     userData.unlockedBadges = userData.unlockedBadges || [];
     if (userData.unlockedBadges.includes(itemId)) {
-      return message.channel.send(`${XMARK} You already own this badge!`);
+      return { ok: false, message: 'You already own this badge!' };
     }
     userData.inventory[SILV_KEY] = silv - cost;
     userData.unlockedBadges.push(itemId);
     await saveUserData({ inventory: userData.inventory, unlockedBadges: userData.unlockedBadges });
-    await checkAchievements(userData, { message, saveUserData });
-    return bought(message, `**${b.name}** badge`, 'Now visible on your `.profile`!');
+    await checkAchievements(userData, { saveUserData });
+    return { ok: true, title: 'PURCHASE COMPLETE', description: `**${b.name}** badge purchased — now visible on your \`.profile\`!` };
   }
 
   // ── BUNDLE ────────────────────────────────────────────────────────────────
   if (BUNDLES[itemId]) {
     const bun = BUNDLES[itemId];
-    if (silv < bun.silvCost) return notEnoughSilv(message, bun.silvCost, silv);
+    if (silv < bun.silvCost) return notEnoughResult(bun.silvCost, silv, 'SILV');
     userData.inventory[SILV_KEY] = silv - bun.silvCost;
     const c = bun.contents;
-    // Apply contents
     if (c.coins)    { userData.balance = (userData.balance || 0) + c.coins; userData.totalEarned = (userData.totalEarned || 0) + c.coins; }
     if (c.keys)     { for (const [rarity, qty] of Object.entries(c.keys)) userData.inventory[rarity] = (userData.inventory[rarity] || 0) + qty; }
     if (c.badges)   { userData.unlockedBadges = userData.unlockedBadges || []; for (const b of c.badges) if (!userData.unlockedBadges.includes(b)) userData.unlockedBadges.push(b); }
@@ -346,52 +390,52 @@ async function handleBuy({ message, args, userData, saveUserData, logAdminAction
     userData.stats = userData.stats || {};
     userData.stats.silvSpent = (userData.stats.silvSpent || 0) + bun.silvCost;
     await saveUserData({ balance: userData.balance, inventory: userData.inventory, unlockedBadges: userData.unlockedBadges, activeEssences: userData.activeEssences, totalEarned: userData.totalEarned, stats: userData.stats });
-    await trackStat(userData, 'silvSpent', 0, { message, saveUserData });
-    return bought(message, `**${bun.name}**`, bun.description);
+    await trackStat(userData, 'silvSpent', 0, { saveUserData });
+    return { ok: true, title: 'PURCHASE COMPLETE', description: `**${bun.name}** purchased. ${bun.description}` };
   }
 
   // ── UTILITY ITEM ─────────────────────────────────────────────────────────
   if (UTILITY_ITEMS[itemId]) {
     const u      = UTILITY_ITEMS[itemId];
     const total  = u.coinCost * amount;
-    if (coins < total) return notEnoughCoins(message, total, coins);
+    if (coins < total) return notEnoughResult(total, coins, 'coins');
     userData.balance           = coins - total;
     const invKey               = u.name;
     userData.inventory[invKey] = (userData.inventory[invKey] || 0) + amount;
     await saveUserData({ balance: userData.balance, inventory: userData.inventory });
-    return bought(message, `**${amount}× ${u.emoji} ${u.name}**`, `Spent: ${total.toLocaleString()} coins`);
+    return { ok: true, title: 'PURCHASE COMPLETE', description: `**${amount}× ${u.name}** purchased. Spent: ${total.toLocaleString()} coins.` };
   }
 
   // ── DB ITEM ────────────────────────────────────────────────────────────────
   try {
     const item = await ShopItem.findOne({ itemId });
-    if (!item) return message.channel.send(`${XMARK} No item with ID \`${itemId}\` found. Check \`.sh\` for available items.`);
+    if (!item) return { ok: false, message: `No item with ID \`${itemId}\` found. Check \`.sh\` for available items.` };
 
     if (item.roleId && amount > 1) amount = 1;
     const totalCoins = item.priceCoins * amount;
     const totalSilv  = item.priceSilv  * amount;
 
     if (item.priceSilv > 0) {
-      if (silv < totalSilv) return notEnoughSilv(message, totalSilv, silv);
+      if (silv < totalSilv) return notEnoughResult(totalSilv, silv, 'SILV');
       userData.inventory[SILV_KEY] = silv - totalSilv;
     } else if (item.priceCoins > 0) {
-      if (coins < totalCoins) return notEnoughCoins(message, totalCoins, coins);
+      if (coins < totalCoins) return notEnoughResult(totalCoins, coins, 'coins');
       userData.balance = coins - totalCoins;
     } else {
-      return message.channel.send('This item has no price configured.');
+      return { ok: false, message: 'This item has no price configured.' };
     }
 
     userData.inventory[item.name] = (userData.inventory[item.name] || 0) + amount;
 
-    if (item.roleId) {
+    if (item.roleId && guild) {
       try {
-        const member = await message.guild.members.fetch(message.author.id);
-        const role   = message.guild.roles.cache.get(item.roleId);
+        const member = await guild.members.fetch(userId);
+        const role   = guild.roles.cache.get(item.roleId);
         if (role && !member.roles.cache.has(item.roleId)) {
           await member.roles.add(role);
           if (item.roleDays > 0) {
             setTimeout(async () => {
-              const fresh = await message.guild.members.fetch(message.author.id).catch(() => null);
+              const fresh = await guild.members.fetch(userId).catch(() => null);
               if (fresh?.roles.cache.has(item.roleId)) await fresh.roles.remove(role).catch(() => {});
             }, item.roleDays * 86400_000);
           }
@@ -400,12 +444,34 @@ async function handleBuy({ message, args, userData, saveUserData, logAdminAction
     }
 
     await saveUserData({ balance: userData.balance, inventory: userData.inventory });
-    return bought(message, `**${amount}× ${item.name}**`, `Owned: ${userData.inventory[item.name]}×`);
+    return { ok: true, title: 'PURCHASE COMPLETE', description: `**${amount}× ${item.name}** purchased. Owned: ${userData.inventory[item.name]}×.` };
 
   } catch (err) {
     console.error('Shop buy error:', err);
-    return message.channel.send(`${XMARK} Something went wrong.`);
+    return { ok: false, message: 'Something went wrong.' };
   }
+}
+
+function notEnoughResult(need, have, currency) {
+  return { ok: false, message: `Not enough ${currency}. Need **${need.toLocaleString()}**, you have **${have.toLocaleString()}** (missing **${(need - have).toLocaleString()}**).` };
+}
+
+// Thin wrapper for the text `.sh buy <id> [amount]` path — same core as every
+// button, just fetches fresh data and renders the result as a channel embed
+// instead of an ephemeral reply.
+async function handleBuy({ message, args, getUserData, saveSpecificUserData, logAdminAction }) {
+  const itemId = (args[0] || '').toLowerCase();
+  const amount = Math.max(1, parseInt(args[1] || '1', 10) || 1);
+  if (!itemId) return message.channel.send('Usage: `.sh buy <item_id> [amount]`');
+
+  const result = await performPurchase({
+    userId: message.author.id, username: message.author.username,
+    guild: message.guild, itemId, amount,
+    getUserData, saveSpecificUserData, logAdminAction,
+  });
+
+  if (!result.ok) return message.channel.send(result.message);
+  return bought(message, result.title, result.description);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -451,26 +517,10 @@ function deny(message) {
   return message.channel.send({ embeds: [new EmbedBuilder().setColor(BLACK).setTitle('ACCESS DENIED').setDescription(`${XMARK} Admins only.`).setFooter(footer(message))] });
 }
 
-function notEnoughSilv(message, need, have) {
+function bought(message, title, description) {
   return message.channel.send({
-    embeds: [new EmbedBuilder().setColor(BLACK).setTitle('NOT ENOUGH SILV')
-      .setDescription(`> Need: **${need}** ${SILV_ICON}\n> Have: **${have}** ${SILV_ICON}\n> Missing: **${need - have}** ${SILV_ICON}`)
-      .setFooter(footer(message))],
-  });
-}
-
-function notEnoughCoins(message, need, have) {
-  return message.channel.send({
-    embeds: [new EmbedBuilder().setColor(BLACK).setTitle('NOT ENOUGH COINS')
-      .setDescription(`> Need: **${need.toLocaleString()}** coins\n> Have: **${have.toLocaleString()}** coins\n> Missing: **${(need - have).toLocaleString()}** coins`)
-      .setFooter(footer(message))],
-  });
-}
-
-function bought(message, itemStr, note) {
-  return message.channel.send({
-    embeds: [new EmbedBuilder().setColor(BLACK).setTitle('PURCHASE COMPLETE')
-      .setDescription(`> ${CHECK} You purchased ${itemStr}\n\n> ${note}`)
+    embeds: [new EmbedBuilder().setColor(BLACK).setTitle(title)
+      .setDescription(`> ${CHECK} ${description}`)
       .setFooter(footer(message))],
   });
 }
