@@ -200,17 +200,17 @@ module.exports = {
   // (SPELL_DURATIONS / SPELL_DESCRIPTIONS). Race-locked spells are
   // sellable to anyone — Sentinel enforces the race check at cast time.
   SPELLS: {
-    mute:       { name: 'Mute',       emoji: '💀', effect: 'Silence a member for 30 minutes.',                    silvCost: 2 },
-    jail:       { name: 'Jail',       emoji: '💀', effect: 'Jail a member for 1 hour.',                           silvCost: 3 },
+    mute:       { name: 'Mute',       emoji: '💀', effect: 'Silence a member for 30 min + 20-30 Willpower damage.', silvCost: 2 },
+    jail:       { name: 'Jail',       emoji: '💀', effect: 'Silence a member for 1h + 30-40 Willpower damage.',     silvCost: 3 },
     curse:      { name: 'Curse',      emoji: '🌀', effect: "Freeze a member's XP gains for 2 hours.",             silvCost: 3 },
     drain:      { name: 'Drain',      emoji: '🌀', effect: "Steal 5–15% of a member's Aether instantly.",         silvCost: 6 },
     shield:     { name: 'Shield',     emoji: '🪽', effect: 'Block the next spell cast against you (4h).',         silvCost: 4 },
-    cloak:      { name: 'Cloak',      emoji: '🪽', effect: 'Untargetable by rob/duel/drain for 2 hours.',         silvCost: 4 },
+    cloak:      { name: 'Cloak',      emoji: '🪽', effect: 'Untargetable by rob/duel/drain for 6 hours.',         silvCost: 4 },
     purify:     { name: 'Purify',     emoji: '🪽', effect: 'Remove all active debuffs from yourself instantly.',  silvCost: 5 },
-    smite:      { name: 'Smite',      emoji: '🪽', effect: 'Angel only — 45m mute + drain 10% of their RP.',      silvCost: 8, raceLocked: 'angel' },
+    smite:      { name: 'Smite',      emoji: '🪽', effect: 'Angel only — 45m Silence + Willpower damage + drain 10% of their RP.',      silvCost: 8, raceLocked: 'angel' },
     corruption: { name: 'Corruption', emoji: '😈', effect: 'Demon only — 3h curse + drain 8% of their Aether.',   silvCost: 8, raceLocked: 'demon' },
-    wrath:      { name: 'Wrath',      emoji: '🐉', effect: 'Dragon only — 1h jail + drain 12% of their Aether.',  silvCost: 8, raceLocked: 'dragon' },
-    bloodlust:  { name: 'Bloodlust',  emoji: '🩸', effect: 'Vampire only — 1h mute + drain 10% of their Aether.', silvCost: 8, raceLocked: 'vampire' },
+    wrath:      { name: 'Wrath',      emoji: '🐉', effect: 'Dragon only — 1h Silence + Willpower damage + drain 12% of their Aether.',  silvCost: 8, raceLocked: 'dragon' },
+    bloodlust:  { name: 'Bloodlust',  emoji: '🩸', effect: 'Vampire only — 1h Silence + Willpower damage + drain 10% of their Aether.', silvCost: 8, raceLocked: 'vampire' },
   },
 
   // ── SHOP UTILITY ITEMS (coin-priced) ───────────────────────

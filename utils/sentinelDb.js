@@ -66,4 +66,43 @@ async function grantItem(guildId, userId, item, qty = 1) {
   }
 }
 
-module.exports = { awardPoints, grantItem };
+/**
+ * Read a user's owned item ids (quantity > 0) from Sentinel's user_inventory.
+ * Returns [] if SENTINEL_DB_URL is not set or DB is unreachable — callers
+ * must treat that as "unknown", not "owns nothing", where it matters.
+ */
+async function getOwnedItems(guildId, userId) {
+  const pool = _getPool();
+  if (!pool) return [];
+  try {
+    const res = await pool.query(
+      `SELECT item FROM user_inventory WHERE guild_id=$1 AND user_id=$2 AND quantity > 0`,
+      [guildId.toString(), userId.toString()],
+    );
+    return res.rows.map(r => r.item);
+  } catch (err) {
+    console.error('[sentinel-db] getOwnedItems failed:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Remove an item entirely from a user's Sentinel inventory (admin tool —
+ * e.g. clearing a Relic so a player can swap to a different one).
+ */
+async function removeItem(guildId, userId, item) {
+  const pool = _getPool();
+  if (!pool) return false;
+  try {
+    await pool.query(
+      `DELETE FROM user_inventory WHERE guild_id=$1 AND user_id=$2 AND item=$3`,
+      [guildId.toString(), userId.toString(), item],
+    );
+    return true;
+  } catch (err) {
+    console.error('[sentinel-db] removeItem failed:', err.message);
+    return false;
+  }
+}
+
+module.exports = { awardPoints, grantItem, getOwnedItems, removeItem };
