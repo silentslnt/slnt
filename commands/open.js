@@ -1,4 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
+const { trackStat, checkAchievements } = require('../utils/achievements');
 
 const validRarities = [
   'Prismatic', 'Mythical', 'Legendary', 'Rare', 'Uncommon', 'Common'
@@ -74,6 +75,14 @@ module.exports = {
         inventory: userData.inventory,
         balance: userData.balance
       });
+
+      // 'Open 3 keys' mission/achievement was permanently stuck at 0 — this
+      // stat was declared in the schema and referenced by the mission pool
+      // and keys_opened_50 achievement, but nothing ever actually
+      // incremented it. Track real keys opened, not just successful casts.
+      await trackStat(userData, 'keysOpened', amount);
+      await saveUserData({ stats: userData.stats });
+      await checkAchievements(userData, { message, saveUserData });
 
       const embed = new EmbedBuilder()
         .setColor(0x000000)

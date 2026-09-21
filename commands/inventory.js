@@ -1,4 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
+const { trackStat, checkAchievements } = require('../utils/achievements');
 
 // Map item names to emojis
 const itemEmojis = {
@@ -14,8 +15,15 @@ const itemEmojis = {
 module.exports = {
   name:'inventory',
   description: 'Check your inventory',
-  async execute({ message, userData }) {
+  async execute({ message, userData, saveUserData }) {
     const inventory = userData.inventory || {};
+
+    // 'Check your inventory' mission was permanently stuck at 0 — this
+    // command never tracked the invChecked stat at all despite it being
+    // declared in the schema and referenced by the mission pool.
+    await trackStat(userData, 'invChecked', 1);
+    await saveUserData({ stats: userData.stats });
+    await checkAchievements(userData, { message, saveUserData });
 
     if (Object.keys(inventory).length === 0) {
       return message.channel.send('Your inventory is empty.');

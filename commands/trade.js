@@ -401,26 +401,37 @@ module.exports = {
         }
       }
 
+      // 'Complete a trade' mission/achievement was permanently stuck at 0 —
+      // this stat was declared in the schema and referenced by the mission
+      // pool and trade_1 achievement, but nothing ever incremented it for
+      // either side of a completed trade.
+      initiatorData.stats = initiatorData.stats || {};
+      initiatorData.stats.trades = (initiatorData.stats.trades || 0) + 1;
+      partnerData.stats = partnerData.stats || {};
+      partnerData.stats.trades = (partnerData.stats.trades || 0) + 1;
+
       // Save to database - use appropriate method based on who is calling
       if (userId === trade.initiator) {
         await saveUserData({
           balance: initiatorData.balance,
           inventory: initiatorData.inventory,
+          stats: initiatorData.stats,
         });
         const User = require('mongoose').model('User');
         await User.updateOne(
           { userId: trade.partner },
-          { $set: { balance: partnerData.balance, inventory: partnerData.inventory } }
+          { $set: { balance: partnerData.balance, inventory: partnerData.inventory, stats: partnerData.stats } }
         );
       } else {
         await saveUserData({
           balance: partnerData.balance,
           inventory: partnerData.inventory,
+          stats: partnerData.stats,
         });
         const User = require('mongoose').model('User');
         await User.updateOne(
           { userId: trade.initiator },
-          { $set: { balance: initiatorData.balance, inventory: initiatorData.inventory } }
+          { $set: { balance: initiatorData.balance, inventory: initiatorData.inventory, stats: initiatorData.stats } }
         );
       }
 
