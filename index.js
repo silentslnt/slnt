@@ -663,9 +663,16 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  if (!message.content.startsWith(currentPrefix)) return;
+  // Fixed 'shiro ' secondary prefix works everywhere regardless of the
+  // configured currentPrefix (Dank Memer-style, direct request) — additive,
+  // the configured prefix keeps working exactly as before.
+  const SECONDARY_PREFIXES = ['shiro ', 'Shiro ', 'SHIRO '];
+  const matchedPrefix = message.content.startsWith(currentPrefix)
+    ? currentPrefix
+    : SECONDARY_PREFIXES.find(p => message.content.startsWith(p));
+  if (!matchedPrefix) return;
 
-  const args = message.content.slice(currentPrefix.length).trim().split(/ +/);
+  const args = message.content.slice(matchedPrefix.length).trim().split(/ +/);
   const commandName = args.shift().toLowerCase();
   const command = client.commands.get(commandName);
   if (!command) return;
