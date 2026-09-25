@@ -4,17 +4,15 @@
 // "browse everything for the race game" entry point, mixing Aether-priced
 // and SILV-priced sections in one place since a player doesn't care which
 // currency backs an item, they just want to see what's buyable.
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ContainerBuilder, TextDisplayBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const { POINTS_ITEMS, SPELLS } = require('../utils/config');
-const { getPoints, spendPoints, addFishingBait, grantItem, setArtifactEffect, getOwnedItems, getSpellDisplay, awardPoints } = require('../utils/sentinelDb');
+const { getPoints, spendPoints, grantItem, setArtifactEffect, getOwnedItems, getSpellDisplay, awardPoints } = require('../utils/sentinelDb');
 const { trackStat } = require('../utils/achievements');
 const { sendShopUI } = require('../utils/shopUI');
 
 const SILV_KEY  = 'Silv token';
 const SILV_ICON = '<:zzsilvtoken:1486364646796431427>';
 const BLACK     = 0x000000;
-const BAIT_COST_AETHER = 15; // must match Sentinel's races.py BAIT_COST_AETHER
-const BAIT_BUY_MAX     = 50;
 
 let pointsItemsSeeded = false;
 // Points Items reuse the exact effect-kind system artifacts use — races.py's
@@ -33,59 +31,30 @@ function footer(message) {
   return { text: message.guild?.name || 'Shiro' };
 }
 
-async function showHub({ message }) {
-  const embed = new EmbedBuilder()
-    .setColor(BLACK)
-    .setTitle('STORE')
-    .setDescription(
-      `> The SILV race system's shop hub — everything in one place.\n\n` +
-      `__**Sections**__\n` +
-      `> 🪱 \`.store bait\` — fishing bait (Aether)\n` +
-      `> 🪢 \`.store items\` — Points Items, small stat trinkets (Aether)\n` +
-      `> ✨ \`.store spells\` — race spells (SILV)\n` +
-      `> ⚔ \`.store gear\` — premium Sentinel gear (SILV)\n\n` +
-      `-# Separate from \`.sh\` (Shiro's own shop) and \`.artifact\` (the rare weekly SILV shop).`
-    )
-    .setFooter(footer(message));
-  return message.channel.send({ embeds: [embed] });
-}
-
-async function showBait({ message }) {
-  if (!message.guild) return message.channel.send('Must be used in a server.');
-  const guild = message.guild;
-
-  await sendShopUI({
-    message,
-    title: 'BAIT',
-    headerDesc: `> 🪱 **Fishing Bait** — required for Sentinel's \`,fish\`, consumed 1 per cast.`,
-    footerName: guild.name,
-    buyPrefix: 'store_bait_',
-    getItems: async () => {
-      const aether = await getPoints(guild.id, message.author.id);
-      return [1, 10, 25, BAIT_BUY_MAX].map(qty => ({
-        id: String(qty), name: `${qty} Bait`, emoji: '🪱',
-        valueText: `**${(qty * BAIT_COST_AETHER).toLocaleString()}** Aether\n*(you have ${aether.toLocaleString()} Aether)*`,
-      }));
-    },
-    onBuy: async (interaction, itemId) => {
-      const qty = Number(itemId);
-      const cost = qty * BAIT_COST_AETHER;
-      const spent = await spendPoints(guild.id, interaction.user.id, cost);
-      if (!spent) {
-        const have = await getPoints(guild.id, interaction.user.id);
-        return { ok: false, message: `Not enough Aether. Need **${cost.toLocaleString()}**, you have **${have.toLocaleString()}**.` };
-      }
-      const granted = await addFishingBait(guild.id, interaction.user.id, qty);
-      if (!granted) {
-        // Refund — the deduction happened but delivery failed (most likely:
-        // no member_races row yet, i.e. never picked a race in Sentinel).
-        // spendPoints can't be used for this (its own guard no-ops on a
-        // non-positive amount) — awardPoints is the correct add-back path.
-        await awardPoints(guild.id, interaction.user.id, cost);
-        return { ok: false, message: "Couldn't deliver bait — choose a race in Sentinel first with `,race angel|demon|dragon|vampire|human`. Aether refunded." };
-      }
-      return { ok: true, message: `Bought **${qty}** bait for **${cost.toLocaleString()}** Aether.` };
-    },
+async function showHub(ctx) {
+  const { message } = ctx;
+  const c = new ContainerBuilder().setAccentColor(BLACK)
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `## 🏪 SILV Store\nEverything Shiro sells for Sentinel's RPG. Pick a section:\n\n` +
+      `> 🪢 **Items** — Points trinkets (Aether)\n` +
+      `> ✨ **Spells** — cast with Sentinel's \`,cast\` (SILV)\n` +
+      `> ⚔ **Gear** — premium Sentinel gear (SILV)\n\n` +
+      `-# Bait, potions & regular gear: Sentinel's \`,shop\` · SILV ↔ coins/Aether: \`.convert\``))
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('storehub_items').setLabel('Items').setEmoji('🪢').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('storehub_spells').setLabel('Spells').setEmoji('✨').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('storehub_gear').setLabel('Gear').setEmoji('⚔').setStyle(ButtonStyle.Primary),
+    ))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${message.guild?.name || 'Shiro'}`));
+  const msg = await message.channel.send({ components: [c], flags: MessageFlags.IsComponentsV2 });
+  const col = msg.createMessageComponentCollector({ time: 120_000 });
+  col.on('collect', async (i) => {
+    if (i.user.id !== message.author.id) return i.reply({ content: 'Open your own with `.store`.', ephemeral: true });
+    await i.deferUpdate();
+    const which = i.customId.split('_')[1];
+    if (which === 'items') return showPointsItems(ctx);
+    if (which === 'spells') return showSpells(ctx);
+    return showGear(ctx);
   });
 }
 
@@ -219,13 +188,13 @@ async function showGear({ message, getUserData, saveSpecificUserData, logAdminAc
 module.exports = {
   name: 'store',
   aliases: ['market'],
-  description: 'SILV race-system shop hub — bait, Points Items, spells, gear. `.store [bait|items|spells|gear]`',
+  description: 'SILV race-system shop hub — Points Items, spells, gear. `.store [items|spells|gear]`',
   async execute({ message, args, getUserData, saveSpecificUserData, logAdminAction }) {
     const sub = (args[0] || '').toLowerCase();
-    if (sub === 'bait')             return showBait({ message });
+    if (sub === 'bait')             return message.channel.send('Bait is sold in Sentinel\'s shop now — `,shop` → Fishing.');
     if (sub === 'gear')             return showGear({ message, getUserData, saveSpecificUserData, logAdminAction });
     if (sub === 'items' || sub === 'points') return showPointsItems({ message });
     if (sub === 'spells')           return showSpells({ message, getUserData, saveSpecificUserData, logAdminAction });
-    return showHub({ message });
+    return showHub({ message, getUserData, saveSpecificUserData, logAdminAction });
   },
 };

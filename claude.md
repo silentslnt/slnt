@@ -194,3 +194,10 @@ Railway auto-redeploys in ~60-90 seconds.
 - Delete stray pakage.json typo file from repo
 ## Sentinel RPG bridge — premium gear (`.store gear`)
 `commands/store.js` `PREMIUM_GEAR` sells Sentinel gear for SILV, delivered to Sentinel's `user_inventory` as `gear_<id>` via `grantItem` (SILV refunded if delivery fails). ids must match Sentinel's `cogs/gear.py` `GEAR`. Sentinel also now has `,exchange` (Aether → SILV via `pending_silv_grants`), closed by default — the owner opens it with Sentinel's `,shopset price silv_token <aether>`.
+
+## SILV conversion (`.convert`, commands/convert.js) — CV2 card
+- Coins → SILV: `COINS_PER_SILV` = 100,000 coins per SILV, `COIN_TO_SILV_DAILY_CAP` = 5/day (tracked on `userData.silvConvert`). `.rate` reads the same constant.
+- SILV → Aether: `AETHER_PER_SILV` = 10,000, one-way into Sentinel via `awardPoints` (now returns true/false; SILV is refunded on failure).
+- There is NO Aether → SILV path anywhere (SILV = 10 Robux).
+- `.store` is a CV2 hub (Items / Spells / Gear buttons). Bait was removed — it's sold in Sentinel's `,shop` → Fishing.
+- Note: `.sh aether` packs (5k coins → 100 Aether) are now worse value than coins → SILV → Aether (10 coins/Aether); adjust or remove them if you want one path.

@@ -28,9 +28,11 @@ function _getPool() {
  * Silent no-op if SENTINEL_DB_URL is not set or DB is unreachable.
  */
 async function awardPoints(guildId, userId, points) {
-  if (!points || points <= 0) return;
+  // Returns true on success so paid conversions can refund on failure;
+  // existing callers that ignore the return value are unaffected.
+  if (!points || points <= 0) return false;
   const pool = _getPool();
-  if (!pool) return;
+  if (!pool) return false;
   try {
     await pool.query(
       `INSERT INTO member_points (guild_id, user_id, points)
@@ -39,9 +41,11 @@ async function awardPoints(guildId, userId, points) {
        DO UPDATE SET points = member_points.points + EXCLUDED.points`,
       [guildId.toString(), userId.toString(), points],
     );
+    return true;
   } catch (err) {
     // Non-critical — never crash Shiro if Sentinel DB is down
     console.error('[sentinel-db] awardPoints failed:', err.message);
+    return false;
   }
 }
 

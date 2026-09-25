@@ -7,7 +7,7 @@ const ROBUX_TO_USD = 0.0125;
 
 module.exports = {
   name: 'rate',
-  aliases: ['convert', 'rates'],
+  aliases: ['rates'],
   adminOnly: false,
   description: 'Show SILV coin conversion rates. `.rate [amount]`',
 
@@ -16,14 +16,14 @@ module.exports = {
     const amount    = Math.max(1, Math.min(rawAmount, 1_000_000_000));
 
     // 1 SILV = 10 Robux (from config)
-    const COINS_PER_SILV = 10_000; // assumption: 10,000 coins = 1 SILV (shop economy)
+    const { COINS_PER_SILV } = require('./convert'); // single source of truth for the rate
 
     const silvValue  = amount / COINS_PER_SILV;
     const robuxValue = silvValue * SILV_PER_ROBUX;
     const usdValue   = robuxValue * ROBUX_TO_USD;
 
     const userCoins  = userData?.balance || 0;
-    const userSilv   = (userData?.inventory?.silv_token || 0);
+    const userSilv   = (userData?.inventory?.['Silv token'] || 0)  // real key — 'silv_token' was never set, so this always showed 0;
     const userRobux  = userSilv * SILV_PER_ROBUX;
 
     const embed = new EmbedBuilder()
@@ -31,7 +31,7 @@ module.exports = {
       .setTitle('˗ˏˋ 💎 SILV Rate ˎˊ˗')
       .setDescription(
         `**꒰ঌ Exchange Rates ໒꒱**\n\n` +
-        `\`10,000 coins\` = **1 SILV token**\n` +
+        `\`${COINS_PER_SILV.toLocaleString()} coins\` = **1 SILV token** (\`.convert\`)\n` +
         `\`1 SILV\` = **${SILV_PER_ROBUX} Robux**\n` +
         `\`1 Robux\` = **$${ROBUX_TO_USD} USD**\n` +
         `\`1 SILV\` = **$${(SILV_PER_ROBUX * ROBUX_TO_USD).toFixed(3)} USD**`
