@@ -27,6 +27,8 @@ function getResult(player, bot) {
   return 'lose';
 }
 
+const { casinoPayout } = require('../utils/houseEdge');
+
 module.exports = {
   name: 'rps',
   description: 'Play rock paper scissors and double your bet if you win! `.rps <amount|all> <r|p|s>`',
@@ -49,7 +51,8 @@ module.exports = {
     const botChoice = getBotChoice();
     const outcome = getResult(playerChoice, botChoice);
     const won = outcome === 'win';
-    const payout = won ? bet * 2 : (outcome === 'draw' ? bet : 0);
+    // House edge: a win pays 1.9×, a draw refunds 85% — ~92% return.
+    const payout = won ? casinoPayout(bet, bet * 1.9, userData) : (outcome === 'draw' ? Math.floor(bet * 0.85) : 0);
 
     let resultLine = `> You: ${choices[playerChoice]} **${playerChoice}**  ·  Bot: ${choices[botChoice]} **${botChoice}**\n\n`;
 
@@ -58,7 +61,7 @@ module.exports = {
       resultLine += `> **Victory!** Reward: **${payout.toLocaleString()}**`;
     } else if (outcome === 'draw') {
       userData.balance += payout;
-      resultLine += `> **Draw.** Bet refunded.`;
+      resultLine += `> **Draw.** 85% of your bet back (**${payout.toLocaleString()}**).`;
     } else {
       resultLine += `> **You lose.**`;
     }

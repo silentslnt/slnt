@@ -92,7 +92,7 @@ module.exports = {
     aura_essence: {
       name: 'Aura Essence',
       emoji: '💰',
-      effect: '2× coin gains',
+      effect: '2× coin gains (not casino payouts)',
       durationMs: 30 * 60 * 1000,        // 30 min
       silvCost: 3,
       type: 'coins',
@@ -100,7 +100,7 @@ module.exports = {
     frenzy_essence: {
       name: 'Frenzy Essence',
       emoji: '🎮',
-      effect: '2× minigame payouts',
+      effect: '2× minigame rewards · +5% winnings in casino games',
       durationMs: 30 * 60 * 1000,
       silvCost: 3,
       type: 'frenzy',
@@ -108,7 +108,7 @@ module.exports = {
     luck_essence: {
       name: 'Luck Essence',
       emoji: '🍀',
-      effect: '+15% gambling win chance',
+      effect: '+1% win chance in casino games',
       durationMs: 60 * 60 * 1000,
       silvCost: 5,
       type: 'luck',

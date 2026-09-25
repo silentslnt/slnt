@@ -422,7 +422,7 @@ const COOLDOWN_MS = 5000;
 const usersInFlight = new Set();
 const LOCK_EXEMPT_COMMANDS = new Set([
   'duel', 'blackjack', 'mines', 'minesweeper', 'trade',
-  'hl', 'hangman', 'wordscramble', 'guess', 'cipher',
+  'hangman', 'wordscramble', 'guess', 'cipher', 'crash', 'tower', 'cups',
 ]);
 
 // Load commands dynamically (exclude keydrop.js)

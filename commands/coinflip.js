@@ -9,6 +9,7 @@ const { addXP } = require('../utils/xp');
 const { trackStat, checkAchievements } = require('../utils/achievements');
 const { awardPoints } = require('../utils/sentinelDb');
 const { announceWin } = require('../utils/winAnnouncer');
+const { casinoPayout, casinoLuck } = require('../utils/houseEdge');
 
 const SPIN_FRAMES = ['🪙', '✨', '💫', '⭐', '🪙'];
 
@@ -47,7 +48,8 @@ module.exports = {
     const coinMult    = getMultiplier(userData, 'coins');
 
     // Luck essence shifts win probability slightly
-    const winChance   = 0.5 + luckBonus;
+    // House edge: 47% to win 2× (94% return); Luck adds 1 point, Frenzy 5% of profit.
+    const winChance   = 0.47 + casinoLuck(userData);
     const won         = Math.random() < winChance;
     const landedHeads = won ? pickedHeads : !pickedHeads;
     const result      = landedHeads ? 'Heads 🪙' : 'Tails 🌑';
@@ -75,7 +77,7 @@ module.exports = {
     userData.balance = (userData.balance || 0) - bet;
 
     if (won) {
-      payout           = Math.floor(bet * 2 * frenzyMult * coinMult);
+      payout           = casinoPayout(bet, bet * 2, userData);
       userData.balance += payout;
       userData.totalEarned = (userData.totalEarned || 0) + payout;
     }
@@ -130,8 +132,8 @@ module.exports = {
       )
       .setFooter({
         text: [
-          frenzyMult > 1 ? `${frenzyMult}× Frenzy` : '',
-          luckBonus   > 0 ? `+${luckBonus * 100}% luck` : '',
+          frenzyMult > 1 ? 'Frenzy +5% winnings' : '',
+          luckBonus   > 0 ? '+1% luck' : '',
           message.guild?.name || 'Shiro',
         ].filter(Boolean).join(' — '),
       });

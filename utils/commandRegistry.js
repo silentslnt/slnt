@@ -24,7 +24,12 @@ const COMMAND_ALIASES = {
   'roulette': 'roulette', 'rl': 'roulette',
   'dice': 'dice', 'd': 'dice',
   'rps': 'rps',
-  'highlow': 'hl', 'hl': 'hl',
+  'crash': 'crash', 'cr': 'crash',
+  'tower': 'tower', 'tw': 'tower',
+  'wheel': 'wheel', 'wh': 'wheel',
+  'cups': 'cups', 'shell': 'cups',
+  'overunder': 'overunder', 'ou': 'overunder',
+  'keno': 'keno',
   'minesweeper': 'minesweeper', 'mine': 'minesweeper',
 
   // Keys / Inventory

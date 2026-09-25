@@ -10,6 +10,7 @@ const { addXP } = require('../utils/xp');
 const { trackStat, checkAchievements } = require('../utils/achievements');
 const { awardPoints } = require('../utils/sentinelDb');
 const { announceWin } = require('../utils/winAnnouncer');
+const { casinoPayout, casinoLuck } = require('../utils/houseEdge');
 
 // ── Jackpot state (persisted per guild in MongoDB meta collection) ────────────
 const metaSchema = new mongoose.Schema({ key: { type: String, unique: true }, value: mongoose.Schema.Types.Mixed });
@@ -110,7 +111,7 @@ module.exports = {
     }
 
     // ── Spin reels ────────────────────────────────────────────────────────
-    const reels  = [spinReel(luckBonus), spinReel(luckBonus), spinReel(luckBonus)];
+    const reels  = [spinReel(casinoLuck(userData)), spinReel(casinoLuck(userData)), spinReel(casinoLuck(userData))];
     const row    = reels.map(r => r.s).join(' ');
 
     userData.balance = (userData.balance || 0) - bet;
@@ -131,12 +132,12 @@ module.exports = {
       resultText   = `**JACKPOT!** 💎💎💎 You won the **${payout.toLocaleString()}** coin jackpot!`;
       await resetJackpot();
     } else if (allMatch) {
-      payout     = Math.floor(bet * reels[0].mult * frenzyMult * coinMult);
-      resultText = `**TRIPLE ${reels[0].s}!** You win **${payout.toLocaleString()}** coins! (${reels[0].mult}× → ${frenzyMult > 1 ? frenzyMult + '× Frenzy' : 'base'})`;
+      payout     = casinoPayout(bet, bet * reels[0].mult, userData);
+      resultText = `**TRIPLE ${reels[0].s}!** You win **${payout.toLocaleString()}** coins! (${reels[0].mult}×${frenzyMult > 1 ? ' + Frenzy 5%' : ''})`;
     } else if (twoMatch) {
       const matchSym = reels[0].s === reels[1].s ? reels[0] : reels[1].s === reels[2].s ? reels[1] : reels[0];
       const twoMult  = matchSym.mult * 0.5;
-      payout         = Math.floor(bet * twoMult * frenzyMult * coinMult);
+      payout         = casinoPayout(bet, bet * twoMult, userData);
       resultText     = `**Double ${matchSym.s}!** You win **${payout.toLocaleString()}** coins! (${twoMult.toFixed(1)}×)`;
     } else {
       resultText = `No match. Better luck next time! \`${row}\``;
@@ -180,7 +181,7 @@ module.exports = {
       .setFooter({
         text: [
           '5% of every bet feeds the jackpot',
-          frenzyMult > 1 ? `${frenzyMult}× Frenzy active` : '',
+          frenzyMult > 1 ? 'Frenzy: +5% winnings' : '',
           message.guild?.name || 'Shiro',
         ].filter(Boolean).join(' — '),
       });

@@ -12,6 +12,7 @@ const { trackStat, checkAchievements } = require('../utils/achievements');
 const { awardPoints } = require('../utils/sentinelDb');
 const { randomFloat } = require('../utils/rng');
 const { announceWin } = require('../utils/winAnnouncer');
+const { casinoPayout, casinoLuck } = require('../utils/houseEdge');
 
 // European roulette wheel — 37 slots (0 green, 1-18 alternating red/black)
 const RED_NUMS   = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
@@ -26,8 +27,8 @@ function spinWheel() {
 const COLOR_EMOJI = { red: '🟥', black: '⬛', green: '🟩' };
 const COLOR_LABEL = { red: 'RED', black: 'BLACK', green: 'GREEN (0)' };
 
-// Payouts (return including stake): red/black 2x, number 36x, green 18x
-const PAYOUT = { red: 2, black: 2, number: 36, green: 18 };
+// Payouts (return including stake): red/black 2x, number 35x, green 17x
+const PAYOUT = { red: 2, black: 2, number: 35, green: 17 };  // 0–36 wheel: every bet returns < 100%
 
 module.exports = {
   name: 'roulette',
@@ -84,8 +85,8 @@ module.exports = {
 
     const baseMulti  = won ? PAYOUT[betType] : 0;
     const frenzy     = won ? getMultiplier(userData, 'frenzy') : 1;
-    const finalMulti = baseMulti * frenzy;
-    const payout     = Math.floor(bet * finalMulti);
+    const finalMulti = baseMulti;
+    const payout     = won ? casinoPayout(bet, bet * finalMulti, userData) : 0;
     const profit     = payout - bet;
 
     if (won) {
@@ -112,7 +113,7 @@ module.exports = {
     let statusLine;
     if (won) {
       statusLine = frenzy > 1
-        ? `${CHECK} **${resultEmoji} ${result.num} (${COLOR_LABEL[result.color]})** — ×${baseMulti} → ×${finalMulti} (Frenzy) **+${profit.toLocaleString()}** coins`
+        ? `${CHECK} **${resultEmoji} ${result.num} (${COLOR_LABEL[result.color]})** — ×${baseMulti} + Frenzy 5% **+${profit.toLocaleString()}** coins`
         : `${CHECK} **${resultEmoji} ${result.num} (${COLOR_LABEL[result.color]})** — ×${baseMulti} — **+${profit.toLocaleString()}** coins`;
     } else {
       statusLine = `${XMARK} **${resultEmoji} ${result.num} (${COLOR_LABEL[result.color]})** — not ${betLabel}. Lost **${bet.toLocaleString()}** coins.`;

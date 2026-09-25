@@ -209,3 +209,10 @@ Railway auto-redeploys in ~60-90 seconds.
 ## UI rules
 - `utils/cv2patch.js` (required at the top of index.js) converts every `{ embeds: [...] }` send/reply/edit/update/followUp into a Components V2 container automatically, falling back to the embed if Discord rejects it. New commands should still build CV2 directly (ContainerBuilder/SectionBuilder) — see `commands/convert.js`.
 - **Never flood the channel.** A button press edits the card it's on (`interaction.update`) or answers ephemerally — it never posts a new public message. `utils/shopUI.js` `sendShopUI({ interaction, onBack })` opens a shop section in place of the hub card; collectors filter by customId prefix so a hub and its section never double-handle a click; a collector's `end` only strips buttons on `time`, not on navigation. Games edit their own card for results (blackjack does now).
+
+## Casino rules (house edge — `utils/houseEdge.js`)
+Every house game returns LESS than it takes on average, even with essences. A winner got lucky; the house wins over time.
+- Frenzy = +5% of WINNINGS (profit only) in casino games; Luck = +1 point win chance; Aura never touches casino payouts. Use `casinoPayout(bet, gross, userData)` / `casinoLuck(userData)` in every casino game.
+- Returns (checked by simulation): coinflip 94% (47% × 2), blackjack ~94%, dice 85%, rps ~92% (win 1.9×, draw refunds 85%), roulette ~95–97% (number 35×, green 17×), slots ~68% + jackpot, plinko ~94% (big multipliers on the edges only — the old tables paid 110/143/408%), mines 95%, minesweeper 92% of fair odds, crash 94%, tower 94%, cups 93%, wheel 91%, over/under 94%.
+- Hi-Lo (`.hl`) was removed — it paid ~115% with basic play.
+- New CV2 games share `utils/casino.js` (`takeBet` / `settle` on fresh user data, `card` builder): `.crash`, `.tower`, `.cups`, `.wheel`, `.ou`.

@@ -13,22 +13,15 @@ const { addXP } = require('../utils/xp');
 const { trackStat, checkAchievements } = require('../utils/achievements');
 const { randomFloat } = require('../utils/rng');
 const { announceWin } = require('../utils/winAnnouncer');
+const { casinoPayout, casinoLuck } = require('../utils/houseEdge');
 
 // Multiplier tables per risk level (17 buckets, symmetric)
-// RTP ~97% for all risk levels
+// RTP ~94% for all risk levels (checked against the 16-row binomial)
 const MULTIPLIERS = {
-  low: [
-    0.5, 0.7, 0.9, 1.0, 1.1, 1.1, 1.1, 1.2,
-    1.1, 1.1, 1.1, 1.0, 0.9, 0.7, 0.5, 0.3, 0.2,
-  ],
-  medium: [
-    0.2, 0.4, 0.6, 0.8, 1.0, 1.4, 1.6, 2.0,
-    1.6, 1.4, 1.0, 0.8, 0.6, 0.4, 0.2, 0.1, 0.05,
-  ],
-  high: [
-    0.2, 0.3, 0.5, 0.8, 1.2, 2.0, 5.0, 10.0,
-    5.0, 2.0, 1.2, 0.8, 0.5, 0.3, 0.2, 0.1, 0.02,
-  ],
+  // Edges pay big, the middle (where most balls land) pays little — ~94% return.
+  low:    [15, 8.5, 1.9, 1.3, 1.3, 1.1, 1.0, 0.9, 0.5, 0.9, 1.0, 1.1, 1.3, 1.3, 1.9, 8.5, 15],
+  medium: [100, 38, 9.5, 4.7, 2.8, 1.4, 0.9, 0.5, 0.3, 0.5, 0.9, 1.4, 2.8, 4.7, 9.5, 38, 100],
+  high:   [900, 120, 24, 8.5, 3.8, 1.9, 0.2, 0.2, 0.2, 0.2, 0.2, 1.9, 3.8, 8.5, 24, 120, 900],
 };
 
 const ROWS = 16; // 16 pegs → 17 buckets
@@ -82,7 +75,7 @@ module.exports = {
           .setDescription(
             '> Usage: `.plinko <bet> [risk]`\n\n' +
             '__**Risk Levels**__\n' +
-            '> `low` — steady, multipliers 0.2×–1.2×\n' +
+            '> `low` — steady, 0.5×–15×\n' +
             '> `medium` — balanced, up to 2×\n' +
             '> `high` — volatile, up to 10×\n\n' +
             '__**Examples**__\n' +
@@ -105,8 +98,8 @@ module.exports = {
     const baseMulti = mults[bucket] || 0.1;
 
     const frenzy     = getMultiplier(userData, 'frenzy');
-    const finalMulti = Math.round(baseMulti * frenzy * 100) / 100;
-    const payout     = Math.floor(bet * finalMulti);
+    const finalMulti = baseMulti;
+    const payout     = casinoPayout(bet, bet * finalMulti, userData);
     const profit     = payout - bet;
     const won        = payout > bet;
 
@@ -136,7 +129,7 @@ module.exports = {
       .setDescription(
         `> ${statusLine}\n\n` +
         `> Risk: \`${riskArg}\` · Bet: \`${bet.toLocaleString()}\`\n` +
-        `> Multiplier: \`×${baseMulti}\`${frenzy > 1 ? ` → \`×${finalMulti}\` (Frenzy)` : ''}\n` +
+        `> Multiplier: \`×${baseMulti}\`${frenzy > 1 ? ' (+5% winnings, Frenzy)' : ''}\n` +
         `> Payout: \`${payout.toLocaleString()}\``
       )
       .setFooter({ text: `${message.guild?.name || 'Shiro'} — RTP ~97%` });

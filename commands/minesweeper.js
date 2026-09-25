@@ -30,6 +30,12 @@ function gridDisplay(grid, picks) {
     .join(' ');
 }
 
+function nCr(n, k) {
+  let r = 1;
+  for (let i = 0; i < k; i++) r = (r * (n - i)) / (i + 1);
+  return r;
+}
+
 module.exports = {
   name: 'minesweeper',
   description: 'Play a personalized minesweeper! Usage: .minesweeper start <size> <mines> <bet>',
@@ -123,7 +129,9 @@ module.exports = {
       // Win: all safe tiles found
       const safeTiles = game.grid.filter(x => x === 'safe').length;
       if (game.picks.size >= safeTiles) {
-        const payout = game.bet * 5;
+        // Fair odds of clearing the board = 1 / C(size, mines); pay 92% of that.
+        const mult = Math.max(1.1, Math.round(0.92 * nCr(game.size, game.mineCount) * 100) / 100);
+        const payout = Math.floor(game.bet * mult);
         userData.balance += payout;
         userData.totalEarned = (userData.totalEarned || 0) + (payout - game.bet);
         await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned });
@@ -147,7 +155,7 @@ module.exports = {
           announceWin(client, {
             userId, username: message.author.username,
             avatarURL: message.author.displayAvatarURL({ dynamic: true }),
-            game: 'minesweeper', bet: game.bet, payout, multiplier: 5,
+            game: 'minesweeper', bet: game.bet, payout, multiplier: mult,
             detail: `all ${safeTiles} safe tiles cleared`,
             logAdminAction,
           }).catch(() => {});

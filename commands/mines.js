@@ -11,6 +11,7 @@ const { addXP } = require('../utils/xp');
 const { trackStat, checkAchievements } = require('../utils/achievements');
 const { pickUniqueIndices } = require('../utils/rng');
 const { announceWin } = require('../utils/winAnnouncer');
+const { casinoPayout, casinoLuck } = require('../utils/houseEdge');
 
 // Multiplier table: [mineCount][safeReveals] → multiplier
 // RTP target ~97%. Formula: nCr(25-mines, reveals) / nCr(25, reveals) gives prob of survival.
@@ -21,8 +22,8 @@ function calcMultiplier(mines, revealed) {
   for (let i = 0; i < revealed; i++) {
     prob *= (safe - i) / (25 - i);
   }
-  // House edge: 3%
-  return Math.max(1.01, Math.round((0.97 / prob) * 100) / 100);
+  // House edge: 5% (stays under 100% even with Frenzy's profit bonus)
+  return Math.max(1.01, Math.round((0.95 / prob) * 100) / 100);
 }
 
 // Active game sessions: userId → { bet, mines, minePositions, revealed: Set, grid: string[] }
@@ -167,7 +168,7 @@ module.exports = {
 
         // Frenzy essence multiplier
         const frenzy   = getMultiplier(userData, 'frenzy');
-        const finalPay = Math.floor(payout * frenzy);
+        const finalPay = casinoPayout(session.bet, payout, userData);
 
         userData.balance     = (userData.balance || 0) + finalPay;
         userData.totalEarned = (userData.totalEarned || 0) + Math.max(0, finalPay - bet);
@@ -196,7 +197,7 @@ module.exports = {
         }
 
         const status = frenzy > 1
-          ? `✅ Cashed out! ×${multi} → ×${(multi * frenzy).toFixed(2)} (Frenzy) = **${finalPay.toLocaleString()}** coins!`
+          ? `✅ Cashed out! ×${multi} + Frenzy 5% of winnings = **${finalPay.toLocaleString()}** coins!`
           : `✅ Cashed out at ×${multi} — **+${(finalPay - bet).toLocaleString()}** coins!`;
 
         await i.update({

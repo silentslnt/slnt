@@ -9,6 +9,7 @@ const { addXP } = require('../utils/xp');
 const { trackStat, checkAchievements } = require('../utils/achievements');
 const { awardPoints } = require('../utils/sentinelDb');
 const { announceWin } = require('../utils/winAnnouncer');
+const { casinoPayout, casinoLuck } = require('../utils/houseEdge');
 
 const activeGames = new Set();
 
@@ -135,16 +136,16 @@ module.exports = {
       if (pv > 21) {
         result = 'You busted!';
       } else if (dv > 21) {
-        payout = Math.floor(bet * 2 * frenzyMult * coinMult);
+        payout = casinoPayout(bet, bet * 2, userData);
         won    = true;
         result = `Dealer busted! You win **${payout.toLocaleString()}** coins!`;
       } else if (naturalBJ && pv === 21) {
         // Natural blackjack = 2.5x
-        payout = Math.floor(bet * 2.5 * frenzyMult * coinMult);
+        payout = casinoPayout(bet, bet * 2.5, userData);
         won    = true;
         result = `**Natural Blackjack!** You win **${payout.toLocaleString()}** coins!`;
       } else if (pv > dv) {
-        payout = Math.floor(bet * 2 * frenzyMult * coinMult);
+        payout = casinoPayout(bet, bet * 2, userData);
         won    = true;
         result = `You beat the dealer! You win **${payout.toLocaleString()}** coins!`;
       } else if (pv === dv) {
@@ -174,7 +175,7 @@ module.exports = {
           { name: 'Dealer Value', value: String(dv), inline: true },
           { name: 'New Balance', value: `**${userData.balance.toLocaleString()}** coins`, inline: false },
         )
-        .setFooter({ text: frenzyMult > 1 ? `${frenzyMult}× Frenzy Essence active` : (message.guild?.name || 'Shiro') });
+        .setFooter({ text: frenzyMult > 1 ? 'Frenzy: +5% winnings' : (message.guild?.name || 'Shiro') });
 
       await msg.edit({ embeds: [finalEmbed] }).catch(() => message.channel.send({ embeds: [finalEmbed] }));
       msg.reactions.removeAll().catch(() => {});
