@@ -23,7 +23,8 @@ function hubPayload(message) {
     .addTextDisplayComponents(new TextDisplayBuilder().setContent(
       `## ${SILV_ICON} SILV Store\nPremium items for Sentinel's RPG, paid in SILV tokens:\n\n` +
       `> ✨ **Spells** — cast with Sentinel's \`,cast\`\n` +
-      `> ⚔ **Gear** — the strongest Sentinel gear + Revive Token\n\n` +
+      `> ⚔ **Gear** — the strongest Sentinel gear + Revive Token\n` +
+      `> 🏺 **Artifacts** — \`.artifact\`, open every weekend (Fri 18:00 – Sun 23:59 UTC), random stock\n\n` +
       `-# Everything bought with Aether (gear, potions, bait, rods, trinkets) is in Sentinel's \`,shop\`. Coins → SILV → Aether: \`.convert\``))
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('storehub_spells').setLabel('Spells').setEmoji('✨').setStyle(ButtonStyle.Secondary),
