@@ -147,6 +147,8 @@ const PREMIUM_GEAR = {
   bloodthorn_blade: { name: 'Bloodthorn Blade',    emoji: '🩸', silvCost: 25, stats: '+16 PWR · +3 LCK · −15 HP (weapon, Legendary)' },
   dragonhide:       { name: 'Dragonhide Mantle',   emoji: '🔥', silvCost: 25, stats: '+16 DEF · +40 HP · −3 SPD (armor, Legendary)' },
   crown_of_thorns:  { name: 'Crown of Thorns',     emoji: '👑', silvCost: 25, stats: '+8 PWR · +5 LCK · −6 DEF (accessory, Legendary)' },
+  // Not gear — delivered raw (no gear_ prefix). Sentinel's ,race revive restores a lives-out wipe within 14 days.
+  revive_token:     { name: 'Revive Token',        emoji: '✨', silvCost: 100, stats: 'Lost every life and got wiped? Buy this, then `,race revive` in Sentinel (within 14 days, before beginning again)', raw: true },
 };
 
 async function showGear({ message, getUserData, saveSpecificUserData, logAdminAction }) {
@@ -172,7 +174,7 @@ async function showGear({ message, getUserData, saveSpecificUserData, logAdminAc
       userData.stats = userData.stats || {};
       userData.stats.silvSpent = (userData.stats.silvSpent || 0) + g.silvCost;
       await saveSpecificUserData(interaction.user.id, { inventory: userData.inventory, stats: userData.stats });
-      const delivered = await grantItem(guild.id, interaction.user.id, `gear_${itemId}`, 1);
+      const delivered = await grantItem(guild.id, interaction.user.id, g.raw ? itemId : `gear_${itemId}`, 1);
       if (!delivered) {
         userData.inventory[SILV_KEY] = (userData.inventory[SILV_KEY] || 0) + g.silvCost; // refund, never eat a payment
         userData.stats.silvSpent -= g.silvCost;
@@ -180,7 +182,7 @@ async function showGear({ message, getUserData, saveSpecificUserData, logAdminAc
         return { ok: false, message: `SILV refunded — couldn't reach Sentinel right now. Try again shortly.` };
       }
       await logAdminAction(interaction.user.id, interaction.user.username, 'store', 'Gear Purchase', null, null, `${g.name} for ${g.silvCost} SILV`);
-      return { ok: true, message: `**${g.name}** delivered — equip it with Sentinel's \`,inventory\`.` };
+      return { ok: true, message: g.raw ? `**${g.name}** delivered — use it with Sentinel's \`,race revive\`.` : `**${g.name}** delivered — equip it with Sentinel's \`,inventory\`.` };
     },
   });
 }
