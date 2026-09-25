@@ -201,3 +201,6 @@ Railway auto-redeploys in ~60-90 seconds.
 - There is NO Aether → SILV path anywhere (SILV = 10 Robux).
 - `.store` is a CV2 hub (Items / Spells / Gear buttons). Bait was removed — it's sold in Sentinel's `,shop` → Fishing.
 - Note: `.sh aether` packs (5k coins → 100 Aether) are now worse value than coins → SILV → Aether (10 coins/Aether); adjust or remove them if you want one path.
+
+## UI rule: CV2 everywhere
+`utils/cv2patch.js` (required at the top of index.js) converts every `{ embeds: [...] }` send/reply/edit/update/followUp into a Components V2 container automatically, falling back to the embed if Discord rejects it. New commands should still build CV2 directly (ContainerBuilder/SectionBuilder) with buttons and ephemeral feedback — see `commands/convert.js` for the pattern (one Convert button per section → modal → ephemeral result → card refresh).

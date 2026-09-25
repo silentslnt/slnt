@@ -1,4 +1,5 @@
 require('dotenv').config();
+require('./utils/cv2patch'); // every embed renders as a Components V2 card (see utils/cv2patch.js)
 const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
