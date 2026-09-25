@@ -11,6 +11,7 @@ const { addXP } = require('../utils/xp');
 const { trackStat, checkAchievements } = require('../utils/achievements');
 const { pickUniqueIndices } = require('../utils/rng');
 const { announceWin } = require('../utils/winAnnouncer');
+const { recordRound } = require('../utils/houseBank');
 const { casinoPayout, casinoLuck } = require('../utils/houseEdge');
 
 // Multiplier table: [mineCount][safeReveals] → multiplier
@@ -170,6 +171,7 @@ module.exports = {
         const frenzy   = getMultiplier(userData, 'frenzy');
         const finalPay = casinoPayout(session.bet, payout, userData);
 
+        recordRound('mines', bet, finalPay);
         userData.balance     = (userData.balance || 0) + finalPay;
         userData.totalEarned = (userData.totalEarned || 0) + Math.max(0, finalPay - bet);
         await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned });
@@ -221,6 +223,7 @@ module.exports = {
           session.won   = false;
           for (const mineIdx of session.minePositions) session.revealed.add(mineIdx);
 
+          recordRound('mines', bet, 0);
           await addXP(userId, XP_PER_GAME, userData, saveUserData, message);
           await trackStat(userData, 'gamesPlayed', 1);
           await checkAchievements(userData, { message, saveUserData });
@@ -242,6 +245,7 @@ module.exports = {
           session.ended = true;
           session.won   = true;
 
+          recordRound('mines', bet, payout);
           userData.balance     = (userData.balance || 0) + payout;
           userData.totalEarned = (userData.totalEarned || 0) + Math.max(0, payout - bet);
           await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned });

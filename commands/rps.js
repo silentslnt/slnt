@@ -27,6 +27,7 @@ function getResult(player, bot) {
   return 'lose';
 }
 
+const { recordRound } = require('../utils/houseBank');
 const { casinoPayout } = require('../utils/houseEdge');
 
 module.exports = {
@@ -74,6 +75,7 @@ module.exports = {
 
     await saveUserData({ balance: userData.balance });
 
+    recordRound('rps', bet, payout);
     await trackStat(userData, 'gamesPlayed', 1);
     if (won) {
       await trackStat(userData, 'gamesWon', 1);

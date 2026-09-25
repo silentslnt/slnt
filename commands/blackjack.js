@@ -9,6 +9,7 @@ const { addXP } = require('../utils/xp');
 const { trackStat, checkAchievements } = require('../utils/achievements');
 const { awardPoints } = require('../utils/sentinelDb');
 const { announceWin } = require('../utils/winAnnouncer');
+const { recordRound } = require('../utils/houseBank');
 const { casinoPayout, casinoLuck } = require('../utils/houseEdge');
 
 const activeGames = new Set();
@@ -104,7 +105,7 @@ module.exports = {
           } else {
             await msg.edit({ embeds: [buildEmbed('You busted! Dealer wins.')] });
           }
-          await finalize(false, 0);
+          await finalize(false, hasInsurance ? bet : 0);
         } else if (pv === 21) {
           gameOver = true;
           collector.stop();
@@ -195,6 +196,7 @@ module.exports = {
 
     async function finalize(won, payout) {
       activeGames.delete(userId);
+      recordRound('blackjack', bet, payout);
 
       // XP
       await addXP(userId, won ? XP_PER_WIN : XP_PER_GAME, userData, saveUserData, message);

@@ -9,7 +9,10 @@ const { addXP } = require('../utils/xp');
 const { trackStat, checkAchievements } = require('../utils/achievements');
 const { awardPoints } = require('../utils/sentinelDb');
 const { announceWin } = require('../utils/winAnnouncer');
+const { recordRound } = require('../utils/houseBank');
 const { casinoPayout, casinoLuck } = require('../utils/houseEdge');
+
+const CF_FEE = 0.10;   // taken from the winnings of every winning flip
 
 const SPIN_FRAMES = ['🪙', '✨', '💫', '⭐', '🪙'];
 
@@ -48,8 +51,8 @@ module.exports = {
     const coinMult    = getMultiplier(userData, 'coins');
 
     // Luck essence shifts win probability slightly
-    // House edge: 47% to win 2× (94% return); Luck adds 1 point, Frenzy 5% of profit.
-    const winChance   = 0.47 + casinoLuck(userData);
+    // A fair 50/50 flip; a 10% fee comes off the winnings (≈95% return). Luck adds 1 point.
+    const winChance   = 0.5 + casinoLuck(userData);
     const won         = Math.random() < winChance;
     const landedHeads = won ? pickedHeads : !pickedHeads;
     const result      = landedHeads ? 'Heads 🪙' : 'Tails 🌑';
@@ -74,10 +77,12 @@ module.exports = {
 
     // Calculate payout
     let payout = 0;
+    let fee = 0;
     userData.balance = (userData.balance || 0) - bet;
 
     if (won) {
-      payout           = casinoPayout(bet, bet * 2, userData);
+      fee              = Math.ceil(bet * CF_FEE);
+      payout           = casinoPayout(bet, bet * 2 - fee, userData);
       userData.balance += payout;
       userData.totalEarned = (userData.totalEarned || 0) + payout;
     }
@@ -94,10 +99,11 @@ module.exports = {
     let streakBonus = 0;
     let streakNote  = '';
     if (won && cfStreak > 0 && cfStreak % 5 === 0) {
-      streakBonus       = Math.floor(bet * 0.5);
+      streakBonus       = Math.floor(bet * 0.25);
       userData.balance += streakBonus;
       streakNote        = `\n> **${cfStreak}-flip streak bonus:** +${streakBonus.toLocaleString()} coins!`;
     }
+    recordRound('coinflip', bet, payout + streakBonus, fee);
 
     await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned, stats: userData.stats });
     await addXP(message.author.id, won ? XP_PER_WIN : XP_PER_GAME, userData, saveUserData, message);
@@ -121,13 +127,13 @@ module.exports = {
         { name: 'Result',     value: result,                                   inline: true },
         { name: 'You Picked', value: picked,                                   inline: true },
         { name: 'Bet',        value: bet.toLocaleString(),                     inline: true },
-        { name: won ? 'Won' : 'Lost', value: won ? `+${payout.toLocaleString()}` : `-${bet.toLocaleString()}`, inline: true },
+        { name: won ? 'Won' : 'Lost', value: won ? `+${(payout - bet).toLocaleString()} (fee ${fee.toLocaleString()})` : `-${bet.toLocaleString()}`, inline: true },
         { name: 'Balance',    value: userData.balance.toLocaleString(),        inline: true },
         { name: 'CF Streak',  value: `${cfStreak} flips`,                     inline: true },
       )
       .setDescription(
         won
-          ? `> **${result}!** You win **${payout.toLocaleString()}** coins!${streakNote}`
+          ? `> **${result}!** You win **${(payout - bet).toLocaleString()}** coins.\n-# ${fee.toLocaleString()} coin fee${streakNote}`
           : `> **${result}!** You picked ${picked}. Better luck next time.`
       )
       .setFooter({

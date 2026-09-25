@@ -214,5 +214,7 @@ Railway auto-redeploys in ~60-90 seconds.
 Every house game returns LESS than it takes on average, even with essences. A winner got lucky; the house wins over time.
 - Frenzy = +5% of WINNINGS (profit only) in casino games; Luck = +1 point win chance; Aura never touches casino payouts. Use `casinoPayout(bet, gross, userData)` / `casinoLuck(userData)` in every casino game.
 - Returns (checked by simulation): coinflip 94% (47% × 2), blackjack ~94%, dice 85%, rps ~92% (win 1.9×, draw refunds 85%), roulette ~95–97% (number 35×, green 17×), slots ~68% + jackpot, plinko ~94% (big multipliers on the edges only — the old tables paid 110/143/408%), mines 95%, minesweeper 92% of fair odds, crash 94%, tower 94%, cups 93%, wheel 91%, over/under 94%.
+- Coinflip is a fair 50/50 with a 10% fee off the winnings (shown to the player as "fee", never as "house"); streak bonus is 25% of the bet every 5 wins. ~95% return.
+- **Casino ledger** (`utils/houseBank.js`, `.house` — trusted list / OWNER_ID only): every casino round calls `recordRound(game, bet, payout, fee)` (settle() does it for the CV2 games). Stored in the Mongo `Meta` collection under `house_bank`; it is NOT a user balance and never appears on leaderboards or `.bal`.
 - Hi-Lo (`.hl`) was removed — it paid ~115% with basic play.
 - New CV2 games share `utils/casino.js` (`takeBet` / `settle` on fresh user data, `card` builder): `.crash`, `.tower`, `.cups`, `.wheel`, `.ou`.

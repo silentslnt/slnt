@@ -1,3 +1,4 @@
+const { recordRound } = require('../utils/houseBank');
 const { EmbedBuilder } = require('discord.js');
 const { MAX_BET } = require('../utils/config');
 const { announceWin } = require('../utils/winAnnouncer');
@@ -121,6 +122,7 @@ module.exports = {
           .setFooter({ text: message.guild?.name || 'Shiro' });
         message.channel.send({ embeds: [embed] });
         userGames.delete(userId);
+        recordRound('minesweeper', game.bet, 0);
         await trackStat(userData, 'gamesPlayed', 1);
         await checkAchievements(userData, { message, saveUserData });
         return;
@@ -132,6 +134,7 @@ module.exports = {
         // Fair odds of clearing the board = 1 / C(size, mines); pay 92% of that.
         const mult = Math.max(1.1, Math.round(0.92 * nCr(game.size, game.mineCount) * 100) / 100);
         const payout = Math.floor(game.bet * mult);
+        recordRound('minesweeper', game.bet, payout);
         userData.balance += payout;
         userData.totalEarned = (userData.totalEarned || 0) + (payout - game.bet);
         await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned });

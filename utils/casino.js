@@ -10,6 +10,7 @@ const { addXP } = require('./xp');
 const { trackStat, checkAchievements } = require('./achievements');
 const { announceWin } = require('./winAnnouncer');
 const { XP_PER_GAME, XP_PER_WIN } = require('./config');
+const { recordRound } = require('./houseBank');
 
 const BLACK = 0x000000;
 const WIN = 0x3FA34D;
@@ -61,6 +62,7 @@ async function settle(ctx, { bet, payout, game, detail }) {
   const uid = message.author.id;
   const userData = await getUserData(uid);
   const won = payout > bet;
+  recordRound(game, bet, payout);
   if (payout > 0) {
     userData.balance = (userData.balance || 0) + payout;
     userData.totalEarned = (userData.totalEarned || 0) + Math.max(0, payout - bet);

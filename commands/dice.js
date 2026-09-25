@@ -1,3 +1,4 @@
+const { recordRound } = require('../utils/houseBank');
 const { EmbedBuilder } = require('discord.js');
 const { awardPoints } = require('../utils/sentinelDb');
 const { parseBet } = require('../utils/parseBet');
@@ -50,6 +51,7 @@ module.exports = {
       await awardPoints(message.guild.id, message.author.id, pts);
     }
 
+    recordRound('dice', bet, reward);
     await trackStat(userData, 'gamesPlayed', 1);
     if (reward > 0) {
       await trackStat(userData, 'gamesWon', 1);

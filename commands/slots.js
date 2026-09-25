@@ -10,6 +10,7 @@ const { addXP } = require('../utils/xp');
 const { trackStat, checkAchievements } = require('../utils/achievements');
 const { awardPoints } = require('../utils/sentinelDb');
 const { announceWin } = require('../utils/winAnnouncer');
+const { recordRound } = require('../utils/houseBank');
 const { casinoPayout, casinoLuck } = require('../utils/houseEdge');
 
 // ── Jackpot state (persisted per guild in MongoDB meta collection) ────────────
@@ -156,6 +157,7 @@ module.exports = {
     }
 
     userData.stats = userData.stats || {};
+    recordRound('slots', bet, payout);
     userData.stats.gamesPlayed = (userData.stats.gamesPlayed || 0) + 1;
     if (payout > 0) {
       userData.stats.gamesWon = (userData.stats.gamesWon || 0) + 1;

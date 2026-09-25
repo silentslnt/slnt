@@ -12,6 +12,7 @@ const { trackStat, checkAchievements } = require('../utils/achievements');
 const { awardPoints } = require('../utils/sentinelDb');
 const { randomFloat } = require('../utils/rng');
 const { announceWin } = require('../utils/winAnnouncer');
+const { recordRound } = require('../utils/houseBank');
 const { casinoPayout, casinoLuck } = require('../utils/houseEdge');
 
 // European roulette wheel — 37 slots (0 green, 1-18 alternating red/black)
@@ -100,6 +101,7 @@ module.exports = {
       const pts = betType === 'number' ? 50 : betType === 'green' ? 35 : Math.min(30, Math.max(5, Math.floor(profit / 500)));
       await awardPoints(message.guild.id, message.author.id, pts);
     }
+    recordRound('roulette', bet, payout);
     await trackStat(userData, 'gamesPlayed', 1);
     if (won) {
       await trackStat(userData, 'gamesWon', 1);

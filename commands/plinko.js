@@ -13,6 +13,7 @@ const { addXP } = require('../utils/xp');
 const { trackStat, checkAchievements } = require('../utils/achievements');
 const { randomFloat } = require('../utils/rng');
 const { announceWin } = require('../utils/winAnnouncer');
+const { recordRound } = require('../utils/houseBank');
 const { casinoPayout, casinoLuck } = require('../utils/houseEdge');
 
 // Multiplier tables per risk level (17 buckets, symmetric)
@@ -108,6 +109,7 @@ module.exports = {
     await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned });
 
     await addXP(message.author.id, XP_PER_GAME + (won ? XP_PER_WIN : 0), userData, saveUserData, message);
+    recordRound('plinko', bet, payout);
     await trackStat(userData, 'gamesPlayed', 1);
     if (won) await trackStat(userData, 'gamesWon', 1);
     if (won) await trackStat(userData, 'coinsWon', profit);
