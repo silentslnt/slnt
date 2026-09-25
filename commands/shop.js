@@ -417,6 +417,24 @@ async function performPurchase({ userId, username, guild, itemId, amount, getUse
     const item = await ShopItem.findOne({ itemId });
     if (!item) return { ok: false, message: `No item with ID \`${itemId}\` found. Check \`.sh\` for available items.` };
 
+    // Real cross-bot bug found live: a legacy admin-added ShopItem document
+    // can share a DISPLAY NAME with a race-system spell (e.g. "cloak")
+    // while having a different itemId, so it skips the SPELLS[itemId] check
+    // above and lands here — charging SILV and writing to Shiro's own LOCAL
+    // inventory field only. It never reaches Sentinel's shared Postgres
+    // user_inventory, so ,cast never sees it and Sentinel's ,inventory never
+    // shows it — the exact "why tf its here not in Sentinel" confusion a
+    // player hit. Refuse the sale outright instead of silently duplicating
+    // a spell-shaped item into a dead-end store.
+    const nameLower = String(item.name || '').toLowerCase();
+    const shadowsSpell = Object.values(SPELLS).some(s => s.name.toLowerCase() === nameLower);
+    if (shadowsSpell) {
+      return {
+        ok: false,
+        message: `**${item.name}** is a race-system spell now sold through \`.store spells\` — this legacy listing is disabled to avoid a duplicate that never reaches Sentinel. Buy it there instead.`,
+      };
+    }
+
     if (item.roleId && amount > 1) amount = 1;
     const totalCoins = item.priceCoins * amount;
     const totalSilv  = item.priceSilv  * amount;
