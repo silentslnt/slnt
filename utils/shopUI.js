@@ -30,7 +30,7 @@ function buildEmbed({ title, headerDesc, items, page, totalPages, footerName, co
   return embed;
 }
 
-function buildComponents({ items, page, totalPages, buyPrefix }) {
+function buildComponents({ items, page, totalPages, buyPrefix, hasBack }) {
   const pageItems = items.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
   const rows = [];
 
@@ -48,46 +48,60 @@ function buildComponents({ items, page, totalPages, buyPrefix }) {
     rows.push(buyRow);
   }
 
+  const nav = new ActionRowBuilder();
+  if (hasBack) nav.addComponents(new ButtonBuilder().setCustomId(`${buyPrefix}back`).setLabel('Back').setEmoji('<a:carrow:1512498181391388802>').setStyle(ButtonStyle.Secondary));
   if (totalPages > 1) {
-    rows.push(new ActionRowBuilder().addComponents(
+    nav.addComponents(
       new ButtonBuilder().setCustomId(`${buyPrefix}prev`).setLabel('◀').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
       new ButtonBuilder().setCustomId(`${buyPrefix}next`).setLabel('▶').setStyle(ButtonStyle.Secondary).setDisabled(page >= totalPages - 1),
-    ));
+    );
   }
+  if (nav.components.length) rows.push(nav);
   return rows;
 }
 
 /**
  * @param {object} opts
  *   message       — the triggering message (used for channel + author check)
+ *   interaction   — optional: a button press on an existing card (e.g. a hub).
+ *                   The shop then REPLACES that card in place instead of
+ *                   posting a new message (no channel flood).
+ *   onBack        — optional async (interaction) => void — shows a Back
+ *                   button that hands the card back to the caller (the hub).
  *   title         — embed title
  *   headerDesc    — optional text above the item cards
  *   footerName    — guild name for the footer
  *   buyPrefix     — unique customId prefix for this shop instance's buttons
- *                   (e.g. 'sh_ess_') so multiple shop UIs in the same
- *                   process never collide on customId
  *   getItems      — async () => [{id, name, emoji, valueText, disabled, soldOut}]
- *                   called fresh on open AND after every buy/nav, so stock/
- *                   sold-out state and prices never go stale on screen.
+ *                   called fresh on open AND after every buy/nav.
  *   onBuy         — async (interaction, itemId) => { ok: bool, message: str }
  *                   Must NOT reply to the interaction itself — sendShopUI
  *                   handles the ephemeral reply and the card re-render.
  */
-async function sendShopUI({ message, title, headerDesc, footerName, buyPrefix, getItems, onBuy }) {
+async function sendShopUI({ message, interaction: opener, onBack, title, headerDesc, footerName, buyPrefix, getItems, onBuy }) {
   let items = await getItems();
+  const hasBack = !!onBack;
   if (!items.length) {
-    return message.channel.send("Nothing available here right now — check back later.");
+    const empty = { content: 'Nothing available here right now — check back later.', embeds: [], components: [] };
+    return opener ? opener.reply({ ...empty, ephemeral: true }) : message.channel.send(empty.content);
   }
 
   let page = 0;
   const totalPages = () => Math.max(1, Math.ceil(items.length / PAGE_SIZE));
-
-  const msg = await message.channel.send({
+  const payload = () => ({
     embeds: [buildEmbed({ title, headerDesc, items, page, totalPages: totalPages(), footerName })],
-    components: buildComponents({ items, page, totalPages: totalPages(), buyPrefix }),
+    components: buildComponents({ items, page, totalPages: totalPages(), buyPrefix, hasBack }),
   });
 
-  const collector = msg.createMessageComponentCollector({ time: COLLECTOR_MS });
+  let msg;
+  if (opener) {
+    await opener.update(payload());
+    msg = opener.message;
+  } else {
+    msg = await message.channel.send(payload());
+  }
+
+  const collector = msg.createMessageComponentCollector({ time: COLLECTOR_MS, filter: (i) => i.customId.startsWith(buyPrefix) });
 
   collector.on('collect', async (interaction) => {
     if (interaction.user.id !== message.author.id) {
@@ -95,30 +109,27 @@ async function sendShopUI({ message, title, headerDesc, footerName, buyPrefix, g
     }
 
     const id = interaction.customId;
+    if (id === `${buyPrefix}back` && onBack) {
+      collector.stop('back');
+      return onBack(interaction);
+    }
     if (id === `${buyPrefix}prev` || id === `${buyPrefix}next`) {
       page = id === `${buyPrefix}prev` ? Math.max(0, page - 1) : Math.min(totalPages() - 1, page + 1);
       items = await getItems();
-      return interaction.update({
-        embeds: [buildEmbed({ title, headerDesc, items, page, totalPages: totalPages(), footerName })],
-        components: buildComponents({ items, page, totalPages: totalPages(), buyPrefix }),
-      });
+      return interaction.update(payload());
     }
 
     if (id.startsWith(`${buyPrefix}buy_`)) {
       const itemId = id.slice(`${buyPrefix}buy_`.length);
       const result = await onBuy(interaction, itemId);
       await interaction.reply({ content: (result.ok ? '✅ ' : '') + result.message, ephemeral: true });
-
       items = await getItems();
-      await msg.edit({
-        embeds: [buildEmbed({ title, headerDesc, items, page, totalPages: totalPages(), footerName })],
-        components: buildComponents({ items, page, totalPages: totalPages(), buyPrefix }),
-      }).catch(() => {});
+      await msg.edit(payload()).catch(() => {});
     }
   });
 
-  collector.on('end', () => {
-    msg.edit({ components: [] }).catch(() => {});
+  collector.on('end', (_c, reason) => {
+    if (reason === 'time') msg.edit({ components: [] }).catch(() => {});
   });
 
   return msg;

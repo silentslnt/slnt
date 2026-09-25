@@ -1,5 +1,5 @@
 // commands/shop.js
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const mongoose = require('mongoose');
 const {
   ESSENCES, TITLES, BADGES, BUNDLES, UTILITY_ITEMS, SPELLS,
@@ -21,14 +21,6 @@ const CROSS     = '<a:ccross:1512497030348542122>';
 const WHITESWIRL = '<a:cwhiteswirl:1512869492492079184>';
 const BLACKSWIRL = '<a:cblackswirl:1512496801394065688>';
 const BLACK      = 0x000000;
-
-// Aether packs — spend Shiro coins to earn community points in Sentinel
-const AETHER_PACKS = {
-  aether_100:  { label: '100 Aether',    coins: 5_000,   pts: 100  },
-  aether_500:  { label: '500 Aether',    coins: 22_000,  pts: 500  },
-  aether_1000: { label: '1,000 Aether',  coins: 40_000,  pts: 1000 },
-  aether_5000: { label: '5,000 Aether',  coins: 175_000, pts: 5000 },
-};
 
 // ── Dynamic shop items (DB-backed) ────────────────────────────────────────────
 const shopItemSchema = new mongoose.Schema({
@@ -84,10 +76,10 @@ module.exports = {
     if (sub === 'bundles' || sub === 'bun')  return showBundleShop(ctx);
     if (sub === 'cosmetics' || sub === 'cos') return showCosmeticsShop(ctx);
     if (sub === 'utility' || sub === 'util') return showUtilityShop(ctx);
-    if (sub === 'aether' || sub === 'ae')    return showAetherShop(ctx);
-    if (sub === 'spells' || sub === 'sp')    return showSpellShop(ctx);
+    if (sub === 'aether' || sub === 'ae')    return message.channel.send('Coins → Aether goes through SILV now: `.convert`. Spend Aether in Sentinel\'s `,shop`.');
+    if (sub === 'spells' || sub === 'sp')    return message.channel.send('Spells are in `.store` → Spells.');
     if (sub === 'items')  return showDynamicShop(ctx);
-    return showMainShop({ message });
+    return showMainShop(ctx);
   },
 };
 
@@ -95,34 +87,61 @@ module.exports = {
 //  SHOW SECTIONS
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function showMainShop({ message }) {
+const SECTIONS = [
+  ['ess', 'Essences', SPARKLE, 'active boosts (SILV)', showEssenceShop],
+  ['bun', 'Bundles', PRESENT, 'value packs (SILV)', showBundleShop],
+  ['cos', 'Cosmetics', WHITESTAR, 'titles & badges (SILV)', showCosmeticsShop],
+  ['util', 'Utility', CROSS, 'utility items (coins)', showUtilityShop],
+  ['dyn', 'Server items', BLACKSWIRL, 'items added by admins', showDynamicShop],
+];
+
+function mainShopPayload(message) {
   const embed = new EmbedBuilder()
     .setColor(BLACK)
     .setTitle('SHOP')
     .setDescription(
       `> **1** ${SILV_ICON} SILV = **10** Robux\n\n` +
       `__**Sections**__\n` +
-      `> ${SPARKLE} \`.sh essences\` — active boosts (SILV)\n` +
-      `> ${PRESENT} \`.sh bundles\` — value packs (SILV)\n` +
-      `> ${WHITESTAR} \`.sh cosmetics\` — titles & badges (SILV)\n` +
-      `> ${CROSS} \`.sh utility\` — utility items (coins)\n` +
-      `> ${WHITESWIRL} \`.sh aether\` — Aether packs (coins)\n` +
-      `> ${BLACKSWIRL} \`.sh spells\` — SILV race spells (SILV)\n` +
-      `> \`.sh items\` — admin-added items\n\n` +
-      `-# Buy with \`.sh buy <item_id> [amount]\`. Check your SILV with \`.inv\`, coins with \`.bal\`.`
+      SECTIONS.map(([, label, emoji, desc]) => `> ${emoji} **${label}** — ${desc}`).join('\n') + `\n\n` +
+      `-# Sentinel RPG spells & gear: \`.store\` · Aether shop: Sentinel's \`,shop\` · coins → SILV → Aether: \`.convert\``
     )
-    .setThumbnail(message.guild.iconURL())
+    .setThumbnail(message.guild?.iconURL() || null)
     .setFooter(footer(message));
-  return message.channel.send({ embeds: [embed] });
+  const row = new ActionRowBuilder().addComponents(
+    ...SECTIONS.map(([key, label, emoji]) => new ButtonBuilder().setCustomId(`shhub_${key}`).setLabel(label).setEmoji(emoji).setStyle(ButtonStyle.Secondary)),
+  );
+  return { embeds: [embed], components: [row] };
+}
+
+// One card: a section replaces the hub in place, its Back button restores it.
+async function showMainShop(ctx, interaction = null) {
+  const { message } = ctx;
+  let msg;
+  if (interaction) {
+    await interaction.update(mainShopPayload(message));
+    msg = interaction.message;
+  } else {
+    msg = await message.channel.send(mainShopPayload(message));
+  }
+  const col = msg.createMessageComponentCollector({ time: 120_000, filter: (i) => i.customId.startsWith('shhub_') });
+  col.on('collect', async (i) => {
+    if (i.user.id !== message.author.id) return i.reply({ content: 'Open your own with `.sh`.', ephemeral: true });
+    col.stop('nav');
+    const section = SECTIONS.find(([key]) => i.customId === `shhub_${key}`);
+    return section[4]({ ...ctx, interaction: i, onBack: (b) => showMainShop(ctx, b) });
+  });
+  col.on('end', (_c, reason) => {
+    if (reason === 'time') msg.edit({ components: [] }).catch(() => {});
+  });
 }
 
 // Each buyPrefix below must be unique across every shop section so button
 // customIds from two different open shop menus (e.g. essences + spells open
 // in the same channel at once) never collide with each other.
 
-async function showEssenceShop({ message, getUserData, saveSpecificUserData, logAdminAction }) {
+async function showEssenceShop({ message, interaction, onBack, getUserData, saveSpecificUserData, logAdminAction }) {
   await sendShopUI({
-    message,
+    message, interaction, onBack,
     title: 'ESSENCE SHOP',
     headerDesc: '> Temporary buffs, activated immediately on purchase.',
     footerName: message.guild?.name,
@@ -139,9 +158,9 @@ async function showEssenceShop({ message, getUserData, saveSpecificUserData, log
   });
 }
 
-async function showBundleShop({ message, getUserData, saveSpecificUserData, logAdminAction }) {
+async function showBundleShop({ message, interaction, onBack, getUserData, saveSpecificUserData, logAdminAction }) {
   await sendShopUI({
-    message,
+    message, interaction, onBack,
     title: 'BUNDLE SHOP',
     headerDesc: '> Value packs, priced in SILV.',
     footerName: message.guild?.name,
@@ -158,9 +177,9 @@ async function showBundleShop({ message, getUserData, saveSpecificUserData, logA
   });
 }
 
-async function showCosmeticsShop({ message, getUserData, saveSpecificUserData, logAdminAction }) {
+async function showCosmeticsShop({ message, interaction, onBack, getUserData, saveSpecificUserData, logAdminAction }) {
   await sendShopUI({
-    message,
+    message, interaction, onBack,
     title: 'COSMETICS SHOP',
     headerDesc: '> Titles & badges — shown on `.profile`. Equip a title with `.profile customize title <id>`.',
     footerName: message.guild?.name,
@@ -189,9 +208,9 @@ async function showCosmeticsShop({ message, getUserData, saveSpecificUserData, l
   });
 }
 
-async function showUtilityShop({ message, getUserData, saveSpecificUserData, logAdminAction }) {
+async function showUtilityShop({ message, interaction, onBack, getUserData, saveSpecificUserData, logAdminAction }) {
   await sendShopUI({
-    message,
+    message, interaction, onBack,
     title: 'UTILITY SHOP',
     headerDesc: '> Consumables, priced in coins.',
     footerName: message.guild?.name,
@@ -208,57 +227,9 @@ async function showUtilityShop({ message, getUserData, saveSpecificUserData, log
   });
 }
 
-async function showAetherShop({ message, getUserData, saveSpecificUserData, logAdminAction }) {
+async function showDynamicShop({ message, interaction, onBack, getUserData, saveSpecificUserData, logAdminAction }) {
   await sendShopUI({
-    message,
-    title: 'AETHER EXCHANGE',
-    headerDesc: '> Convert Shiro coins into Aether — your community standing in SILV.',
-    footerName: message.guild?.name,
-    buyPrefix: 'sh_ae_',
-    getItems: async () => Object.entries(AETHER_PACKS).map(([id, p]) => {
-      const bonus = id === 'aether_100' ? '' : id === 'aether_500' ? ' (+12% value)' : id === 'aether_1000' ? ' (+25% value)' : ' (+30% value)';
-      return {
-        id, name: p.label, emoji: WHITESWIRL,
-        valueText: `**${p.coins.toLocaleString()}** coins${bonus}`,
-      };
-    }),
-    onBuy: (interaction, itemId) => performPurchase({
-      userId: interaction.user.id, username: interaction.user.username,
-      guild: interaction.guild, itemId, amount: 1,
-      getUserData, saveSpecificUserData, logAdminAction,
-    }),
-  });
-}
-
-async function showSpellShop({ message, getUserData, saveSpecificUserData, logAdminAction }) {
-  await sendShopUI({
-    message,
-    title: 'SPELL SHOP',
-    headerDesc: '> Cast in SILV with `,cast <spell> @member` — delivered to your Sentinel inventory instantly.',
-    footerName: message.guild?.name,
-    buyPrefix: 'sh_sp_',
-    getItems: async () => {
-      // Live text from Sentinel (spells.py is the actual mechanical source of
-      // truth) takes priority — falls back to the static SPELLS[id].effect
-      // copy only if Sentinel's DB is unreachable, so the shop never breaks.
-      const live = await getSpellDisplay();
-      return Object.entries(SPELLS).map(([id, s]) => ({
-        id, name: s.name, emoji: s.emoji,
-        valueText: `${live[id]?.description || s.effect}${s.raceLocked ? `\n*(${s.raceLocked}s only)*` : ''}\n**${s.silvCost}** ${SILV_ICON}`,
-      }));
-    },
-    onBuy: (interaction, itemId) => performPurchase({
-      userId: interaction.user.id, username: interaction.user.username,
-      guild: interaction.guild, itemId, amount: 1,
-      getUserData, saveSpecificUserData, logAdminAction,
-    }),
-  });
-}
-
-// Admin-added dynamic items (`.sh add`) — same button UI, `.sh items` to view.
-async function showDynamicShop({ message, getUserData, saveSpecificUserData, logAdminAction }) {
-  await sendShopUI({
-    message,
+    message, interaction, onBack,
     title: 'SHOP — ADMIN ITEMS',
     headerDesc: '> Items added by server admins.',
     footerName: message.guild?.name,
@@ -298,19 +269,6 @@ async function performPurchase({ userId, username, guild, itemId, amount, getUse
   const silv  = userData.inventory[SILV_KEY] || 0;
   const coins = userData.balance || 0;
   const saveUserData = (data) => saveSpecificUserData(userId, data);
-
-  // ── AETHER PACK ──────────────────────────────────────────────────────────
-  if (AETHER_PACKS[itemId]) {
-    const pack = AETHER_PACKS[itemId];
-    if (coins < pack.coins) return notEnoughResult(pack.coins, coins, 'coins');
-    if (!guild) return { ok: false, message: 'Must be used in a server.' };
-
-    userData.balance = coins - pack.coins;
-    await saveUserData({ balance: userData.balance });
-    await awardPoints(guild.id, userId, pack.pts);
-    await logAdminAction(userId, username, 'shop', 'Aether Purchase', null, null, `${pack.coins.toLocaleString()} coins → ${pack.pts.toLocaleString()} Aether`);
-    return { ok: true, title: 'AETHER ACQUIRED', description: `+**${pack.pts.toLocaleString()}** Aether. Coins spent: **${pack.coins.toLocaleString()}**. Balance: **${userData.balance.toLocaleString()}**.` };
-  }
 
   // ── SPELL (delivered to Sentinel's user_inventory, cast with `,cast`) ────
   if (SPELLS[itemId]) {
