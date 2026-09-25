@@ -121,12 +121,21 @@ async function addFishingBait(guildId, userId, amount) {
 
 /**
  * Grant an item into Sentinel's user_inventory table (used for spells).
- * Silent no-op if SENTINEL_DB_URL is not set or DB is unreachable.
+ * Returns true on success, false if unreachable/failed — real bug found
+ * live: this used to be a bare silent no-op, so a spell purchase could
+ * take the buyer's SILV, show "SPELL DELIVERED", and never actually
+ * deliver anything if SENTINEL_DB_URL was unset/down on Shiro's side,
+ * with no way to tell purchase-time. Callers that grant something the
+ * player paid real currency for (spells, artifacts) MUST check this
+ * return value and warn on failure — see commands/shop.js, store.js.
  */
 async function grantItem(guildId, userId, item, qty = 1) {
-  if (!item || qty <= 0) return;
+  if (!item || qty <= 0) return false;
   const pool = _getPool();
-  if (!pool) return;
+  if (!pool) {
+    console.error('[sentinel-db] grantItem failed: SENTINEL_DB_URL not configured');
+    return false;
+  }
   try {
     await pool.query(
       `INSERT INTO user_inventory (guild_id, user_id, item, quantity)
@@ -135,8 +144,10 @@ async function grantItem(guildId, userId, item, qty = 1) {
        DO UPDATE SET quantity = user_inventory.quantity + EXCLUDED.quantity`,
       [guildId.toString(), userId.toString(), item, qty],
     );
+    return true;
   } catch (err) {
     console.error('[sentinel-db] grantItem failed:', err.message);
+    return false;
   }
 }
 

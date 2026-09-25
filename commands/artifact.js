@@ -265,15 +265,23 @@ async function performArtifactPurchase({ userId, username, guild, itemId, getUse
   // Always land in user_inventory (not just when there's no role) so Sentinel's
   // races.py ARTIFACT_EFFECTS lookup can see it — a relic/charm with BOTH a role
   // and a passive effect needs both grants, not one or the other.
+  let delivered = true;
   if (guild && (item.effectKind || !item.roleId)) {
-    await grantItem(guild.id, userId, itemId, 1);
+    delivered = await grantItem(guild.id, userId, itemId, 1);
   }
 
   await logAdminAction(
     userId, username, 'artifact', 'Artifact Purchase',
-    null, null, `${item.name} for ${item.priceSilv} SILV`
+    null, null, `${item.name} for ${item.priceSilv} SILV${delivered ? '' : ' (DELIVERY FAILED)'}`
   );
 
+  if (!delivered) {
+    return {
+      ok: true,
+      title: 'SILV CHARGED — DELIVERY FAILED',
+      description: `${item.emoji} **${item.name}**'s effect couldn't be delivered to Sentinel right now (bridge unreachable), though your stock slot and SILV are already spent. Contact an admin for a manual grant — don't re-buy, the stock is gone either way.`,
+    };
+  }
   return {
     ok: true,
     title: 'ARTIFACT ACQUIRED',

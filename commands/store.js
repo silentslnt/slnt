@@ -115,7 +115,11 @@ async function showPointsItems({ message }) {
         const have = await getPoints(guild.id, interaction.user.id);
         return { ok: false, message: `Not enough Aether. Need **${item.aetherCost.toLocaleString()}**, you have **${have.toLocaleString()}**.` };
       }
-      await grantItem(guild.id, interaction.user.id, itemId, 1);
+      const delivered = await grantItem(guild.id, interaction.user.id, itemId, 1);
+      if (!delivered) {
+        await awardPoints(guild.id, interaction.user.id, item.aetherCost); // refund — see races: never silently eat a payment for a failed delivery
+        return { ok: false, message: `Aether was refunded — couldn't deliver **${item.name}** right now (Sentinel bridge unreachable). Try again shortly.` };
+      }
       return { ok: true, message: `Bought **${item.name}** for **${item.aetherCost.toLocaleString()}** Aether — effect is live immediately.` };
     },
   });
@@ -152,8 +156,11 @@ async function showSpells({ message, getUserData, saveSpecificUserData, logAdmin
       userData.stats.silvSpent = (userData.stats.silvSpent || 0) + s.silvCost;
       await saveSpecificUserData(interaction.user.id, { inventory: userData.inventory, stats: userData.stats });
       await trackStat(userData, 'silvSpent', 0, { saveUserData: (d) => saveSpecificUserData(interaction.user.id, d) });
-      await grantItem(guild.id, interaction.user.id, itemId, 1);
-      await logAdminAction(interaction.user.id, interaction.user.username, 'store', 'Spell Purchase', null, null, `${s.name} for ${s.silvCost} SILV`);
+      const delivered = await grantItem(guild.id, interaction.user.id, itemId, 1);
+      await logAdminAction(interaction.user.id, interaction.user.username, 'store', 'Spell Purchase', null, null, `${s.name} for ${s.silvCost} SILV${delivered ? '' : ' (DELIVERY FAILED)'}`);
+      if (!delivered) {
+        return { ok: true, message: `**${s.silvCost}** SILV was spent, but delivery to Sentinel failed (bridge unreachable). Contact an admin for a manual grant or refund — don't re-buy yet.` };
+      }
       return { ok: true, message: `**${s.name}** delivered to your SILV inventory. Cast with \`,cast ${itemId} @member\`.` };
     },
   });

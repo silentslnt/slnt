@@ -324,8 +324,14 @@ async function performPurchase({ userId, username, guild, itemId, amount, getUse
     userData.stats.silvSpent = (userData.stats.silvSpent || 0) + cost;
     await saveUserData({ inventory: userData.inventory, stats: userData.stats });
     await trackStat(userData, 'silvSpent', 0, { saveUserData });
-    await grantItem(guild.id, userId, itemId, amount);
-    await logAdminAction(userId, username, 'shop', 'Spell Purchase', null, null, `${amount}× ${s.name} for ${cost} SILV`);
+    const delivered = await grantItem(guild.id, userId, itemId, amount);
+    await logAdminAction(userId, username, 'shop', 'Spell Purchase', null, null, `${amount}× ${s.name} for ${cost} SILV${delivered ? '' : ' (DELIVERY FAILED)'}`);
+    if (!delivered) {
+      return {
+        ok: true, title: 'SILV CHARGED — DELIVERY FAILED',
+        description: `**${cost}** SILV was spent, but the spell couldn't be delivered to Sentinel right now (bridge unreachable). Contact an admin for a manual grant or refund — don't re-buy yet.`,
+      };
+    }
     return { ok: true, title: 'SPELL DELIVERED', description: `**${amount}× ${s.name}** added to your SILV inventory. SILV spent: **${cost}**. Use \`,cast ${itemId} @member\` in SILV to cast it.` };
   }
 
