@@ -192,3 +192,5 @@ Railway auto-redeploys in ~60-90 seconds.
 - Seasonal events
 - Fix: client.once('ready') -> client.once('clientReady')
 - Delete stray pakage.json typo file from repo
+## Sentinel RPG bridge — premium gear (`.store gear`)
+`commands/store.js` `PREMIUM_GEAR` sells Sentinel gear for SILV, delivered to Sentinel's `user_inventory` as `gear_<id>` via `grantItem` (SILV refunded if delivery fails). ids must match Sentinel's `cogs/gear.py` `GEAR`. Sentinel also now has `,exchange` (Aether → SILV via `pending_silv_grants`), closed by default — the owner opens it with Sentinel's `,shopset price silv_token <aether>`.

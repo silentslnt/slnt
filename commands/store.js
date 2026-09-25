@@ -42,7 +42,8 @@ async function showHub({ message }) {
       `__**Sections**__\n` +
       `> 🪱 \`.store bait\` — fishing bait (Aether)\n` +
       `> 🪢 \`.store items\` — Points Items, small stat trinkets (Aether)\n` +
-      `> ✨ \`.store spells\` — race spells (SILV)\n\n` +
+      `> ✨ \`.store spells\` — race spells (SILV)\n` +
+      `> ⚔ \`.store gear\` — premium Sentinel gear (SILV)\n\n` +
       `-# Separate from \`.sh\` (Shiro's own shop) and \`.artifact\` (the rare weekly SILV shop).`
     )
     .setFooter(footer(message));
@@ -166,13 +167,63 @@ async function showSpells({ message, getUserData, saveSpecificUserData, logAdmin
   });
 }
 
+// SILV-priced premium gear — delivered into Sentinel's user_inventory as
+// `gear_<id>`, equipped with Sentinel's ,inventory. ids MUST match Sentinel's
+// cogs/gear.py GEAR table or the item does nothing. Mythics are otherwise
+// only World Boss drops, so SILV is the one paid shortcut to them.
+const PREMIUM_GEAR = {
+  heavens_edge:     { name: "Heaven's Edge",       emoji: '🌟', silvCost: 60, stats: '+22 PWR · +5 DEF (weapon, Mythic)' },
+  seraph_aegis:     { name: 'Aegis of the Seraph', emoji: '🪽', silvCost: 60, stats: '+20 DEF · +60 HP (armor, Mythic)' },
+  eye_of_the_abyss: { name: 'Eye of the Abyss',    emoji: '👁', silvCost: 60, stats: '+12 LCK · +5 SPD (accessory, Mythic)' },
+  bloodthorn_blade: { name: 'Bloodthorn Blade',    emoji: '🩸', silvCost: 25, stats: '+16 PWR · +3 LCK · −15 HP (weapon, Legendary)' },
+  dragonhide:       { name: 'Dragonhide Mantle',   emoji: '🔥', silvCost: 25, stats: '+16 DEF · +40 HP · −3 SPD (armor, Legendary)' },
+  crown_of_thorns:  { name: 'Crown of Thorns',     emoji: '👑', silvCost: 25, stats: '+8 PWR · +5 LCK · −6 DEF (accessory, Legendary)' },
+};
+
+async function showGear({ message, getUserData, saveSpecificUserData, logAdminAction }) {
+  if (!message.guild) return message.channel.send('Must be used in a server.');
+  const guild = message.guild;
+  await sendShopUI({
+    message,
+    title: 'PREMIUM GEAR',
+    headerDesc: "> Top-tier gear for Sentinel's RPG — lands in your `,inventory`, equip it there. Stats scale with your RP.",
+    footerName: guild.name,
+    buyPrefix: 'store_gear_',
+    getItems: async () => Object.entries(PREMIUM_GEAR).map(([id, g]) => ({
+      id, name: g.name, emoji: g.emoji, valueText: `${g.stats}\n**${g.silvCost}** ${SILV_ICON}`,
+    })),
+    onBuy: async (interaction, itemId) => {
+      const g = PREMIUM_GEAR[itemId];
+      if (!g) return { ok: false, message: 'Unknown item.' };
+      const userData = await getUserData(interaction.user.id);
+      userData.inventory = userData.inventory || {};
+      const silv = userData.inventory[SILV_KEY] || 0;
+      if (silv < g.silvCost) return { ok: false, message: `Not enough SILV. Need **${g.silvCost}**, you have **${silv}**.` };
+      userData.inventory[SILV_KEY] = silv - g.silvCost;
+      userData.stats = userData.stats || {};
+      userData.stats.silvSpent = (userData.stats.silvSpent || 0) + g.silvCost;
+      await saveSpecificUserData(interaction.user.id, { inventory: userData.inventory, stats: userData.stats });
+      const delivered = await grantItem(guild.id, interaction.user.id, `gear_${itemId}`, 1);
+      if (!delivered) {
+        userData.inventory[SILV_KEY] = (userData.inventory[SILV_KEY] || 0) + g.silvCost; // refund, never eat a payment
+        userData.stats.silvSpent -= g.silvCost;
+        await saveSpecificUserData(interaction.user.id, { inventory: userData.inventory, stats: userData.stats });
+        return { ok: false, message: `SILV refunded — couldn't reach Sentinel right now. Try again shortly.` };
+      }
+      await logAdminAction(interaction.user.id, interaction.user.username, 'store', 'Gear Purchase', null, null, `${g.name} for ${g.silvCost} SILV`);
+      return { ok: true, message: `**${g.name}** delivered — equip it with Sentinel's \`,inventory\`.` };
+    },
+  });
+}
+
 module.exports = {
   name: 'store',
   aliases: ['market'],
-  description: 'SILV race-system shop hub — bait, Points Items, spells. `.store [bait|items|spells]`',
+  description: 'SILV race-system shop hub — bait, Points Items, spells, gear. `.store [bait|items|spells|gear]`',
   async execute({ message, args, getUserData, saveSpecificUserData, logAdminAction }) {
     const sub = (args[0] || '').toLowerCase();
     if (sub === 'bait')             return showBait({ message });
+    if (sub === 'gear')             return showGear({ message, getUserData, saveSpecificUserData, logAdminAction });
     if (sub === 'items' || sub === 'points') return showPointsItems({ message });
     if (sub === 'spells')           return showSpells({ message, getUserData, saveSpecificUserData, logAdminAction });
     return showHub({ message });
