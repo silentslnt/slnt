@@ -120,7 +120,7 @@ module.exports = {
     });
 
     collector.on('end', () => {
-      if (!gameOver) { message.channel.send('Blackjack timed out.'); finalize(false, 0); }
+      if (!gameOver) { msg.edit({ content: 'Blackjack timed out.', embeds: [] }).catch(() => {}); msg.reactions.removeAll().catch(() => {}); finalize(false, 0); }
     });
 
     async function dealerTurn() {
@@ -176,7 +176,8 @@ module.exports = {
         )
         .setFooter({ text: frenzyMult > 1 ? `${frenzyMult}× Frenzy Essence active` : (message.guild?.name || 'Shiro') });
 
-      await message.channel.send({ embeds: [finalEmbed] });
+      await msg.edit({ embeds: [finalEmbed] }).catch(() => message.channel.send({ embeds: [finalEmbed] }));
+      msg.reactions.removeAll().catch(() => {});
 
       if (won && client) {
         announceWin(client, {
