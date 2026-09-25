@@ -192,15 +192,20 @@ Railway auto-redeploys in ~60-90 seconds.
 - Seasonal events
 - Fix: client.once('ready') -> client.once('clientReady')
 - Delete stray pakage.json typo file from repo
+## Who sells what (rule: one place per currency)
+- **Shiro `.sh`** — Shiro's own economy: essences, bundles, cosmetics, utility, admin items. Button hub; each section replaces the hub in place with a Back button.
+- **Shiro `.store`** — SILV-priced items for Sentinel's RPG: Spells, premium Gear (+ Revive Token). Same in-place hub. Points Items (Aether trinkets) were moved OUT to Sentinel's `,shop` → Trinkets; `.store items` points there.
+- **Shiro `.artifact`** — the weekend Artifact Shop (Fri 18:00 → Sun 23:59 UTC, random stock). Sentinel's `,shop` → Premium and `,guide` mention it.
+- **Shiro `.convert`** — coins → SILV (100k, 5/day) and SILV → Aether (10k/SILV). The only coins→Aether path: `.sh aether` packs were removed (they were a second, inconsistent rate).
+- **Sentinel `,shop`** — everything priced in Aether (gear, potions, bait, lures, rods, trinkets) + a Premium page that lists the SILV items and says to buy them with `shiro store`.
+
 ## Sentinel RPG bridge — premium gear (`.store gear`)
-`commands/store.js` `PREMIUM_GEAR` sells Sentinel gear for SILV, delivered to Sentinel's `user_inventory` as `gear_<id>` via `grantItem` (SILV refunded if delivery fails). ids must match Sentinel's `cogs/gear.py` `GEAR`. Sentinel also now has `,exchange` (Aether → SILV via `pending_silv_grants`), closed by default — the owner opens it with Sentinel's `,shopset price silv_token <aether>`.
+`commands/store.js` `PREMIUM_GEAR` sells Sentinel gear for SILV, delivered to Sentinel's `user_inventory` as `gear_<id>` via `grantItem` (SILV refunded if delivery fails). ids must match Sentinel's `cogs/gear.py` `GEAR`, and Sentinel's `PREMIUM_SILV` list (shown on its `,shop` Premium page) must be kept in sync by hand. Sentinel has NO Aether → SILV path (SILV = 10 Robux).
 
 ## SILV conversion (`.convert`, commands/convert.js) — CV2 card
 - Coins → SILV: `COINS_PER_SILV` = 100,000 coins per SILV, `COIN_TO_SILV_DAILY_CAP` = 5/day (tracked on `userData.silvConvert`). `.rate` reads the same constant.
-- SILV → Aether: `AETHER_PER_SILV` = 10,000, one-way into Sentinel via `awardPoints` (now returns true/false; SILV is refunded on failure).
-- There is NO Aether → SILV path anywhere (SILV = 10 Robux).
-- `.store` is a CV2 hub (Items / Spells / Gear buttons). Bait was removed — it's sold in Sentinel's `,shop` → Fishing.
-- Note: `.sh aether` packs (5k coins → 100 Aether) are now worse value than coins → SILV → Aether (10 coins/Aether); adjust or remove them if you want one path.
+- SILV → Aether: `AETHER_PER_SILV` = 10,000, one-way into Sentinel via `awardPoints` (returns true/false; SILV is refunded on failure).
 
-## UI rule: CV2 everywhere
-`utils/cv2patch.js` (required at the top of index.js) converts every `{ embeds: [...] }` send/reply/edit/update/followUp into a Components V2 container automatically, falling back to the embed if Discord rejects it. New commands should still build CV2 directly (ContainerBuilder/SectionBuilder) with buttons and ephemeral feedback — see `commands/convert.js` for the pattern (one Convert button per section → modal → ephemeral result → card refresh).
+## UI rules
+- `utils/cv2patch.js` (required at the top of index.js) converts every `{ embeds: [...] }` send/reply/edit/update/followUp into a Components V2 container automatically, falling back to the embed if Discord rejects it. New commands should still build CV2 directly (ContainerBuilder/SectionBuilder) — see `commands/convert.js`.
+- **Never flood the channel.** A button press edits the card it's on (`interaction.update`) or answers ephemerally — it never posts a new public message. `utils/shopUI.js` `sendShopUI({ interaction, onBack })` opens a shop section in place of the hub card; collectors filter by customId prefix so a hub and its section never double-handle a click; a collector's `end` only strips buttons on `time`, not on navigation. Games edit their own card for results (blackjack does now).
