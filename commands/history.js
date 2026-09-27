@@ -9,19 +9,11 @@ const bar = (part, total, n = 12) => {
 };
 const fmt = (n) => `${n < 0 ? '−' : '+'}${Math.abs(Math.round(n)).toLocaleString()}`;
 
-module.exports = {
-  name: 'history',
-  aliases: ['hist', 'record', 'gamblelog'],
-  description: 'Your casino history — wins, losses, net and every recent round. `.history [@user] [game]`',
-
-  async execute({ message, args }) {
-    const target = message.mentions.users.first() || message.author;
-    const game = args.find((a) => !a.startsWith('<@'))?.toLowerCase();
+async function historyCard(target, game, guild, rows = []) {
     let rounds = await playerHistory(target.id);
     if (game) rounds = rounds.filter((r) => r.game === game);
-    const guild = message.guild?.name || 'Shiro';
     if (!rounds.length) {
-      return message.channel.send(card({ title: `📜 ${target.username}'s record`, body: '> No rounds yet' + (game ? ` in **${game}**.` : '.'), footer: guild }));
+      return card({ title: `📜 ${target.username}'s record`, body: '> No rounds yet' + (game ? ` in **${game}**.` : '.'), rows, footer: guild });
     }
     const wins = rounds.filter((r) => r.payout > r.bet);
     const losses = rounds.filter((r) => r.payout < r.bet);
@@ -60,10 +52,22 @@ module.exports = {
       '',
       '__**Recent rounds**__', recent,
     ].join('\n');
-    return message.channel.send(card({
+    return card({
       title: `📜 ${target.username}'s record${game ? ` — ${game}` : ''}`,
       body, accent: net > 0 ? WIN : net < 0 ? LOSE : BLACK,
-      footer: `${guild} · last ${rounds.length} rounds · the house always wins in the long run`,
-    }));
+      rows, footer: `${guild} · last ${rounds.length} rounds · the house always wins in the long run`,
+    });
+}
+
+module.exports = {
+  name: 'history',
+  aliases: ['hist', 'record', 'gamblelog'],
+  description: 'Your casino history — wins, losses, net and every recent round. `.history [@user] [game]`',
+
+  async execute({ message, args }) {
+    const target = message.mentions.users.first() || message.author;
+    const game = args.find((a) => !a.startsWith('<@'))?.toLowerCase();
+    return message.channel.send(await historyCard(target, game, message.guild?.name || 'Shiro'));
   },
+  historyCard,
 };

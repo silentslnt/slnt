@@ -1,18 +1,95 @@
-// commands/bal.js
-const { EmbedBuilder } = require('discord.js');
+// commands/bal.js — the Shiro profile card (direct: "like the ,race card… a profile interface: their balance,
+// a button to see their history of games, winnings, losses and any other needed thing"). One CV2 card with tabs:
+// Overview · Game history · Stats · Bag. Anyone can look at anyone (`.bal @user`); only the one who opened it
+// switches tabs.
+const {
+  ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SectionBuilder, ThumbnailBuilder, ActionRowBuilder,
+  ButtonBuilder, ButtonStyle, MessageFlags,
+} = require('discord.js');
 const { xpProgress, progressBar } = require('../utils/xp');
-const { getRank } = require('../utils/prestige');
+const { getRank, getNextRank } = require('../utils/prestige');
+const { playerHistory } = require('../utils/houseBank');
+const { historyCard } = require('./history');
 
 const SILV_ICON  = '<:zzsilvtoken:1486364646796431427>';
 const WHITESWIRL = '<a:cwhiteswirl:1512869492492079184>';
 const CSTAR      = '<a:cstar:1545032606603812954>';
 const BLACK      = 0x000000;
+const TABS = [['overview', 'Overview'], ['history', 'Game history'], ['stats', 'Stats'], ['bag', 'Bag']];
+const KEY_TIERS = ['Common', 'Uncommon', 'Rare', 'Legendary', 'Mythical', 'Prismatic'];
+
+const fmt = (n) => Math.round(n || 0).toLocaleString();
+const signed = (n) => `${n < 0 ? '−' : '+'}${Math.abs(Math.round(n)).toLocaleString()}`;
+
+function tabRow(tab, disabled = false) {
+  return new ActionRowBuilder().addComponents(...TABS.map(([id, label]) => new ButtonBuilder()
+    .setCustomId(`prof_${id}`).setLabel(label).setDisabled(disabled)
+    .setStyle(id === tab ? ButtonStyle.Primary : ButtonStyle.Secondary)));
+}
+
+async function body(tab, target, data) {
+  if (tab === 'overview') {
+    const { level, current, needed } = xpProgress(data.xp || 0);
+    const rank = getRank(data.totalEarned || 0);
+    const next = getNextRank ? getNextRank(data.totalEarned || 0) : null;
+    const silv = data.inventory?.['Silv token'] || 0;
+    const rounds = await playerHistory(target.id, 200);
+    const net = rounds.reduce((t, r) => t + (r.payout - r.bet), 0);
+    const won = rounds.filter((r) => r.payout > r.bet).length;
+    return [
+      `# ${fmt(data.balance)} coins`,
+      `> ${SILV_ICON} **${silv}** SILV *(= ${silv * 10} Robux)*`,
+      `> ${CSTAR} Level **${level}** · ${WHITESWIRL} Rank **${rank.name}**` + (next && next.name ? ` · next **${next.name}**` : ''),
+      `> 🔥 Daily streak **${data.dailyStreak || 0}** · 💰 Total earned **${fmt(data.totalEarned)}**`,
+      '',
+      `__**XP**__ *(Lv ${level})*`,
+      `> ${progressBar(current, needed, 12)} ${current}/${needed}`,
+      '',
+      '__**Casino (last 200 rounds)**__',
+      rounds.length
+        ? `> **${signed(net)}** net · ${rounds.length} played · ${won} won (${Math.round((won / rounds.length) * 100)}%)`
+        : '> No games yet.',
+      '-# Game history shows every round — wins, losses and how each game treats you.',
+    ].join('\n');
+  }
+  if (tab === 'stats') {
+    const st = data.stats || {};
+    const lines = [
+      ['Games played', st.gamesPlayed], ['Games won', st.gamesWon], ['Coins won', st.coinsWon],
+      ['Natural blackjacks', st.blackjack21], ['Keys opened', st.keysOpened], ['Daily claims', st.dailyClaims],
+      ['Coins gifted', st.coinsGifted], ['Trades', st.tradesCompleted],
+    ].filter(([, v]) => v).map(([k, v]) => `> ${k}: **${fmt(v)}**`);
+    return ['## 📊 Stats', lines.join('\n') || '> Nothing yet.', '',
+      `__**Achievements**__ \`${(data.achievements || []).length}\``,
+      (data.achievements || []).slice(-8).map((a) => `> 🏅 ${typeof a === 'string' ? a : a.name || a.id}`).join('\n') || '> None yet.'].join('\n');
+  }
+  const inv = data.inventory || {};
+  const keys = KEY_TIERS.filter((k) => inv[k]).map((k) => `> 🔑 ${k} key ×**${inv[k]}**`);
+  const items = Object.entries(inv).filter(([k, v]) => !KEY_TIERS.includes(k) && k !== 'Silv token' && typeof v === 'number' && v > 0)
+    .map(([k, v]) => `> ${k} ×**${v}**`);
+  const chars = (data.characters || []).length;
+  return ['## 🎒 Bag', `> ${SILV_ICON} SILV ×**${inv['Silv token'] || 0}**`, ...keys, ...items,
+    chars ? `> 🃏 Characters **${chars}**` : '', (keys.length || items.length) ? '' : '> Nothing else yet.'].filter((x) => x !== '').join('\n');
+}
+
+async function profile(tab, target, data, guild, disabled = false) {
+  if (tab === 'history') return historyCard(target, null, guild, [tabRow(tab, disabled)]);
+  const c = new ContainerBuilder().setAccentColor(BLACK)
+    .addSectionComponents(new SectionBuilder()
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${target.username}\n-# Shiro profile`))
+      .setThumbnailAccessory(new ThumbnailBuilder().setURL(target.displayAvatarURL({ dynamic: true }))))
+    .addActionRowComponents(tabRow(tab, disabled))
+    .addSeparatorComponents(new SeparatorBuilder())
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(await body(tab, target, data)))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${guild}`));
+  return { components: [c], flags: MessageFlags.IsComponentsV2 };
+}
 
 module.exports = {
   name: 'bal',
   aliases: ['balance', 'b', 'coins'],
   adminOnly: false,
-  description: 'Check balance. `.bal [@user]`',
+  description: 'Your Shiro profile — balance, SILV, level, game history, stats, bag. `.bal [@user]`',
 
   async execute({ message, userData, getUserData }) {
     const target = message.mentions.users.first() || message.author;
@@ -21,30 +98,20 @@ module.exports = {
       data = await getUserData(target.id);
       if (!data) return message.channel.send('No data for that user.');
     }
-
-    const balance = data.balance || 0;
-    const silv    = data.inventory?.['Silv token'] || 0;
-    const { level, current, needed } = xpProgress(data.xp || 0);
-    const xpBar   = progressBar(current, needed, 8);
-    const rank    = getRank(data.totalEarned || 0);
-
-    return message.channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setTitle('BALANCE')
-          .setColor(BLACK)
-          .setThumbnail(target.displayAvatarURL({ dynamic: true }))
-          .setDescription(
-            `> **${target.username}**\n\n` +
-            `> Coins: **${balance.toLocaleString()}**\n` +
-            `> ${SILV_ICON} SILV: **${silv}** *(= ${silv * 10} Robux)*\n` +
-            `> ${CSTAR} Level **${level}** · ${WHITESWIRL} Rank **${rank.name}**\n` +
-            `> Streak: **${data.dailyStreak || 0}** days · Total earned: **${(data.totalEarned || 0).toLocaleString()}**\n\n` +
-            `__**XP Progress**__ *(Lv ${level})*\n` +
-            `> ${xpBar} ${current}/${needed}`
-          )
-          .setFooter({ text: message.guild?.name || 'Shiro' }),
-      ],
+    const guild = message.guild?.name || 'Shiro';
+    const msg = await message.channel.send(await profile('overview', target, data, guild));
+    const collector = msg.createMessageComponentCollector({ time: 300_000 });
+    collector.on('collect', async (i) => {
+      if (i.user.id !== message.author.id) {
+        return i.reply({ content: 'Open your own with `.bal`.', ephemeral: true }).catch(() => {});
+      }
+      const tab = i.customId.replace('prof_', '');
+      const fresh = await getUserData(target.id);
+      await i.update(await profile(tab, target, fresh, guild)).catch(() => {});
+    });
+    collector.on('end', async () => {
+      const fresh = await getUserData(target.id).catch(() => data);
+      await msg.edit(await profile('overview', target, fresh || data, guild, true)).catch(() => {});
     });
   },
 };
