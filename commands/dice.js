@@ -51,7 +51,7 @@ module.exports = {
       await awardPoints(message.guild.id, message.author.id, pts);
     }
 
-    recordRound('dice', bet, reward);
+    recordRound('dice', bet, reward, 0, message.author.id);
     await trackStat(userData, 'gamesPlayed', 1);
     if (reward > 0) {
       await trackStat(userData, 'gamesWon', 1);

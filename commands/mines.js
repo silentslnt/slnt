@@ -171,7 +171,7 @@ module.exports = {
         const frenzy   = getMultiplier(userData, 'frenzy');
         const finalPay = casinoPayout(session.bet, payout, userData);
 
-        recordRound('mines', bet, finalPay);
+        recordRound('mines', bet, finalPay, 0, userId);
         userData.balance     = (userData.balance || 0) + finalPay;
         userData.totalEarned = (userData.totalEarned || 0) + Math.max(0, finalPay - bet);
         await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned });
@@ -223,7 +223,7 @@ module.exports = {
           session.won   = false;
           for (const mineIdx of session.minePositions) session.revealed.add(mineIdx);
 
-          recordRound('mines', bet, 0);
+          recordRound('mines', bet, 0, 0, userId);
           await addXP(userId, XP_PER_GAME, userData, saveUserData, message);
           await trackStat(userData, 'gamesPlayed', 1);
           await checkAchievements(userData, { message, saveUserData });
@@ -245,7 +245,7 @@ module.exports = {
           session.ended = true;
           session.won   = true;
 
-          recordRound('mines', bet, payout);
+          recordRound('mines', bet, payout, 0, userId);
           userData.balance     = (userData.balance || 0) + payout;
           userData.totalEarned = (userData.totalEarned || 0) + Math.max(0, payout - bet);
           await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned });

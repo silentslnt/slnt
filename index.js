@@ -156,6 +156,34 @@ async function saveUserData(userId, userData) {
   await User.updateOne({ userId }, { $set: userData }, { upsert: true });
 }
 
+/**
+ * A command's own saver. Balance is written as the CHANGE since this command loaded it, never as an absolute
+ * number: long games (blackjack, crash, tower, mines…) used to write back a balance read minutes earlier,
+ * erasing whatever happened meanwhile — lose everything in coinflip while a blackjack hand is open and the
+ * blackjack result put the old balance back. A spend that the real balance can't cover is refused.
+ */
+class InsufficientFunds extends Error {}
+
+function makeSaver(userId, userData) {
+  let base = Number(userData.balance) || 0;
+  return async (updated) => {
+    const upd = { ...updated };
+    if (Object.prototype.hasOwnProperty.call(upd, 'balance')) {
+      const target = Number(upd.balance) || 0;
+      delete upd.balance;
+      const delta = target - base;
+      if (delta < 0) {
+        const res = await User.findOneAndUpdate({ userId, balance: { $gte: -delta } }, { $inc: { balance: delta } }, { new: true });
+        if (!res) throw new InsufficientFunds('balance changed while this was running');
+      } else if (delta > 0) {
+        await User.updateOne({ userId }, { $inc: { balance: delta } }, { upsert: true });
+      }
+      base = target;
+    }
+    if (Object.keys(upd).length) await User.updateOne({ userId }, { $set: upd }, { upsert: true });
+  };
+}
+
 async function updateUserBalance(userId, amount) {
   const user = await User.findOneAndUpdate(
     { userId },
@@ -737,7 +765,7 @@ client.on('messageCreate', async (message) => {
       message,
       args,
       userData,
-      saveUserData: (updatedData) => saveUserData(message.author.id, updatedData),
+      saveUserData: makeSaver(message.author.id, userData),
       saveSpecificUserData: saveUserData,
       updateUserBalance,
       addKeyToInventory,
@@ -754,6 +782,9 @@ client.on('messageCreate', async (message) => {
       setEconomyLogsChannel,
     });
   } catch (error) {
+    if (error instanceof InsufficientFunds) {
+      return message.channel.send("You don't have enough coins for that anymore — your balance changed while it was running.").catch(() => {});
+    }
     console.error(`Error executing ${command.name}:`, error);
     const errorEmbed = new EmbedBuilder()
       .setTitle('Command Error')

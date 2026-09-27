@@ -103,7 +103,7 @@ module.exports = {
       userData.balance += streakBonus;
       streakNote        = `\n> **${cfStreak}-flip streak bonus:** +${streakBonus.toLocaleString()} coins!`;
     }
-    recordRound('coinflip', bet, payout + streakBonus, fee);
+    recordRound('coinflip', bet, payout + streakBonus, fee, message.author.id);
 
     await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned, stats: userData.stats });
     await addXP(message.author.id, won ? XP_PER_WIN : XP_PER_GAME, userData, saveUserData, message);

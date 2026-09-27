@@ -1,6 +1,7 @@
 // commands/tower.js — climb floor by floor; each floor hides a trap behind one
 // of the doors. Cash out whenever you like. Multiplier after n floors =
 // 0.94 / P(surviving n floors) — a 6% house edge at every floor.
+const { shuffle } = require('../utils/shuffle');
 const { card, button, row, takeBet, settle, WIN, LOSE, BLACK, ButtonStyle } = require('../utils/casino');
 const { casinoPayout } = require('../utils/houseEdge');
 
@@ -40,7 +41,7 @@ module.exports = {
     let traps = null;           // trap doors for the current floor
     const history = [];
     const newFloor = () => {
-      const idx = [...Array(doors).keys()].sort(() => Math.random() - 0.5);
+      const idx = shuffle([...Array(doors).keys()]);
       traps = new Set(idx.slice(0, doors - safe));
     };
     newFloor();

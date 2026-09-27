@@ -101,7 +101,7 @@ module.exports = {
       const pts = betType === 'number' ? 50 : betType === 'green' ? 35 : Math.min(30, Math.max(5, Math.floor(profit / 500)));
       await awardPoints(message.guild.id, message.author.id, pts);
     }
-    recordRound('roulette', bet, payout);
+    recordRound('roulette', bet, payout, 0, message.author.id);
     await trackStat(userData, 'gamesPlayed', 1);
     if (won) {
       await trackStat(userData, 'gamesWon', 1);

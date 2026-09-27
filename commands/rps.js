@@ -75,7 +75,7 @@ module.exports = {
 
     await saveUserData({ balance: userData.balance });
 
-    recordRound('rps', bet, payout);
+    recordRound('rps', bet, payout, 0, message.author.id);
     await trackStat(userData, 'gamesPlayed', 1);
     if (won) {
       await trackStat(userData, 'gamesWon', 1);

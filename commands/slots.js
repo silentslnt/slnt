@@ -157,7 +157,7 @@ module.exports = {
     }
 
     userData.stats = userData.stats || {};
-    recordRound('slots', bet, payout);
+    recordRound('slots', bet, payout, 0, message.author.id);
     userData.stats.gamesPlayed = (userData.stats.gamesPlayed || 0) + 1;
     if (payout > 0) {
       userData.stats.gamesWon = (userData.stats.gamesWon || 0) + 1;

@@ -109,7 +109,7 @@ module.exports = {
     await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned });
 
     await addXP(message.author.id, XP_PER_GAME + (won ? XP_PER_WIN : 0), userData, saveUserData, message);
-    recordRound('plinko', bet, payout);
+    recordRound('plinko', bet, payout, 0, message.author.id);
     await trackStat(userData, 'gamesPlayed', 1);
     if (won) await trackStat(userData, 'gamesWon', 1);
     if (won) await trackStat(userData, 'coinsWon', profit);

@@ -34,6 +34,7 @@ const SECTIONS = {
       { cmd: '.plinko',             desc: '.plinko <bet> <low|medium|high>' },
       { cmd: '.crash / .cr',        desc: '.crash <bet> [2x]  — Cash out before it crashes' },
       { cmd: '.tower / .tw',        desc: '.tower <bet> [easy|medium|hard]  — Climb, avoid traps' },
+      { cmd: '.history / .hist',    desc: '.history [@user] [game]  — Your win/loss record' },
       { cmd: '.cups',               desc: '.cups <bet>  — Find the coin (2.8×)' },
       { cmd: '.wheel / .wh',        desc: '.wheel <bet>  — Spin 0×–5×' },
       { cmd: '.ou',                 desc: '.ou <bet> <over|under> <5-95>  — Riskier call, bigger pay' },

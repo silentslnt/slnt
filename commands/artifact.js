@@ -7,6 +7,7 @@ const {
   EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
   StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle,
 } = require('discord.js');
+const { shuffle } = require('../utils/shuffle');
 const { ArtifactPool, ArtifactWindow, ArtifactOverride } = require('../models/artifact');
 const { getWindow } = require('../utils/artifactSchedule');
 const { requireWhitelisted, isWhitelisted } = require('../utils/permissions');
@@ -123,7 +124,7 @@ function fmtCountdown(ms) {
 // Randomly picks how many + which artifacts from the pool roll into a window.
 // 2-5 items, never more than the pool actually has.
 function rollSelection(pool) {
-  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  const shuffled = shuffle(pool);
   const count = Math.min(shuffled.length, 2 + Math.floor(Math.random() * 4)); // 2-5
   return shuffled.slice(0, count);
 }

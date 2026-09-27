@@ -11,6 +11,7 @@ const { trackStat, checkAchievements } = require('./achievements');
 const { announceWin } = require('./winAnnouncer');
 const { XP_PER_GAME, XP_PER_WIN } = require('./config');
 const { recordRound } = require('./houseBank');
+const User = require('../models/user');
 
 const BLACK = 0x000000;
 const WIN = 0x3FA34D;
@@ -51,8 +52,13 @@ async function takeBet(ctx, arg, usage) {
     await message.channel.send(`You only have **${(userData.balance || 0).toLocaleString()}** coins.`);
     return null;
   }
-  userData.balance -= bet;
-  await saveSpecificUserData(message.author.id, { balance: userData.balance });
+  // Atomic: only taken if the balance still covers it right now (two games at once can't spend the same coins).
+  const taken = await User.findOneAndUpdate({ userId: message.author.id, balance: { $gte: bet } }, { $inc: { balance: -bet } }, { new: true });
+  if (!taken) {
+    await message.channel.send("You don't have enough coins for that bet.");
+    return null;
+  }
+  userData.balance = taken.balance;
   return { bet, userData };
 }
 
@@ -62,9 +68,10 @@ async function settle(ctx, { bet, payout, game, detail }) {
   const uid = message.author.id;
   const userData = await getUserData(uid);
   const won = payout > bet;
-  recordRound(game, bet, payout);
-  if (payout > 0) {
-    userData.balance = (userData.balance || 0) + payout;
+  recordRound(game, bet, payout, 0, uid);
+  if (payout > 0) {  // paid as an increment — never overwrites a balance change made meanwhile
+    const after = await User.findOneAndUpdate({ userId: uid }, { $inc: { balance: payout } }, { new: true, upsert: true });
+    userData.balance = after.balance;
     userData.totalEarned = (userData.totalEarned || 0) + Math.max(0, payout - bet);
   }
   await trackStat(userData, 'gamesPlayed', 1);
@@ -73,7 +80,7 @@ async function settle(ctx, { bet, payout, game, detail }) {
     await trackStat(userData, 'coinsWon', payout - bet);
   }
   const save = (d) => saveSpecificUserData(uid, d);
-  await save({ balance: userData.balance, totalEarned: userData.totalEarned, stats: userData.stats });
+  await save({ totalEarned: userData.totalEarned, stats: userData.stats });
   await addXP(uid, won ? XP_PER_GAME + XP_PER_WIN : XP_PER_GAME, userData, save, message).catch(() => {});
   await checkAchievements(userData, { message, saveUserData: save }).catch(() => {});
   if (won && client) {

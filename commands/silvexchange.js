@@ -7,6 +7,7 @@
 // UI matches Dank Memer's shop pattern: item cards with an inline Buy
 // button each, plus ◀ ▶ pagination — not just a `.silvexchange buy <id>`
 // text command (still works, kept for convenience/muscle memory).
+const { shuffle } = require('../utils/shuffle');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { SilvExchangePool, SilvExchangeDay } = require('../models/silvExchange');
 const { requireWhitelisted } = require('../utils/permissions');
@@ -36,7 +37,7 @@ function fmtCountdown(ms) {
 
 // 3-6 items roll in each day, never more than the pool has.
 function rollSelection(pool) {
-  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  const shuffled = shuffle(pool);
   const count = Math.min(shuffled.length, 3 + Math.floor(Math.random() * 4)); // 3-6
   return shuffled.slice(0, count);
 }

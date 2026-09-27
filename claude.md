@@ -218,3 +218,11 @@ Every house game returns LESS than it takes on average, even with essences. A wi
 - **Casino ledger** (`utils/houseBank.js`, `.house` — trusted list / OWNER_ID only): every casino round calls `recordRound(game, bet, payout, fee)` (settle() does it for the CV2 games). Stored in the Mongo `Meta` collection under `house_bank`; it is NOT a user balance and never appears on leaderboards or `.bal`.
 - Hi-Lo (`.hl`) was removed — it paid ~115% with basic play.
 - New CV2 games share `utils/casino.js` (`takeBet` / `settle` on fresh user data, `card` builder): `.crash`, `.tower`, `.cups`, `.wheel`, `.ou`.
+
+
+## Casino integrity (direct: "there should be no payout or easy money methods whatsoever")
+- **Balances are written as changes, never absolutes.** `index.js makeSaver(userId, userData)` is every command's `saveUserData`: a `balance` in the update becomes `$inc` of (new − the value this command loaded); a spend the live balance can't cover throws `InsufficientFunds` (answered, not logged as an error). Long games (blackjack, crash, tower, mines, cups…) used to write back a balance read minutes earlier and erase anything that happened meanwhile — play coinflip while a blackjack hand is open and the old balance came back (24 → 150).
+- `utils/casino.js` `takeBet` is an atomic conditional `$inc` (`balance >= bet`); `settle` pays with `$inc`.
+- **Fair shuffles only** — `utils/shuffle.js` (Fisher–Yates + `crypto.randomInt`). `sort(() => Math.random() - 0.5)` is biased: Tower's Easy door 2 was a trap 19% of the time instead of 33% and Hard door 3 50% instead of 67%, so always picking them beat the house. Never use the sort trick.
+- Blackjack settles once (`busy`/`settled`/`finalized` flags): two fast reactions used to run the dealer's turn and pay twice.
+- **`.history [@user] [game]`** (aka hist/record/gamblelog) — the player's last 200 rounds (`CasinoRound` in utils/houseBank.js, written by `recordRound(game, bet, payout, fee, userId)`; every game passes the user id): net, W/L, win-rate bar, streak, best/worst, per-game net, recent rounds.

@@ -48,7 +48,12 @@ module.exports = {
 
     activeGames.add(userId);
     userData.balance -= bet;
-    await saveUserData({ balance: userData.balance });
+    try {
+      await saveUserData({ balance: userData.balance });
+    } catch (e) {
+      activeGames.delete(userId);
+      throw e;
+    }
 
     let playerHand = [getCard(), getCard()];
     let dealerHand = [getCard(), getCard()];
@@ -84,8 +89,14 @@ module.exports = {
     const filter = (r, u) => ['✅','⏹️'].includes(r.emoji.name) && u.id === userId;
     const collector = msg.createReactionCollector({ filter, time: 60000 });
 
+    let busy = false;  // one reaction at a time — two fast clicks used to run the dealer's turn (and pay out) twice
     collector.on('collect', async (reaction, user) => {
-      if (gameOver) return;
+      if (gameOver || busy) return;
+      busy = true;
+      try { await handle(reaction, user); } finally { busy = false; }
+    });
+
+    async function handle(reaction, user) {
       await reaction.users.remove(user.id).catch(() => {});
 
       if (reaction.emoji.name === '✅') {
@@ -119,13 +130,16 @@ module.exports = {
         collector.stop();
         await dealerTurn();
       }
-    });
+    }
 
     collector.on('end', () => {
       if (!gameOver) { msg.edit({ content: 'Blackjack timed out.', embeds: [] }).catch(() => {}); msg.reactions.removeAll().catch(() => {}); finalize(false, 0); }
     });
 
+    let settled = false;
     async function dealerTurn() {
+      if (settled) return;
+      settled = true;
       while (handValue(dealerHand) < 17) dealerHand.push(getCard());
       const pv = handValue(playerHand);
       const dv = handValue(dealerHand);
@@ -194,9 +208,12 @@ module.exports = {
       await finalize(won, payout);
     }
 
+    let finalized = false;
     async function finalize(won, payout) {
+      if (finalized) return;
+      finalized = true;
       activeGames.delete(userId);
-      recordRound('blackjack', bet, payout);
+      recordRound('blackjack', bet, payout, 0, userId);
 
       // XP
       await addXP(userId, won ? XP_PER_WIN : XP_PER_GAME, userData, saveUserData, message);

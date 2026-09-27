@@ -122,7 +122,7 @@ module.exports = {
           .setFooter({ text: message.guild?.name || 'Shiro' });
         message.channel.send({ embeds: [embed] });
         userGames.delete(userId);
-        recordRound('minesweeper', game.bet, 0);
+        recordRound('minesweeper', game.bet, 0, 0, message.author.id);
         await trackStat(userData, 'gamesPlayed', 1);
         await checkAchievements(userData, { message, saveUserData });
         return;
@@ -134,7 +134,7 @@ module.exports = {
         // Fair odds of clearing the board = 1 / C(size, mines); pay 92% of that.
         const mult = Math.max(1.1, Math.round(0.92 * nCr(game.size, game.mineCount) * 100) / 100);
         const payout = Math.floor(game.bet * mult);
-        recordRound('minesweeper', game.bet, payout);
+        recordRound('minesweeper', game.bet, payout, 0, message.author.id);
         userData.balance += payout;
         userData.totalEarned = (userData.totalEarned || 0) + (payout - game.bet);
         await saveUserData({ balance: userData.balance, totalEarned: userData.totalEarned });

@@ -8,8 +8,27 @@ const metaSchema = new mongoose.Schema({ key: { type: String, unique: true }, va
 const Meta = mongoose.models.Meta || mongoose.model('Meta', metaSchema);
 const KEY = 'house_bank';
 
-/** Record one finished round. payout = everything paid back (stake included); fee = fee kept on a win. */
-function recordRound(game, bet, payout, fee = 0) {
+// Every player's own rounds — powers `.history` (their win/loss log). Kept to the last HISTORY_KEEP per player.
+const roundSchema = new mongoose.Schema({
+  userId: { type: String, index: true }, game: String, bet: Number, payout: Number, at: { type: Date, default: Date.now },
+});
+const CasinoRound = mongoose.models.CasinoRound || mongoose.model('CasinoRound', roundSchema);
+const HISTORY_KEEP = 200;
+
+async function logPlayerRound(userId, game, bet, payout) {
+  await CasinoRound.create({ userId, game, bet, payout });
+  const old = await CasinoRound.find({ userId }).sort({ at: -1 }).skip(HISTORY_KEEP).select('_id').lean();
+  if (old.length) await CasinoRound.deleteMany({ _id: { $in: old.map((o) => o._id) } });
+}
+
+async function playerHistory(userId, limit = HISTORY_KEEP) {
+  return CasinoRound.find({ userId }).sort({ at: -1 }).limit(limit).lean();
+}
+
+/** Record one finished round. payout = everything paid back (stake included); fee = fee kept on a win.
+ *  Pass userId so it also lands in that player's `.history`. */
+function recordRound(game, bet, payout, fee = 0, userId = null) {
+  if (userId) logPlayerRound(String(userId), game, bet, payout).catch(() => {});
   const net = Math.floor(bet - payout);
   Meta.findOneAndUpdate(
     { key: KEY },
@@ -28,4 +47,4 @@ async function resetBank() {
   await Meta.findOneAndUpdate({ key: KEY }, { $set: { value: { balance: 0, wagered: 0, paid: 0, fees: 0, rounds: 0, games: {} } } }, { upsert: true });
 }
 
-module.exports = { recordRound, getBank, resetBank };
+module.exports = { recordRound, getBank, resetBank, playerHistory };
