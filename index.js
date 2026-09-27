@@ -294,14 +294,19 @@ async function claimPendingSilvTokens() {
   }
   for (const grant of grants) {
     try {
-      await updateUserBalance(grant.userId, grant.amount);
+      // SILV lives in inventory['Silv token'] — this used to add the grant to the COIN balance by mistake.
+      await User.updateOne({ userId: grant.userId }, { $inc: { 'inventory.Silv token': grant.amount } }, { upsert: true });
       const user = await client.users.fetch(grant.userId).catch(() => null);
       if (user) {
+        const invited = String(grant.source || '').startsWith('invite:');
+        const why = invited
+          ? `🎟 **Invite reward** — <@${grant.source.split(':')[1]}> joined and began their journey.`
+          : '✨ **A SILV Token you caught fishing has been claimed.**';
         await user.send({
           embeds: [
             new EmbedBuilder()
               .setColor(0x000000)
-              .setDescription(`✨ **A SILV Token you caught fishing has been claimed.**\n\n> +\`${grant.amount.toLocaleString()}\` SILV added to your balance.`),
+              .setDescription(`${why}\n\n> +\`${grant.amount.toLocaleString()}\` SILV added to your inventory.`),
           ],
         }).catch(() => {});
       }
