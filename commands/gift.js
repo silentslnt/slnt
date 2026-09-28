@@ -56,7 +56,7 @@ module.exports = {
     targetData.totalEarned   = (targetData.totalEarned || 0) + capped;
 
     await saveUserData({ balance: userData.balance, giftedToday: userData.giftedToday, lastGiftReset: userData.lastGiftReset });
-    await saveSpecificUserData(target.id, { balance: targetData.balance, totalEarned: targetData.totalEarned });
+    await require('../utils/atomicInv').credit(target.id, { balance: capped, totalEarned: capped }); // never an absolute write
     await logAdminAction(message.author.id, message.author.username, 'gift', 'Gift Sent', target.id, target.username, `${capped.toLocaleString()} coins`);
 
     return message.channel.send({

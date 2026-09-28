@@ -228,3 +228,24 @@ Every house game returns LESS than it takes on average, even with essences. A wi
 - **`.history [@user] [game]`** (aka hist/record/gamblelog) — the player's last 200 rounds (`CasinoRound` in utils/houseBank.js, written by `recordRound(game, bet, payout, fee, userId)`; every game passes the user id): net, W/L, win-rate bar, streak, best/worst, per-game net, recent rounds.
 - **SILV grants from Sentinel** (`claimPendingSilvTokens` in index.js): credit `inventory['Silv token']` — it used to add them to the COIN balance by mistake (fishing SILV paid as coins). Sources: fishing drop, `invite:<userId>` (Sentinel's invite reward, 1 SILV per recruit who runs `,race begin`); the DM names the source.
 - **`.bal` is the profile card** (commands/bal.js, CV2): header with avatar, tab row (Overview · Game history · Stats · Bag), body. Overview = coins, SILV, level/rank/XP bar, streak, total earned, casino net over the last 200 rounds; Game history = `history.js historyCard(target, game, guild, rows)` (shared with `.history`); Stats = stats + recent achievements; Bag = SILV, keys, items, characters. Only the opener switches tabs (5 min), others open their own.
+
+## Payouts (`.payout`, commands/payout.js, models/payout.js)
+SILV → Robux, no staff judgement needed. 100 SILV = 1,000 Robux (`ROBUX_PER_SILV` 10), minimum `MIN_SILV` 100.
+- Player: `.payout` card → **Request payout** → form (SILV amount + gamepass link, `PASS_RE`) → the bot shows the exact gamepass price
+  (`priceFor`: the payout amount, or ÷0.7 to cover Roblox's 30% when `.payout fee on`) → **Confirm** checks the pass with Roblox's
+  product-info API (price must match, must be on sale; Roblox unreachable = allowed but flagged "not verified").
+- Confirm = ONE guarded atomic debit of the SILV into escrow (`utils/atomicInv.debit`), then a `Payout` doc (unique partial index: one open
+  request per player AND per gamepass), then the request card is posted in the payout channel pinging the notify role. Any failure after the
+  debit refunds it.
+- Staff card buttons `po_paid:<id>` / `po_rej:<id>` are routed in index.js `interactionCreate` (work after restarts). Status changes are atomic
+  `open → paid|rejected|cancelled`, so a double click can't pay or refund twice. Reject asks for a reason, refunds, DMs. Paid DMs the player.
+  Who can press them: `ADMIN_USER_IDS`, Manage Server, or the notify role.
+- The player can Cancel while it's open (refund). Last 5 requests shown on their card.
+- Owner: `.payout setup #channel @role`, `.payout fee on|off`, `.payout open|close`.
+
+## Atomic writes (no lost updates)
+- `getUserData` tags `inventory` with a hidden snapshot (`INV_BASE`); every save (`makeSaver`, `saveSpecificUserData`) goes through
+  `applyUserUpdate`, which writes inventory as per-key `$inc` deltas and refuses a spend the real bag can't cover (`InsufficientFunds`).
+  Never `$set` a whole `inventory` again, and never copy it (`{...inv}` loses the snapshot and logs a warning).
+- Other players' balances are never written as absolute numbers: trade, duel, gift, silvexchange, convert, cipher/guess rewards use
+  `utils/atomicInv` (`debit` = guarded `$gte` + `$inc`, `credit` = `$inc`).

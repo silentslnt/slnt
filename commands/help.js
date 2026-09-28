@@ -10,6 +10,7 @@ const SECTIONS = {
     title: '💰 Economy',
     commands: [
       { cmd: '.bal / .b',          desc: 'Check your balance & stats'        },
+      { cmd: '.payout',            desc: 'Cash out SILV for Robux (min 100 SILV = 1,000 Robux)' },
       { cmd: '.daily / .day',      desc: 'Claim daily reward + streak bonus' },
       { cmd: '.missions / .ms',    desc: 'View and complete daily missions'  },
       { cmd: '.profile / .pf',     desc: 'View your full profile'            },

@@ -70,38 +70,36 @@ module.exports = {
       busy.add(i.user.id);
       let note;
       try {
-        const data = await getUserData(i.user.id); // fresh at submit time
-        data.inventory = data.inventory || {};
-        const silv = data.inventory[SILV_KEY] || 0;
+        const { debit, credit } = require('../utils/atomicInv');
+        const data = await getUserData(i.user.id); // fresh at submit time (display + daily cap only)
+        const silv = data.inventory?.[SILV_KEY] || 0;
         if (kind === 'c2s') {
           const conv = data.silvConvert && data.silvConvert.day === todayKey() ? data.silvConvert : { day: todayKey(), count: 0 };
           const cost = n * COINS_PER_SILV;
           if (conv.count + n > COIN_TO_SILV_DAILY_CAP) note = `❌ Daily limit — you can buy ${COIN_TO_SILV_DAILY_CAP - conv.count} more today.`;
-          else if ((data.balance || 0) < cost) note = `❌ That needs \`${cost.toLocaleString()}\` coins — you have \`${(data.balance || 0).toLocaleString()}\`.`;
+          else if (!(await debit(i.user.id, { balance: cost }))) note = `❌ That needs \`${cost.toLocaleString()}\` coins — you have \`${(data.balance || 0).toLocaleString()}\`.`;
           else {
-            data.balance -= cost;
-            data.inventory[SILV_KEY] = silv + n;
+            await credit(i.user.id, { items: { [SILV_KEY]: n } });
             conv.count += n;
             data.silvConvert = conv;
-            await saveSpecificUserData(i.user.id, { balance: data.balance, inventory: data.inventory, silvConvert: data.silvConvert });
+            await saveSpecificUserData(i.user.id, { silvConvert: data.silvConvert });
             await logAdminAction(i.user.id, i.user.username, 'convert', 'Coins → SILV', null, null, `${cost} coins → ${n} SILV`);
             note = `✅ \`${cost.toLocaleString()}\` coins → **${n} SILV**.`;
           }
-        } else if (silv < n) {
+        } else if (!(await debit(i.user.id, { items: { [SILV_KEY]: n } }))) {
           note = `❌ You have \`${silv}\` SILV.`;
         } else {
-          data.inventory[SILV_KEY] = silv - n;
-          await saveSpecificUserData(i.user.id, { inventory: data.inventory });
           const ok = await awardPoints(guild.id, i.user.id, n * AETHER_PER_SILV);
           if (!ok) {
-            data.inventory[SILV_KEY] = silv; // refund — never eat SILV on a failed bridge write
-            await saveSpecificUserData(i.user.id, { inventory: data.inventory });
+            await credit(i.user.id, { items: { [SILV_KEY]: n } }); // refund — never eat SILV on a failed bridge write
             note = '❌ Sentinel is unreachable right now — your SILV was refunded.';
           } else {
             await logAdminAction(i.user.id, i.user.username, 'convert', 'SILV → Aether', null, null, `${n} SILV → ${n * AETHER_PER_SILV} Aether`);
             note = `✅ **${n} SILV** → \`${(n * AETHER_PER_SILV).toLocaleString()}\` Aether in Sentinel.`;
           }
         }
+        const fresh = await getUserData(i.user.id);
+        Object.assign(data, { balance: fresh.balance, inventory: fresh.inventory });
         await sub.reply({ content: note, flags: MessageFlags.Ephemeral });
         await msg.edit({ components: [card(data, guild.name)] }).catch(() => {});
       } finally {

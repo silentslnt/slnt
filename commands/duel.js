@@ -72,17 +72,18 @@ module.exports = {
       const winnerData     = challengerWins ? userData   : opponentData;
       const loserData      = challengerWins ? opponentData : userData;
 
-      winnerData.balance    = (winnerData.balance || 0) + bet;
-      loserData.balance     = (loserData.balance  || 0) - bet;
-      winnerData.totalEarned = (winnerData.totalEarned || 0) + bet;
-
-      if (challengerWins) {
-        await saveUserData({ balance: winnerData.balance, totalEarned: winnerData.totalEarned });
-        await saveSpecificUserData(opponent.id, { balance: loserData.balance });
-      } else {
-        await saveUserData({ balance: loserData.balance });
-        await saveSpecificUserData(opponent.id, { balance: winnerData.balance, totalEarned: winnerData.totalEarned });
+      // Atomic: the loser's stake is taken with a guard (they may have spent it while the challenge was open),
+      // then the winner is paid. Nothing is written back as an absolute balance.
+      const { debit, credit } = require('../utils/atomicInv');
+      if (!(await debit(loser.id, { balance: bet }))) {
+        activeDuels.delete(challenger.id);
+        activeDuels.delete(opponent.id);
+        return msg.edit({ embeds: [new EmbedBuilder().setColor(BLACK).setTitle('DUEL VOID')
+          .setDescription(`> ${loser.username} no longer has **${bet.toLocaleString()}** coins — nothing changed hands.`)] });
       }
+      await credit(winner.id, { balance: bet, totalEarned: bet });
+      winnerData.balance = (winnerData.balance || 0) + bet;
+      loserData.balance = (loserData.balance || 0) - bet;
 
       // XP & stats
       await addXP(winner.id, XP_PER_WIN,  winnerData, (d) => saveSpecificUserData(winner.id, d),  message);

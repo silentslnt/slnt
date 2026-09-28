@@ -26,6 +26,7 @@ const COMMAND_ALIASES = {
   'rps': 'rps',
   'crash': 'crash', 'cr': 'crash',
   'tower': 'tower', 'tw': 'tower',
+  'payout': 'payout', 'cashout': 'payout', 'withdraw': 'payout',
   'history': 'history', 'hist': 'history', 'record': 'history', 'gamblelog': 'history',
   'wheel': 'wheel', 'wh': 'wheel',
   'cups': 'cups', 'shell': 'cups',

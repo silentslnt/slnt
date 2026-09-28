@@ -15,7 +15,7 @@ module.exports = {
   name: 'admin',
   description:
     'Admin commands: give/remove currency, silv tokens, keys, or inventory items; reset user data, spawn keys.',
-  async execute({ message, args, getUserData, keydrop, logAdminAction, setEconomyLogsChannel, getEconomyLogsChannel }) {
+  async execute({ message, args, getUserData, saveSpecificUserData, keydrop, logAdminAction, setEconomyLogsChannel, getEconomyLogsChannel }) {
     // Currency/item creation panel — whitelist only, not just the admin role.
     if (!await requireWhitelisted(message)) return;
 
@@ -236,11 +236,7 @@ module.exports = {
             delete targetData.inventory[itemName];
           }
 
-          await User.updateOne(
-            { userId },
-            { $set: { inventory: targetData.inventory } },
-            { upsert: true },
-          );
+          await saveSpecificUserData(userId, { inventory: targetData.inventory }); // per-key delta, never a whole-bag write
 
           await logAdminAction(
             message.author.id,
@@ -272,11 +268,7 @@ module.exports = {
           // GIVE ITEM
           targetData.inventory[itemName] = (targetData.inventory[itemName] || 0) + amount;
 
-          await User.updateOne(
-            { userId },
-            { $set: { inventory: targetData.inventory } },
-            { upsert: true },
-          );
+          await saveSpecificUserData(userId, { inventory: targetData.inventory }); // per-key delta, never a whole-bag write
 
           await logAdminAction(
             message.author.id,
@@ -356,11 +348,7 @@ module.exports = {
           targetData.inventory = targetData.inventory || {};
           targetData.inventory[rarityKey] =
             (targetData.inventory[rarityKey] || 0) + amount;
-          await User.updateOne(
-            { userId },
-            { $set: { inventory: targetData.inventory } },
-            { upsert: true },
-          );
+          await saveSpecificUserData(userId, { inventory: targetData.inventory }); // per-key delta, never a whole-bag write
 
           await logAdminAction(
             message.author.id,
@@ -392,11 +380,7 @@ module.exports = {
           targetData.inventory[SILV_TOKEN_KEY] =
             (targetData.inventory[SILV_TOKEN_KEY] || 0) + amount;
 
-          await User.updateOne(
-            { userId },
-            { $set: { inventory: targetData.inventory } },
-            { upsert: true },
-          );
+          await saveSpecificUserData(userId, { inventory: targetData.inventory }); // per-key delta, never a whole-bag write
 
           await logAdminAction(
             message.author.id,
@@ -481,11 +465,7 @@ module.exports = {
           if (targetData.inventory[rarityKey] === 0) {
             delete targetData.inventory[rarityKey];
           }
-          await User.updateOne(
-            { userId },
-            { $set: { inventory: targetData.inventory } },
-            { upsert: true },
-          );
+          await saveSpecificUserData(userId, { inventory: targetData.inventory }); // per-key delta, never a whole-bag write
 
           await logAdminAction(
             message.author.id,
@@ -534,11 +514,7 @@ module.exports = {
             delete targetData.inventory[SILV_TOKEN_KEY];
           }
 
-          await User.updateOne(
-            { userId },
-            { $set: { inventory: targetData.inventory } },
-            { upsert: true },
-          );
+          await saveSpecificUserData(userId, { inventory: targetData.inventory }); // per-key delta, never a whole-bag write
 
           await logAdminAction(
             message.author.id,

@@ -149,11 +149,65 @@ async function getUserData(userId) {
     }});
   }
 
+  snapInventory(obj);
   return obj;
 }
 
+// Inventory is saved as the CHANGE since it was loaded, never as a whole object (same reason as the balance,
+// see makeSaver): a command that loaded your bag before a payout escrow, a SILV grant or another game used to
+// write the old bag back — restoring spent SILV. getUserData tags each inventory with a hidden snapshot;
+// saving applies per-key $inc deltas, and a spend the real bag can't cover is refused.
+const INV_BASE = Symbol('invBase');
+function snapInventory(obj) {
+  obj.inventory = obj.inventory && typeof obj.inventory === 'object' ? obj.inventory : {};
+  Object.defineProperty(obj.inventory, INV_BASE, {
+    value: JSON.parse(JSON.stringify(obj.inventory)), writable: true, configurable: true, enumerable: false,
+  });
+}
+
+async function applyUserUpdate(userId, data) {
+  const upd = { ...data };
+  delete upd._id; delete upd.__v; delete upd.userId;
+  const set = {}, unset = {}, inc = {}, filter = { userId };
+  const inv = upd.inventory;
+  delete upd.inventory;
+  if (inv && typeof inv === 'object') {
+    const base = inv[INV_BASE];
+    if (base) {
+      for (const k of new Set([...Object.keys(base), ...Object.keys(inv)])) {
+        const a = base[k], b = inv[k];
+        const num = (v) => v === undefined || v === null || typeof v === 'number';
+        if (num(a) && num(b)) {
+          const d = (Number(b) || 0) - (Number(a) || 0);
+          if (d) { inc[`inventory.${k}`] = d; if (d < 0) filter[`inventory.${k}`] = { $gte: -d }; }
+        } else if (JSON.stringify(a) !== JSON.stringify(b)) {
+          if (b === undefined) unset[`inventory.${k}`] = ''; else set[`inventory.${k}`] = b;
+        }
+      }
+    } else {
+      // No snapshot (a copied object) — fall back to per-key writes and flag it so it can be fixed.
+      for (const [k, v] of Object.entries(inv)) set[`inventory.${k}`] = v;
+      console.warn(`[inventory] absolute save without a snapshot for ${userId}: ${Object.keys(inv).join(', ')}`);
+    }
+  }
+  Object.assign(set, upd);
+  const op = {};
+  if (Object.keys(set).length) op.$set = set;
+  if (Object.keys(unset).length) op.$unset = unset;
+  if (Object.keys(inc).length) op.$inc = inc;
+  if (!Object.keys(op).length) return;
+  const guarded = Object.keys(filter).length > 1;
+  if (guarded) {
+    const res = await User.findOneAndUpdate(filter, op, { new: true });
+    if (!res) throw new InsufficientFunds('items changed while this was running');
+  } else {
+    await User.updateOne({ userId }, op, { upsert: true });
+  }
+  if (inv && inv[INV_BASE]) inv[INV_BASE] = JSON.parse(JSON.stringify(inv)); // the next save diffs from here
+}
+
 async function saveUserData(userId, userData) {
-  await User.updateOne({ userId }, { $set: userData }, { upsert: true });
+  await applyUserUpdate(userId, userData);
 }
 
 /**
@@ -180,7 +234,7 @@ function makeSaver(userId, userData) {
       }
       base = target;
     }
-    if (Object.keys(upd).length) await User.updateOne({ userId }, { $set: upd }, { upsert: true });
+    if (Object.keys(upd).length) await applyUserUpdate(userId, upd);
   };
 }
 
@@ -573,9 +627,7 @@ client.on('messageCreate', async (message) => {
           }
 
           // Add reward to user balance
-          const userData = await getUserData(userId);
-          userData.balance += finalReward;
-          await saveUserData(userId, userData);
+          await User.updateOne({ userId }, { $inc: { balance: finalReward } }, { upsert: true }); // never an absolute write
 
           // Remove challenge
           global.activeChallenges.delete(userId);
@@ -669,15 +721,8 @@ client.on('messageCreate', async (message) => {
         const rewardAmount =
           Math.floor(Math.random() * (rewardRange.max - rewardRange.min + 1)) + rewardRange.min;
 
-        const userData = await getUserData(message.author.id);
-        userData.inventory = userData.inventory || {};
-        userData.inventory[wonRarity] = (userData.inventory[wonRarity] || 0) + 1;
-        userData.balance += rewardAmount;
-
-        await saveUserData(message.author.id, {
-          inventory: userData.inventory,
-          balance: userData.balance,
-        });
+        await User.updateOne({ userId: message.author.id },
+          { $inc: { balance: rewardAmount, [`inventory.${wonRarity}`]: 1 } }, { upsert: true }); // atomic
 
         const winEmbed = new EmbedBuilder()
           .setTitle('Game Winner!')
@@ -804,6 +849,10 @@ client.on('messageCreate', async (message) => {
 
 // ===== SLASH COMMAND INTERACTIONS =====
 client.on('interactionCreate', async (interaction) => {
+  // Payout staff buttons (Paid / Reject) — must keep working after restarts, so they're routed here.
+  try {
+    if (await require('./commands/payout').handleInteraction(interaction)) return;
+  } catch (e) { console.error('payout interaction failed:', e); }
 
   // /setup vouch — admin: pick channel then appearance modal
   if (interaction.isChatInputCommand() && interaction.commandName === 'setup') {

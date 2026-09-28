@@ -367,73 +367,23 @@ module.exports = {
         }
       }
 
-      // Execute trade - update inventories and balances
-      initiatorData.inventory = initiatorData.inventory || {};
-      partnerData.inventory = partnerData.inventory || {};
-
-      // Transfer currency
-      initiatorData.balance -= trade.initiatorOffer.currency;
-      initiatorData.balance += trade.partnerOffer.currency;
-
-      partnerData.balance -= trade.partnerOffer.currency;
-      partnerData.balance += trade.initiatorOffer.currency;
-
-      // Transfer items from initiator to partner
-      for (const [itemName, amount] of Object.entries(trade.initiatorOffer.items)) {
-        initiatorData.inventory[itemName] =
-          (initiatorData.inventory[itemName] || 0) - amount;
-        partnerData.inventory[itemName] =
-          (partnerData.inventory[itemName] || 0) + amount;
+      // Execute trade — atomic and guarded (both balances used to be written back as absolute
+      // numbers read earlier, so anything that happened meanwhile was erased or duplicated).
+      const { debit, credit } = require('../utils/atomicInv');
+      const aOffer = { balance: trade.initiatorOffer.currency, items: trade.initiatorOffer.items };
+      const bOffer = { balance: trade.partnerOffer.currency, items: trade.partnerOffer.items };
+      if (!(await debit(trade.initiator, aOffer))) {
+        activeTrades.delete(trade.initiator); activeTrades.delete(trade.partner);
+        return message.channel.send("❌ Trade failed. The initiator doesn't have everything they offered anymore.");
       }
-
-      // Transfer items from partner to initiator
-      for (const [itemName, amount] of Object.entries(trade.partnerOffer.items)) {
-        partnerData.inventory[itemName] =
-          (partnerData.inventory[itemName] || 0) - amount;
-        initiatorData.inventory[itemName] =
-          (initiatorData.inventory[itemName] || 0) + amount;
+      if (!(await debit(trade.partner, bOffer))) {
+        await credit(trade.initiator, aOffer); // give the first side back — nothing moved
+        activeTrades.delete(trade.initiator); activeTrades.delete(trade.partner);
+        return message.channel.send("❌ Trade failed. The partner doesn't have everything they offered anymore.");
       }
-
-      // Clean up zero entries
-      for (const inv of [initiatorData.inventory, partnerData.inventory]) {
-        for (const key in inv) {
-          if (inv[key] === 0) delete inv[key];
-        }
-      }
-
-      // 'Complete a trade' mission/achievement was permanently stuck at 0 —
-      // this stat was declared in the schema and referenced by the mission
-      // pool and trade_1 achievement, but nothing ever incremented it for
-      // either side of a completed trade.
-      initiatorData.stats = initiatorData.stats || {};
-      initiatorData.stats.trades = (initiatorData.stats.trades || 0) + 1;
-      partnerData.stats = partnerData.stats || {};
-      partnerData.stats.trades = (partnerData.stats.trades || 0) + 1;
-
-      // Save to database - use appropriate method based on who is calling
-      if (userId === trade.initiator) {
-        await saveUserData({
-          balance: initiatorData.balance,
-          inventory: initiatorData.inventory,
-          stats: initiatorData.stats,
-        });
-        const User = require('mongoose').model('User');
-        await User.updateOne(
-          { userId: trade.partner },
-          { $set: { balance: partnerData.balance, inventory: partnerData.inventory, stats: partnerData.stats } }
-        );
-      } else {
-        await saveUserData({
-          balance: partnerData.balance,
-          inventory: partnerData.inventory,
-          stats: partnerData.stats,
-        });
-        const User = require('mongoose').model('User');
-        await User.updateOne(
-          { userId: trade.initiator },
-          { $set: { balance: initiatorData.balance, inventory: initiatorData.inventory, stats: initiatorData.stats } }
-        );
-      }
+      // 'Complete a trade' mission/achievement stat for both sides.
+      await credit(trade.partner, { ...aOffer, stats: { trades: 1 } });
+      await credit(trade.initiator, { ...bOffer, stats: { trades: 1 } });
 
       const initiator = await client.users.fetch(trade.initiator);
       const partner = await client.users.fetch(trade.partner);

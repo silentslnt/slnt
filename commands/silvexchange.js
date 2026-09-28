@@ -88,10 +88,15 @@ async function purchaseItem({ dayKey, itemId, userId, username, getUserData, sav
     return { ok: false, message: `${item.emoji} **${item.name}** just sold out — you were too slow.` };
   }
 
-  const newBalance = coins - item.coinCost;
+  const { debit, credit } = require('../utils/atomicInv');
+  if (!(await debit(userId, { balance: item.coinCost }))) { // guarded — the coins must really be there now
+    await SilvExchangeDay.updateOne({ dayKey, 'items.itemId': itemId }, { $inc: { 'items.$.remainingStock': 1 } });
+    return { ok: false, message: `You need **${item.coinCost.toLocaleString()}** coins.` };
+  }
+  await credit(userId, { items: { [SILV_KEY]: item.silvAmount } });
   const inventory = userData.inventory || {};
   inventory[SILV_KEY] = (inventory[SILV_KEY] || 0) + item.silvAmount;
-  await saveSpecificUserData(userId, { balance: newBalance, inventory });
+  userData.balance = coins - item.coinCost;
 
   await logAdminAction(
     userId, username, 'silvexchange', 'Silv Exchange',
