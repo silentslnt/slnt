@@ -352,10 +352,12 @@ async function claimPendingSilvTokens() {
       await User.updateOne({ userId: grant.userId }, { $inc: { 'inventory.Silv token': grant.amount } }, { upsert: true });
       const user = await client.users.fetch(grant.userId).catch(() => null);
       if (user) {
-        const invited = String(grant.source || '').startsWith('invite:');
-        const why = invited
-          ? `🎟 **Your invite has been validated** — <@${grant.source.split(':')[1]}> joined, began their journey and really played.`
-          : '✨ **A SILV Token you caught fishing has been claimed.**';
+        const src = String(grant.source || '');
+        const why = src.startsWith('invite:')
+          ? `🎟 **Your invite has been validated** — <@${src.split(':')[1]}> joined, began their journey and really played.`
+          : src.startsWith('dungeon:')
+            ? '🌀 **SILV you carried out of a dungeon has been claimed.**'
+            : '✨ **A SILV Token you caught fishing has been claimed.**';
         await user.send({
           embeds: [
             new EmbedBuilder()
