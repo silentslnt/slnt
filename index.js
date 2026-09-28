@@ -300,7 +300,7 @@ async function claimPendingSilvTokens() {
       if (user) {
         const invited = String(grant.source || '').startsWith('invite:');
         const why = invited
-          ? `🎟 **Invite reward** — <@${grant.source.split(':')[1]}> joined and began their journey.`
+          ? `🎟 **Your invite has been validated** — <@${grant.source.split(':')[1]}> joined, began their journey and really played.`
           : '✨ **A SILV Token you caught fishing has been claimed.**';
         await user.send({
           embeds: [
