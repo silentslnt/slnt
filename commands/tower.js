@@ -6,8 +6,8 @@ const { card, button, row, takeBet, settle, WIN, LOSE, BLACK, ButtonStyle } = re
 const { casinoPayout } = require('../utils/houseEdge');
 
 const FLOORS = 8;
-// difficulty -> [doors per floor, safe doors]
-const MODES = { easy: [3, 2], medium: [2, 1], hard: [3, 1] };
+// one fixed tower (direct: picking a difficulty was a cheat code) -> [doors per floor, safe doors]
+const MODES = { tower: [2, 1] };
 const EDGE = 0.94;
 const active = new Set();
 
@@ -20,17 +20,17 @@ function multiplier(mode, floors) {
 module.exports = {
   name: 'tower',
   aliases: ['tw'],
-  description: 'Climb the tower, avoid the traps, cash out any time. `.tower <bet> [easy|medium|hard]`',
+  description: 'Climb the tower, avoid the traps, cash out any time. `.tower <bet>`',
 
   async execute(ctx) {
     const { message, args } = ctx;
     const uid = message.author.id;
     if (active.has(uid)) return message.channel.send('You already have a Tower run going.');
-    const mode = MODES[(args[1] || '').toLowerCase()] ? args[1].toLowerCase() : 'easy';
+    const mode = 'tower';
     const taken = await takeBet(ctx, args[0], {
       title: 'Tower',
-      body: '> `.tower <bet> [easy|medium|hard]` — pick a door on each floor. A trap ends the run.\n'
-        + `> **Easy** 2 safe of 3 · **Medium** 1 safe of 2 · **Hard** 1 safe of 3 — ${FLOORS} floors.\n-# Cash out any time to keep what you've climbed.`,
+      body: '> `.tower <bet>` — pick a door on each floor. One of the two is a trap.\n'
+        + `> ${FLOORS} floors.\n-# Cash out any time to keep what you've climbed.`,
     });
     if (!taken) return;
     const { bet, userData } = taken;
@@ -54,7 +54,7 @@ module.exports = {
       const tower = [...Array(FLOORS).keys()].reverse()
         .map((f) => `\`${String(f + 1).padStart(2)}\` ${f < floor ? '🟩' : f === floor ? '➡️' : '⬛'}  ×${multiplier(mode, f + 1)}`).join('\n');
       return card({
-        title: `🗼 Tower — ${mode}`,
+        title: '🗼 Tower',
         body: `${tower}\n\n> Floor **${floor + 1}/${FLOORS}** · pick a door · next: **×${next}**`,
         rows: [doorRow, cash], accent: BLACK, footer: `${guild} · ${safe} safe door${safe > 1 ? 's' : ''} of ${doors} per floor`,
       });
@@ -69,7 +69,7 @@ module.exports = {
       active.delete(uid);
       const m = multiplier(mode, floor);
       const payout = cashed ? casinoPayout(bet, bet * m, userData) : 0;
-      const balance = await settle(ctx, { bet, payout, game: 'tower', detail: `${floor} floors (${mode})` });
+      const balance = await settle(ctx, { bet, payout, game: 'tower', detail: `${floor} floors` });
       const result = card({
         title: cashed ? (floor >= FLOORS ? '🏆 Top of the tower!' : '🗼 Cashed out') : '💥 Trap!',
         body: cashed

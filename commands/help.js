@@ -34,7 +34,7 @@ const SECTIONS = {
       { cmd: '.mines',              desc: '.mines <bet> <mines>  — Reveal safe tiles, cash out' },
       { cmd: '.plinko',             desc: '.plinko <bet> <low|medium|high>' },
       { cmd: '.crash / .cr',        desc: '.crash <bet> [2x]  — Cash out before it crashes' },
-      { cmd: '.tower / .tw',        desc: '.tower <bet> [easy|medium|hard]  — Climb, avoid traps' },
+      { cmd: '.tower / .tw',        desc: '.tower <bet>  — Climb, avoid traps (1 of 2 doors is a trap)' },
       { cmd: '.history / .hist',    desc: '.history [@user] [game]  — Your win/loss record' },
       { cmd: '.cups',               desc: '.cups <bet>  — Find the coin (2.8×)' },
       { cmd: '.wheel / .wh',        desc: '.wheel <bet>  — Spin 0×–5×' },
