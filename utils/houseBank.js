@@ -29,6 +29,7 @@ async function playerHistory(userId, limit = HISTORY_KEEP) {
  *  Pass userId so it also lands in that player's `.history`. */
 function recordRound(game, bet, payout, fee = 0, userId = null) {
   if (userId) logPlayerRound(String(userId), game, bet, payout).catch(() => {});
+  if (userId) require('./weeklyBoard').countPlay(userId, bet);   // the weekly game board
   const net = Math.floor(bet - payout);
   Meta.findOneAndUpdate(
     { key: KEY },

@@ -29,7 +29,7 @@ function render(st, data, guildName, disabled = false) {
   const g = st.game ? GAMES[st.game] : null;
   const c = new ContainerBuilder().setAccentColor(0x000000)
     .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-      `## 🎲 Game floor\n-# Coins \`${fmt(data.balance)}\` · pick a game, pick a bet, play.`))
+      `## 🎲 Game floor\n-# Coins \`${fmt(data.balance)}\` · pick a game, pick a bet, play.\n-# 🏆 \`.weekly\` — the 10 most active players win SILV, coins and Aether every week · 🎡 \`.freespin\` once a day`))
     .addSeparatorComponents(new SeparatorBuilder())
     .addActionRowComponents(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('play_game')
       .setPlaceholder(g ? `${g[1]} ${g[0]}` : 'Pick a game…').setDisabled(disabled)

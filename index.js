@@ -376,6 +376,11 @@ client.once('clientReady', async () => {
 
   setInterval(claimPendingSilvTokens, 60 * 1000);
   claimPendingSilvTokens();
+
+  // Weekly game board: pays last week's top 10 once (claimed in Mongo), checked every 10 minutes.
+  const payWeekly = () => require('./utils/weeklyBoard').payWeek(client, logAdminAction).catch((e) => console.error('weekly board:', e.message));
+  setInterval(payWeekly, 10 * 60 * 1000);
+  payWeekly();
 });
 
 // Sentinel's ,fish command can drop an astronomically rare SILV token — it
