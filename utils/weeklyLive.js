@@ -45,21 +45,48 @@ const chatPrize = (p) => (p.silv ? `${p.silv} SILV` : `${p.coins.toLocaleString(
 function cfg() { return settings.get('weeklyLive', {}) || {}; }
 async function setCfg(patch) { await settings.set('weeklyLive', { ...cfg(), ...patch }); }
 
+// custom emojis (direct: "use <:silvcrown:…> for the trophy and fitted custom emojis")
+const E = {
+  crown: '<:silvcrown:1553472614591111270>', silv: '<:zzsilvtoken:1486364646796431427>',
+  games: '<a:ccards:1512497151417254190>', chat: '<a:cmail:1512498140417232966>',
+  p1: '<a:cyellowhalo:1512869545100972063>', p2: '<a:cwhitestar:1512498079662735461>', p3: '<a:cstar:1545032606603812954>',
+  clock: '<:cclock:1512497249765163159>',
+};
+const PLACE = [E.p1, E.p2, E.p3];
+const pz = (p) => (p.silv ? `**${p.silv}** ${E.silv}` : `${p.coins.toLocaleString()} coins${p.aether ? ` + ${p.aether.toLocaleString()} Aether` : ''}`);
+
+/** One board: podium (1–3), then 4–10 with their numbers, then one line for the prize still open below them. */
+function boardLines(rows, prizes, unit) {
+  const out = [];
+  for (let i = 0; i < prizes.length; i++) {
+    const r = rows[i];
+    const mark = i < 3 ? PLACE[i] : `\`${String(i + 1).padStart(2, '0')}\``;
+    if (r) out.push(`${mark} <@${r.userId}> · ${r[unit].toLocaleString()} ${unit === 'plays' ? 'plays' : 'msgs'} — ${pz(prizes[i])}`);
+    else if (i < 3) out.push(`${mark} *open* — ${pz(prizes[i])}`);
+  }
+  const filled = Math.max(3, rows.length);
+  if (filled < prizes.length) out.push(`-# ${filled + 1}th–${prizes.length}th still open · ${pz(prizes[filled])} each`);
+  return out.join('\n');
+}
+
 async function render(guildName = 'Shiro') {
   const week = W.weekNo();
   const [games, chat] = await Promise.all([W.top(week), topChat(week)]);
   const ends = Math.floor(W.weekEnds(week) / 1000);
-  const gl = W.PRIZES.map((p, i) => `> **${i + 1}.** ${games[i] ? `<@${games[i].userId}> · ${games[i].plays.toLocaleString()} plays` : '*open*'} — ${W.prizeText(p)}`);
-  const cl = CHAT_PRIZES.map((p, i) => `> **${i + 1}.** ${chat[i] ? `<@${chat[i].userId}> · ${chat[i].msgs.toLocaleString()} msgs` : '*open*'} — ${chatPrize(p)}`);
-  const c = new ContainerBuilder().setAccentColor(0x000000)
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## 🏆 Weekly boards\n-# Ends <t:${ends}:R> · paid automatically · updates every 5 minutes`))
+  const c = new ContainerBuilder().setAccentColor(0xC9CCD6)
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `## ${E.crown} Weekly boards\n-# ${E.clock} Ends <t:${ends}:R> · paid automatically · updates every 5 minutes`))
     .addSeparatorComponents(new SeparatorBuilder())
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`### 🎮 Most active players\n-# every game round of ${W.MIN_BET.toLocaleString()}+ coins is one play\n${gl.join('\n')}`))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `### ${E.games} Most active players\n-# every game round of ${W.MIN_BET.toLocaleString()}+ coins is one play\n${boardLines(games, W.PRIZES, 'plays')}`))
     .addSeparatorComponents(new SeparatorBuilder())
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`### 💬 Most active chatters\n-# real messages only — spam and repeats don't count\n${cl.join('\n')}`))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `### ${E.chat} Most active chatters\n-# real messages only — spam and repeats don't count\n${boardLines(chat, CHAT_PRIZES, 'msgs')}`))
+    .addSeparatorComponents(new SeparatorBuilder())
     .addActionRowComponents(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('wk_ping').setLabel('Notify me').setEmoji('🔔').setStyle(ButtonStyle.Secondary)))
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${guildName} · 🔔 pings you when the top 3 changes · press again to stop`));
+      new ButtonBuilder().setCustomId('wk_ping').setLabel('Notify me').setEmoji({ id: '1512496943920713860', name: 'telephone', animated: true })
+        .setStyle(ButtonStyle.Secondary)))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${guildName} · Notify me pings you when the top 3 changes · press again to stop`));
   const key = [games.slice(0, 3).map((r) => r.userId).join(','), chat.slice(0, 3).map((r) => r.userId).join(',')].join('|');
   return { payload: { components: [c], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } }, key };
 }
@@ -172,4 +199,4 @@ async function handleInteraction(interaction) {
   return true;
 }
 
-module.exports = { countChat, topChat, render, post, refresh, weekTick, handleInteraction, cfg, setCfg, CHAT_PRIZES, chatPrize };
+module.exports = { boardLines, countChat, topChat, render, post, refresh, weekTick, handleInteraction, cfg, setCfg, CHAT_PRIZES, chatPrize };
