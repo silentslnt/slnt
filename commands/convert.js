@@ -39,7 +39,7 @@ function card(userData, guildName) {
       .setButtonAccessory(new ButtonBuilder().setCustomId('cv_s2a').setLabel('Convert').setStyle(ButtonStyle.Secondary)))
     .addSectionComponents(new SectionBuilder()
       .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-        `**SILV → Coins**\n-# ${(COINS_PER_SILV * (1 - SILV_TO_COINS_TAX)).toLocaleString()} coins each · ${Math.round(SILV_TO_COINS_TAX * 100)}% exchange tax goes to the house`))
+        `**SILV → Coins**\n-# ${(COINS_PER_SILV * (1 - SILV_TO_COINS_TAX)).toLocaleString()} coins each · ${Math.round(SILV_TO_COINS_TAX * 100)}% exchange tax`))
       .setButtonAccessory(new ButtonBuilder().setCustomId('cv_s2c').setLabel('Convert').setStyle(ButtonStyle.Secondary)))
     .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${guildName} · 1 SILV = 10 Robux`));
 }
@@ -100,7 +100,7 @@ module.exports = {
             await credit(i.user.id, { balance: gross - tax });
             await require('../utils/houseBank').creditHouse(tax, 'silv_exchange');
             await logAdminAction(i.user.id, i.user.username, 'convert', 'SILV → Coins', null, null, `${n} SILV → ${gross - tax} coins (${tax} tax to the house)`);
-            note = `✅ **${n} SILV** → \`${(gross - tax).toLocaleString()}\` coins.\n-# \`${tax.toLocaleString()}\` coins exchange tax went to the house.`;
+            note = `✅ **${n} SILV** → \`${(gross - tax).toLocaleString()}\` coins.\n-# \`${tax.toLocaleString()}\` coins exchange tax.`;
           }
         } else if (!(await debit(i.user.id, { items: { [SILV_KEY]: n } }))) {
           note = `❌ You have \`${silv}\` SILV.`;
