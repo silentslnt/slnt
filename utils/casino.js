@@ -134,7 +134,7 @@ function attachReplay(msg, ownerId, opts) {
     if (kind === 'p') return i.client.runAs(i, opts.replay.game, [String(opts.replay.bet), ...(opts.replay.picks[Number(amt)][2] || [])]);
     return i.client.runAs(i, opts.replay.game, [String(amt), ...(opts.replay.extra || [])]);
   });
-  col.on('end', () => msg.edit(gameResult(opts, false)).catch(() => {}));
+  col.on('end', () => msg.edit(opts.final ? opts.final() : gameResult(opts, false)).catch(() => {}));   // games with their own board pass final()
 }
 
 module.exports = { card, button, row, takeBet, settle, gameResult, replayRow, attachReplay, BLACK, WIN, LOSE, ButtonStyle };

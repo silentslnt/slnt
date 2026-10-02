@@ -1,233 +1,136 @@
-// commands/blackjack.js
-const { EmbedBuilder } = require('discord.js');
-const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
+// commands/blackjack.js — blackjack on one CV2 card with buttons (Hit · Stand · Double down), no reactions.
+// The bet is taken atomically (casino.takeBet) and paid by increment (casino.settle), so nothing a player does
+// elsewhere mid-hand is ever overwritten. A natural 21 pays 2.5× (a push if the dealer has one too).
+// Dealer stands on 17. An Insurance Slip (inventory) returns the bet once if you bust.
+const { card, button, row, takeBet, settle, gameResult, attachReplay, BLACK, ButtonStyle } = require('../utils/casino');
+const { casinoPayout } = require('../utils/houseEdge');
+const { debit, credit } = require('../utils/atomicInv');
+const User = require('../models/user');
 
-const BLACK = 0x000000;
-const { parseBet } = require('../utils/parseBet');
-const { getMultiplier, getLuckBonus, getActiveEssenceSummary } = require('../utils/essences');
-const { addXP } = require('../utils/xp');
-const { trackStat, checkAchievements } = require('../utils/achievements');
-const { awardPoints } = require('../utils/sentinelDb');
-const { announceWin } = require('../utils/winAnnouncer');
-const { recordRound } = require('../utils/houseBank');
-const { casinoPayout, casinoLuck } = require('../utils/houseEdge');
+const active = new Set();
+const SUITS = ['♠', '♥', '♦', '♣'];
 
-const activeGames = new Set();
-
-function getCard() {
-  const values = [2,3,4,5,6,7,8,9,10,10,10,10,11];
-  const suits  = ['♠️','♥️','♦️','♣️'];
-  const val    = values[Math.floor(Math.random() * values.length)];
-  const suit   = suits[Math.floor(Math.random() * suits.length)];
-  const disp   = val === 11 ? 'A' : val === 10 ? ['10','J','Q','K'][Math.floor(Math.random()*4)] : String(val);
-  return { val, display: `${disp}${suit}` };
+function draw() {
+  const values = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11];
+  const val = values[Math.floor(Math.random() * values.length)];
+  const face = val === 11 ? 'A' : val === 10 ? ['10', 'J', 'Q', 'K'][Math.floor(Math.random() * 4)] : String(val);
+  return { val, display: `${face}${SUITS[Math.floor(Math.random() * 4)]}` };
 }
 
-function handValue(hand) {
-  let sum  = hand.reduce((t, c) => t + c.val, 0);
-  let aces = hand.filter(c => c.val === 11).length;
+function value(hand) {
+  let sum = hand.reduce((t, c) => t + c.val, 0);
+  let aces = hand.filter((c) => c.val === 11).length;
   while (sum > 21 && aces-- > 0) sum -= 10;
   return sum;
 }
+
+const show = (hand) => hand.map((c) => `\`${c.display}\``).join(' ');
 
 module.exports = {
   name: 'blackjack',
   aliases: ['bj'],
   description: 'Play blackjack. `.bj <amount|all>`',
 
-  async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
-    const bet = parseBet(args[0], userData.balance || 0);
-    const userId = message.author.id;
+  async execute(ctx) {
+    const { message, args } = ctx;
+    const uid = message.author.id;
+    if (active.has(uid)) return message.channel.send('You already have a blackjack hand going.');
+    const taken = await takeBet(ctx, args[0], {
+      title: '♠ Blackjack',
+      body: '> `.bj <amount|all>` — beat the dealer to 21. **Hit** for a card, **Stand** to hold, **Double down** to double the bet for one last card.\n'
+        + '> A natural 21 pays **2.5×**. Dealer stands on 17.\n> Or with buttons: `.play`',
+    });
+    if (!taken) return;
+    let { bet } = taken;
+    const { userData } = taken;
+    const baseBet = bet;
+    active.add(uid);
+    const g = message.guild?.name || 'Shiro';
+    const player = [draw(), draw()];
+    const dealer = [draw(), draw()];
+    let doubled = false;
+    let done = false;
 
-    if (!bet) return message.channel.send('Usage: `.bj <amount|all>`');
-    if (activeGames.has(userId)) return message.channel.send('You already have an active blackjack game!');
-    if ((userData.balance || 0) < bet) return message.channel.send('Insufficient balance.');
-
-    // Check insurance slip
-    const hasInsurance = (userData.inventory?.['Insurance Slip'] || 0) > 0;
-
-    activeGames.add(userId);
-    userData.balance -= bet;
-    try {
-      await saveUserData({ balance: userData.balance });
-    } catch (e) {
-      activeGames.delete(userId);
-      throw e;
-    }
-
-    let playerHand = [getCard(), getCard()];
-    let dealerHand = [getCard(), getCard()];
-    let gameOver   = false;
-    let naturalBJ  = false;
-
-    // Check natural 21
-    if (handValue(playerHand) === 21) naturalBJ = true;
-
-    const luckBonus   = getLuckBonus(userData);
-    const frenzyMult  = getMultiplier(userData, 'frenzy');
-    const coinMult    = getMultiplier(userData, 'coins');
-    const activeEss   = getActiveEssenceSummary(userData);
-
-    function buildEmbed(desc) {
-      const e = new EmbedBuilder()
-        .setTitle('BLACKJACK')
-        .setColor(BLACK)
-        .addFields(
-          { name: 'Your Hand',   value: playerHand.map(c=>c.display).join(' '), inline: true },
-          { name: 'Dealer Hand', value: `${dealerHand[0].display} 🂠`,          inline: true },
-          { name: 'Your Value',  value: String(handValue(playerHand)),          inline: false },
-        )
-        .setDescription((desc || 'React ✅ **Hit** · ⏹️ **Stand**') + (hasInsurance ? '\n-# Insurance Slip ready' : ''))
-        .setFooter({ text: (message.guild?.name || 'Shiro') + (activeEss ? ' — essences active' : '') });
-      return e;
-    }
-
-    const msg = await message.channel.send({ embeds: [buildEmbed()] });
-    await msg.react('✅');
-    await msg.react('⏹️');
-
-    const filter = (r, u) => ['✅','⏹️'].includes(r.emoji.name) && u.id === userId;
-    const collector = msg.createReactionCollector({ filter, time: 60000 });
-
-    let busy = false;  // one reaction at a time — two fast clicks used to run the dealer's turn (and pay out) twice
-    collector.on('collect', async (reaction, user) => {
-      if (gameOver || busy) return;
-      busy = true;
-      try { await handle(reaction, user); } finally { busy = false; }
+    const table = (note, reveal = false) => card({
+      title: '♠ Blackjack',
+      body: `**Dealer** — ${reveal ? `${show(dealer)} · **${value(dealer)}**` : `\`${dealer[0].display}\` \`🂠\``}\n`
+        + `**You** — ${show(player)} · **${value(player)}**\n> Bet **${bet.toLocaleString()}**${doubled ? ' (doubled)' : ''}`
+        + (note ? `\n-# ${note}` : ''),
+      rows: reveal ? [] : [row(
+        button('bj_hit', 'Hit', ButtonStyle.Primary, false, '🃏'),
+        button('bj_stand', 'Stand', ButtonStyle.Secondary, false, '✋'),
+        button('bj_double', `Double down (${(bet * 2).toLocaleString()})`, ButtonStyle.Success, player.length !== 2 || doubled, '💰'),
+      )],
+      accent: BLACK, footer: `${g} · dealer stands on 17`,
     });
 
-    async function handle(reaction, user) {
-      await reaction.users.remove(user.id).catch(() => {});
+    const msg = await message.channel.send(table(value(player) === 21 ? 'Blackjack!' : 'Hit or stand?'));
+    let col;
 
-      if (reaction.emoji.name === '✅') {
-        playerHand.push(getCard());
-        const pv = handValue(playerHand);
-        if (pv > 21) {
-          gameOver = true;
-          collector.stop();
-
-          // Insurance slip negates the loss
-          if (hasInsurance) {
-            userData.inventory['Insurance Slip']--;
-            if (userData.inventory['Insurance Slip'] <= 0) delete userData.inventory['Insurance Slip'];
-            userData.balance += bet;
-            await saveUserData({ balance: userData.balance, inventory: userData.inventory });
-            await msg.edit({ embeds: [buildEmbed('Busted! Insurance Slip saved you — bet returned.')] });
-          } else {
-            await msg.edit({ embeds: [buildEmbed('You busted! Dealer wins.')] });
-          }
-          await finalize(false, hasInsurance ? bet : 0);
-        } else if (pv === 21) {
-          gameOver = true;
-          collector.stop();
-          await msg.edit({ embeds: [buildEmbed('**21!** Auto-standing...')] });
-          await dealerTurn();
-        } else {
-          await msg.edit({ embeds: [buildEmbed('Hit! React again to draw or ⏹️ to stand.')] });
-        }
-      } else {
-        gameOver = true;
-        collector.stop();
-        await dealerTurn();
-      }
-    }
-
-    collector.on('end', () => {
-      if (!gameOver) { msg.edit({ content: 'Blackjack timed out.', embeds: [] }).catch(() => {}); msg.reactions.removeAll().catch(() => {}); finalize(false, 0); }
-    });
-
-    let settled = false;
-    async function dealerTurn() {
-      if (settled) return;
-      settled = true;
-      while (handValue(dealerHand) < 17) dealerHand.push(getCard());
-      const pv = handValue(playerHand);
-      const dv = handValue(dealerHand);
-
-      let result = '';
-      let won    = false;
+    const finish = async (i = null) => {
+      if (done) return;
+      done = true;
+      if (col) col.stop('done');
+      const pv = value(player);
+      const natural = player.length === 2 && pv === 21 && !doubled;
+      if (pv <= 21 && !natural) while (value(dealer) < 17) dealer.push(draw());
+      const dv = value(dealer);
       let payout = 0;
-
+      let head;
+      let won = null;
       if (pv > 21) {
-        result = 'You busted!';
-      } else if (dv > 21) {
-        payout = casinoPayout(bet, bet * 2, userData);
-        won    = true;
-        result = `Dealer busted! You win **${payout.toLocaleString()}** coins!`;
-      } else if (naturalBJ && pv === 21) {
-        // Natural blackjack = 2.5x
-        payout = casinoPayout(bet, bet * 2.5, userData);
-        won    = true;
-        result = `**Natural Blackjack!** You win **${payout.toLocaleString()}** coins!`;
-      } else if (pv > dv) {
-        payout = casinoPayout(bet, bet * 2, userData);
-        won    = true;
-        result = `You beat the dealer! You win **${payout.toLocaleString()}** coins!`;
-      } else if (pv === dv) {
-        payout = bet;
-        result = 'Push! Bet returned.';
-      } else {
-        result = 'Dealer wins!';
-      }
+        head = `Bust — ${pv}`; won = false;
+        if (await debit(uid, { items: { 'Insurance Slip': 1 } })) { payout = bet; head = 'Bust — your Insurance Slip returned the bet'; won = null; }
+      } else if (natural) {
+        if (dv === 21 && dealer.length === 2) { payout = bet; head = 'Both blackjack — push'; }
+        else { payout = casinoPayout(bet, bet * 2.5, userData); head = 'BLACKJACK — 2.5×'; won = true; }
+      } else if (dv > 21) { payout = casinoPayout(bet, bet * 2, userData); head = `Dealer busts at ${dv} — you win`; won = true; }
+      else if (pv > dv) { payout = casinoPayout(bet, bet * 2, userData); head = `${pv} beats ${dv} — you win`; won = true; }
+      else if (pv === dv) { payout = bet; head = `${pv} each — push`; }
+      else { head = `${dv} beats ${pv} — dealer wins`; won = false; }
+      const balance = await settle(ctx, { bet, payout, game: 'blackjack', detail: natural ? 'Natural Blackjack' : doubled ? 'doubled down' : undefined });
+      if (natural && won) await credit(uid, { stats: { blackjack21: 1 } });
+      active.delete(uid);
+      const opts = {
+        emoji: '♠', game: 'Blackjack', won, headline: head,
+        lines: [
+          `Dealer ${show(dealer)} · **${dv}**`,
+          `You ${show(player)} · **${pv}**`,
+          won === true ? `**+${(payout - bet).toLocaleString()}** coins` : payout === bet ? 'Bet returned' : `**−${bet.toLocaleString()}** coins`,
+          `Balance **${balance.toLocaleString()}**`,
+        ],
+        footer: g, replay: { game: 'blackjack', bet: baseBet },
+      };
+      if (i) await i.update(gameResult(opts)).catch(() => msg.edit(gameResult(opts)).catch(() => {}));
+      else await msg.edit(gameResult(opts)).catch(() => {});
+      attachReplay(msg, uid, opts);
+    };
 
-      if (won || pv === dv) {
-        userData.balance += payout;
-        await saveUserData({ balance: userData.balance });
-        if (won && message.guild) {
-          const pts = Math.min(40, Math.max(5, Math.floor(payout / 500)));
-          await awardPoints(message.guild.id, message.author.id, pts);
+    let busy = false;
+    col = msg.createMessageComponentCollector({ time: 90_000, filter: (i) => i.customId.startsWith('bj_') });
+    col.on('collect', async (i) => {
+      if (i.user.id !== uid) return i.reply({ content: 'Deal yourself in with `.bj <bet>`.', ephemeral: true });
+      if (done || busy) return i.deferUpdate().catch(() => {});
+      busy = true;
+      try {
+        if (i.customId === 'bj_hit') {
+          player.push(draw());
+          if (value(player) >= 21) return await finish(i);
+          return await i.update(table('Hit or stand?'));
         }
-      }
-
-      const finalEmbed = new EmbedBuilder()
-        .setTitle('BLACKJACK RESULT')
-        .setColor(BLACK)
-        .setDescription(`> ${result}`)
-        .addFields(
-          { name: 'Your Hand',   value: playerHand.map(c=>c.display).join(' '), inline: true },
-          { name: 'Dealer Hand', value: dealerHand.map(c=>c.display).join(' '), inline: true },
-          { name: 'Your Value',  value: String(pv), inline: true },
-          { name: 'Dealer Value', value: String(dv), inline: true },
-          { name: 'New Balance', value: `**${userData.balance.toLocaleString()}** coins`, inline: false },
-        )
-        .setFooter({ text: frenzyMult > 1 ? 'Frenzy: +5% winnings' : (message.guild?.name || 'Shiro') });
-
-      await msg.edit({ embeds: [finalEmbed] }).catch(() => message.channel.send({ embeds: [finalEmbed] }));
-      msg.reactions.removeAll().catch(() => {});
-
-      if (won && client) {
-        announceWin(client, {
-          userId, username: message.author.username,
-          avatarURL: message.author.displayAvatarURL({ dynamic: true }),
-          game: 'blackjack', bet, payout, multiplier: bet > 0 ? payout / bet : 0,
-          detail: naturalBJ ? 'Natural Blackjack' : undefined,
-          logAdminAction,
-        }).catch(() => {});
-      }
-
-      await finalize(won, payout);
-    }
-
-    let finalized = false;
-    async function finalize(won, payout) {
-      if (finalized) return;
-      finalized = true;
-      activeGames.delete(userId);
-      recordRound('blackjack', bet, payout, 0, userId);
-
-      // XP
-      await addXP(userId, won ? XP_PER_WIN : XP_PER_GAME, userData, saveUserData, message);
-
-      // Stats
-      userData.stats = userData.stats || {};
-      userData.stats.gamesPlayed = (userData.stats.gamesPlayed || 0) + 1;
-      if (won) {
-        userData.stats.gamesWon  = (userData.stats.gamesWon || 0) + 1;
-        userData.stats.coinsWon  = (userData.stats.coinsWon || 0) + payout;
-        if (naturalBJ) userData.stats.blackjack21 = (userData.stats.blackjack21 || 0) + 1;
-      }
-      await saveUserData({ stats: userData.stats });
-      await checkAchievements(userData, { message, saveUserData });
-    }
+        if (i.customId === 'bj_stand') return await finish(i);
+        if (i.customId === 'bj_double') {
+          if (player.length !== 2 || doubled) return i.deferUpdate();
+          const ok = await User.findOneAndUpdate({ userId: uid, balance: { $gte: bet } }, { $inc: { balance: -bet } }, { new: true });
+          if (!ok) return i.reply({ content: `You need another **${bet.toLocaleString()}** coins to double.`, ephemeral: true });
+          bet *= 2;
+          doubled = true;
+          player.push(draw());
+          return await finish(i);
+        }
+      } finally { busy = false; }
+    });
+    col.on('end', (_c, reason) => { if (reason !== 'done' && !done) finish(); });   // left alone = you stand
+    if (value(player) === 21) setTimeout(() => finish(), 900);
   },
 };
