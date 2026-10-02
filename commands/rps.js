@@ -1,9 +1,8 @@
-const { EmbedBuilder } = require('discord.js');
+const { card, gameResult, attachReplay } = require('../utils/casino');
 const { parseBet } = require('../utils/parseBet');
 const { announceWin } = require('../utils/winAnnouncer');
 const { trackStat, checkAchievements } = require('../utils/achievements');
 
-const BLACK = 0x000000;
 
 const choices = {
   rock: '🪨',
@@ -40,7 +39,7 @@ module.exports = {
     const playerChoice = choiceMap[(args[1] || '').toLowerCase()] || (args[1] || '').toLowerCase();
 
     if (!bet || !['rock', 'paper', 'scissors'].includes(playerChoice)) {
-      return message.channel.send('Usage: `.rps <amount|all> <rock|paper|scissors>`');
+      return message.channel.send(card({ title: '✊ Rock Paper Scissors', body: '> `.rps <amount|all> <r|p|s>` — beat the house hand: a win pays 1.9×, a draw gives 85% back.\n> Or with buttons: `.play`', footer: message.guild?.name || 'Shiro' }));
     }
     if (userData.balance < bet) {
       return message.channel.send('You do not have enough balance to place that bet.');
@@ -67,11 +66,7 @@ module.exports = {
       resultLine += `> **You lose.**`;
     }
 
-    const embed = new EmbedBuilder()
-      .setTitle('ROCK PAPER SCISSORS')
-      .setDescription(`${resultLine}\n\n> New balance: **${userData.balance.toLocaleString()}** coins`)
-      .setColor(BLACK)
-      .setFooter({ text: message.guild?.name || 'Shiro' });
+
 
     await saveUserData({ balance: userData.balance });
 
@@ -84,7 +79,19 @@ module.exports = {
     await saveUserData({ stats: userData.stats });
     await checkAchievements(userData, { message, saveUserData });
 
-    message.channel.send({ embeds: [embed] });
+    const opts = {
+      emoji: '✊', game: 'Rock Paper Scissors', won: won ? true : outcome === 'draw' ? null : false,
+      headline: `${choices[playerChoice]}  vs  ${choices[botChoice]}  — ${won ? 'you win' : outcome === 'draw' ? 'draw' : 'you lose'}`,
+      lines: [
+        `You threw **${playerChoice}** · the house threw **${botChoice}**`,
+        won ? `**+${(payout - bet).toLocaleString()}** coins` : outcome === 'draw' ? `Draw — **${payout.toLocaleString()}** back (85%)` : `**−${bet.toLocaleString()}** coins`,
+        `Balance **${userData.balance.toLocaleString()}**`,
+      ],
+      footer: message.guild?.name || 'Shiro',
+      replay: { game: 'rps', bet, extra: [playerChoice[0]], picks: [['Rock', '🪨', ['r']], ['Paper', '📄', ['p']], ['Scissors', '✂️', ['s']]] },
+    };
+    const sent = await message.channel.send(gameResult(opts));
+    attachReplay(sent, message.author.id, opts);
 
     if (won && client) {
       announceWin(client, {

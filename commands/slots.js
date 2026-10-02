@@ -1,9 +1,8 @@
 // commands/slots.js
-const { EmbedBuilder } = require('discord.js');
+const { card, gameResult, attachReplay } = require('../utils/casino');
 const mongoose = require('mongoose');
 const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
 
-const BLACK = 0x000000;
 const { parseBet } = require('../utils/parseBet');
 const { getMultiplier, getLuckBonus } = require('../utils/essences');
 const { addXP } = require('../utils/xp');
@@ -70,16 +69,12 @@ module.exports = {
   async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
     const bet = parseBet(args[0], userData.balance || 0);
     if (!bet) {
-      return message.channel.send({
-        embeds: [new EmbedBuilder().setColor(BLACK)
-          .setTitle('SLOTS')
-          .setDescription(
-            '> Usage: `.sl <amount|all|max>`\n\n' +
-            '__**Symbols**__\n' +
-            SYMBOLS.map(s => `${s.s} **${s.mult}×**`).join('  ·  ')
-          )
-          .setFooter({ text: message.guild?.name || 'Shiro' })],
-      });
+      return message.channel.send(card({
+        title: '🎰 Slots',
+        body: '> `.sl <amount|all|max>` — three of a kind pays the symbol, two pays half. 💎💎💎 wins the jackpot.\n> '
+          + SYMBOLS.map((x) => `${x.s} **${x.mult}×**`).join(' · ') + '\n> Or with buttons: `.play`',
+        footer: message.guild?.name || 'Shiro',
+      }));
     }
 
     if ((userData.balance || 0) < bet) return message.channel.send('Insufficient balance.');
@@ -94,26 +89,18 @@ module.exports = {
     await addToJackpot(jackpotContrib);
 
     // ── Spin animation ────────────────────────────────────────────────────
-    const spinMsg = await message.channel.send({
-      embeds: [new EmbedBuilder().setColor(BLACK)
-        .setTitle('SLOTS')
-        .setDescription(`**${SPIN_FRAMES[0]}**\n\n> Jackpot: **${(jackpot + jackpotContrib).toLocaleString()}** coins`)
-        .setFooter({ text: message.guild?.name || 'Shiro' })],
-    });
-
-    for (let i = 1; i < SPIN_FRAMES.length; i++) {
-      await new Promise(r => setTimeout(r, 400));
-      await spinMsg.edit({
-        embeds: [new EmbedBuilder().setColor(BLACK)
-          .setTitle('SLOTS')
-          .setDescription(`**${SPIN_FRAMES[i]}**\n\n> Jackpot: **${(jackpot + jackpotContrib).toLocaleString()}** coins`)
-          .setFooter({ text: message.guild?.name || 'Shiro' })],
-      });
-    }
-
+    const g = message.guild?.name || 'Shiro';
+    const reelCard = (a, b, c) => card({ title: '🎰 Slots', body: `# ┃ ${a} ┃ ${b} ┃ ${c} ┃\n> **${bet.toLocaleString()}** in · jackpot **${(jackpot + jackpotContrib).toLocaleString()}**`, footer: g });
+    const rnd = () => SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)].s;
+    const spinMsg = await message.channel.send(reelCard('🌀', '🌀', '🌀'));
     // ── Spin reels ────────────────────────────────────────────────────────
     const reels  = [spinReel(casinoLuck(userData)), spinReel(casinoLuck(userData)), spinReel(casinoLuck(userData))];
     const row    = reels.map(r => r.s).join(' ');
+    // reels stop one by one
+    for (const shown of [[rnd(), rnd(), rnd()], [reels[0].s, rnd(), rnd()], [reels[0].s, reels[1].s, rnd()]]) {
+      await new Promise((r) => setTimeout(r, 380));
+      await spinMsg.edit(reelCard(...shown)).catch(() => {});
+    }
 
     userData.balance = (userData.balance || 0) - bet;
 
@@ -168,27 +155,19 @@ module.exports = {
 
     const newJackpot = isJackpot ? 5_000 : jackpot + jackpotContrib;
 
-    const embed = new EmbedBuilder()
-      .setTitle(isJackpot ? 'SLOTS — JACKPOT' : 'SLOTS RESULT')
-      .setColor(BLACK)
-      .setDescription(
-        `**🎰 | ${row} |**\n\n> ${resultText}`
-      )
-      .addFields(
-        { name: 'Bet',           value: bet.toLocaleString(),              inline: true },
-        { name: payout > 0 ? 'Won' : 'Lost', value: payout > 0 ? `+${payout.toLocaleString()}` : `-${bet.toLocaleString()}`, inline: true },
-        { name: 'Balance',       value: userData.balance.toLocaleString(), inline: true },
-        { name: 'Next Jackpot',  value: `${newJackpot.toLocaleString()} coins`, inline: true },
-      )
-      .setFooter({
-        text: [
-          '5% of every bet feeds the jackpot',
-          frenzyMult > 1 ? 'Frenzy: +5% winnings' : '',
-          message.guild?.name || 'Shiro',
-        ].filter(Boolean).join(' — '),
-      });
-
-    await spinMsg.edit({ embeds: [embed] });
+    const opts = {
+      emoji: '🎰', game: 'Slots', won: payout > bet ? true : payout > 0 ? null : false,
+      headline: `┃ ${reels.map((r) => r.s).join(' ┃ ')} ┃` + (isJackpot ? '  JACKPOT' : ''),
+      lines: [
+        resultText,
+        payout > 0 ? `Paid **${payout.toLocaleString()}** on a **${bet.toLocaleString()}** bet` : `**−${bet.toLocaleString()}** coins`,
+        `Balance **${userData.balance.toLocaleString()}** · next jackpot **${newJackpot.toLocaleString()}**`,
+        '-# 5% of every bet feeds the jackpot' + (frenzyMult > 1 ? ' · Frenzy +5%' : ''),
+      ],
+      footer: g, replay: { game: 'slots', bet },
+    };
+    await spinMsg.edit(gameResult(opts)).catch(() => {});
+    attachReplay(spinMsg, message.author.id, opts);
 
     if (payout > 0 && client) {
       announceWin(client, {

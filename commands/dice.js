@@ -1,11 +1,11 @@
 const { recordRound } = require('../utils/houseBank');
-const { EmbedBuilder } = require('discord.js');
+const { card, gameResult, attachReplay } = require('../utils/casino');
+const FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 const { awardPoints } = require('../utils/sentinelDb');
 const { parseBet } = require('../utils/parseBet');
 const { announceWin } = require('../utils/winAnnouncer');
 const { trackStat, checkAchievements } = require('../utils/achievements');
 
-const BLACK = 0x000000;
 
 module.exports = {
   name: 'dice',
@@ -16,7 +16,7 @@ module.exports = {
     const bet = parseBet(args[0], userData.balance);
 
     if (!bet) {
-      return message.channel.send('Usage: `.dice <amount|all>` (bet must be a positive number)');
+      return message.channel.send(card({ title: '🎲 Dice', body: '> `.dice <amount|all>` — roll a die: **4** pays 1.4× · **5** pays 1.7× · **6** pays 2×.\n> Or with buttons: `.play`', footer: message.guild?.name || 'Shiro' }));
     }
     if (userData.balance < bet) {
       return message.channel.send("You don't have enough balance to play!");
@@ -60,15 +60,20 @@ module.exports = {
     await saveUserData({ stats: userData.stats });
     await checkAchievements(userData, { message, saveUserData });
 
-    const embed = new EmbedBuilder()
-      .setTitle('DICE TABLE')
-      .setDescription(
-        `${resultLine}\n\n> New balance: **${userData.balance.toLocaleString()}** coins`
-      )
-      .setColor(BLACK)
-      .setFooter({ text: message.guild?.name || 'Shiro' });
-
-    message.channel.send({ embeds: [embed] });
+    const g = message.guild?.name || 'Shiro';
+    const rollMsg = await message.channel.send(card({ title: '🎲 Dice', body: `# ${FACES[0]}\n> Rolling for **${bet.toLocaleString()}**…`, footer: g }));
+    for (const f of [FACES[3], FACES[1], FACES[4]]) {
+      await new Promise((r) => setTimeout(r, 280));
+      await rollMsg.edit(card({ title: '🎲 Dice', body: `# ${f}\n> Rolling for **${bet.toLocaleString()}**…`, footer: g })).catch(() => {});
+    }
+    const opts = {
+      emoji: '🎲', game: 'Dice', won: reward > bet ? true : false,
+      headline: `${FACES[roll - 1]}  ${roll}` + (roll === 6 ? ' — JACKPOT' : roll >= 4 ? ' — win' : ' — lose'),
+      lines: [resultLine.replace(/^> /, ''), `Balance **${userData.balance.toLocaleString()}**`, '-# 4 → 1.4× · 5 → 1.7× · 6 → 2×'],
+      footer: g, replay: { game: 'dice', bet },
+    };
+    await rollMsg.edit(gameResult(opts)).catch(() => {});
+    attachReplay(rollMsg, message.author.id, opts);
 
     if (reward > 0 && client) {
       announceWin(client, {

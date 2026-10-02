@@ -93,4 +93,48 @@ async function settle(ctx, { bet, payout, game, detail }) {
   return userData.balance;
 }
 
-module.exports = { card, button, row, takeBet, settle, BLACK, WIN, LOSE, ButtonStyle };
+const fmtN = (n) => Math.floor(n || 0).toLocaleString();
+
+/** The finished-game card every game uses: a big headline, the numbers, and a replay row.
+ *  opts: { emoji, game, headline, won (true|false|null for a push), lines: [..], footer, replay: { game, bet, extra } } */
+function gameResult({ emoji = '🎲', game, headline, won = null, lines = [], footer, replay, rowsBefore = [] }, withReplay = true) {
+  const accent = won === true ? WIN : won === false ? LOSE : BLACK;
+  const body = `# ${headline}\n` + lines.filter(Boolean).map((l) => (l.startsWith('-#') ? l : `> ${l}`)).join('\n');
+  const rows = [...rowsBefore];
+  if (withReplay && replay && replay.bet > 0) {
+    if (replay.picks) {   // play again straight away with a different call (heads/tails, a colour, a hand)
+      rows.push(row(...replay.picks.map(([label, emoji], k) => button(`rp:p:${k}`, `${label} · ${fmtN(replay.bet)}`, ButtonStyle.Primary, false, emoji))));
+    }
+    rows.push(replayRow(replay.game, replay.bet));
+  }
+  return card({ title: `${emoji} ${game}`, body, rows, accent, footer });
+}
+
+/** Again · Double · Half · Casino floor. */
+function replayRow(game, bet) {
+  const half = Math.max(1, Math.floor(bet / 2));
+  return row(
+    button(`rp:a:${bet}`, `Again · ${fmtN(bet)}`, ButtonStyle.Success, false, '🔁'),
+    button(`rp:d:${bet * 2}`, `Double · ${fmtN(bet * 2)}`, ButtonStyle.Primary),
+    button(`rp:h:${half}`, `Half · ${fmtN(half)}`, ButtonStyle.Secondary),
+    button('rp:f:0', 'Casino floor', ButtonStyle.Secondary, false, '🎲'),
+  );
+}
+
+/** Wire the replay row on a sent result: only the player can press it; each press runs the real command for them.
+ *  After 2 minutes the row is removed (the card stays). */
+function attachReplay(msg, ownerId, opts) {
+  if (!msg || !opts.replay || !(opts.replay.bet > 0)) return;
+  const col = msg.createMessageComponentCollector({ time: 120_000, filter: (i) => i.customId.startsWith('rp:') });
+  col.on('collect', async (i) => {
+    if (i.user.id !== ownerId) return i.reply({ content: 'Play your own round — `.play`.', flags: MessageFlags.Ephemeral }).catch(() => {});
+    await i.deferUpdate().catch(() => {});
+    const [, kind, amt] = i.customId.split(':');
+    if (kind === 'f') return i.client.runAs(i, 'play', []);
+    if (kind === 'p') return i.client.runAs(i, opts.replay.game, [String(opts.replay.bet), ...(opts.replay.picks[Number(amt)][2] || [])]);
+    return i.client.runAs(i, opts.replay.game, [String(amt), ...(opts.replay.extra || [])]);
+  });
+  col.on('end', () => msg.edit(gameResult(opts, false)).catch(() => {}));
+}
+
+module.exports = { card, button, row, takeBet, settle, gameResult, replayRow, attachReplay, BLACK, WIN, LOSE, ButtonStyle };

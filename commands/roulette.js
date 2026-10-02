@@ -1,5 +1,5 @@
 // commands/roulette.js — European Roulette (0-36)
-const { EmbedBuilder } = require('discord.js');
+const { card, gameResult, attachReplay } = require('../utils/casino');
 const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
 
 const CHECK = '<:check:1547659779877642360>';
@@ -52,20 +52,12 @@ module.exports = {
     }
 
     if (!bet || !betType) {
-      return message.channel.send({
-        embeds: [new EmbedBuilder().setColor(BLACK)
-          .setTitle('ROULETTE')
-          .setDescription(
-            '> Usage: `.rl <bet> <choice>`\n\n' +
-            '__**Choices & Payouts**__\n' +
-            '> `red` / `black` → **2×** (48.6% win)\n' +
-            '> `green` → **18×** (2.7% win)\n' +
-            '> `0`–`36` → **36×** (2.7% win)\n\n' +
-            '__**Examples**__\n' +
-            '> `.rl 500 red` · `.rl 1000 7` · `.rl all black`'
-          )
-          .setFooter({ text: `${message.guild?.name || 'Shiro'} — RTP ~97%` })],
-      });
+      return message.channel.send(card({
+        title: '🔴 Roulette',
+        body: '> `.rl <bet> <red|black|green|0-36>`\n'
+          + '> 🟥 / ⬛ red or black → **2×** · 🟩 green (0) → **17×** · a single number → **35×**\n> Or with buttons: `.play`',
+        footer: message.guild?.name || 'Shiro',
+      }));
     }
 
     if ((userData.balance || 0) < bet) {
@@ -121,17 +113,28 @@ module.exports = {
       statusLine = `${XMARK} **${resultEmoji} ${result.num} (${COLOR_LABEL[result.color]})** — not ${betLabel}. Lost **${bet.toLocaleString()}** coins.`;
     }
 
-    const embed = new EmbedBuilder()
-      .setColor(BLACK)
-      .setTitle('ROULETTE')
-      .setDescription(
-        `> ${statusLine}\n\n` +
-        `> Bet: \`${bet.toLocaleString()}\` on \`${betLabel}\`\n` +
-        `> Balance: \`${(userData.balance || 0).toLocaleString()}\``
-      )
-      .setFooter({ text: `${message.guild?.name || 'Shiro'} — RTP ~97%` });
-
-    await message.channel.send({ embeds: [embed] });
+    const g = message.guild?.name || 'Shiro';
+    const wheel = (n, c) => card({ title: '🔴 Roulette', body: `# ${COLOR_EMOJI[c]} ${n}\n> **${bet.toLocaleString()}** on **${betLabel}** — the ball is rolling…`, footer: g });
+    const spinMsg = await message.channel.send(wheel('?', 'green'));
+    for (let k = 0; k < 4; k++) {
+      await new Promise((r) => setTimeout(r, 300));
+      const f = spinWheel();
+      await spinMsg.edit(wheel(f.num, f.color)).catch(() => {});
+    }
+    const opts = {
+      emoji: '🔴', game: 'Roulette', won,
+      headline: `${resultEmoji} ${result.num} ${COLOR_LABEL[result.color]} — ${won ? `×${baseMulti}!` : 'no luck'}`,
+      lines: [
+        `You bet **${bet.toLocaleString()}** on **${betLabel}**`,
+        won ? `**+${profit.toLocaleString()}** coins` + (frenzy > 1 ? ' (Frenzy +5%)' : '') : `**−${bet.toLocaleString()}** coins`,
+        `Balance **${(userData.balance || 0).toLocaleString()}**`,
+      ],
+      footer: g,
+      replay: { game: 'roulette', bet, extra: [betType === 'number' ? String(betNumber) : betType],
+        picks: [['Red', '🟥', ['red']], ['Black', '⬛', ['black']], ['Green', '🟩', ['green']]] },
+    };
+    await spinMsg.edit(gameResult(opts)).catch(() => {});
+    attachReplay(spinMsg, message.author.id, opts);
 
     if (client && won) {
       announceWin(client, {

@@ -1,7 +1,7 @@
 // commands/plinko.js — Plinko (16-row ball drop)
 // Ball drops through 16 rows of pegs, landing in one of 17 buckets.
 // Risk level controls the spread of multipliers (low/medium/high).
-const { EmbedBuilder } = require('discord.js');
+const { card, gameResult, attachReplay } = require('../utils/casino');
 const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
 
 const CHECK = '<:check:1547659779877642360>';
@@ -70,16 +70,11 @@ module.exports = {
     const bet     = parseBet(betArg, userData.balance || 0);
 
     if (!bet) {
-      return message.channel.send({
-        embeds: [new EmbedBuilder().setColor(BLACK)
-          .setTitle('PLINKO')
-          .setDescription(
-            '> Usage: `.plinko <bet>`\n\n' +
-            '> One board for everyone — the edges pay big, the middle eats your bet.\n\n' +
-            '__**Example**__\n> `.plinko 500`'
-          )
-          .setFooter({ text: `${message.guild?.name || 'Shiro'} — RTP ~97%` })],
-      });
+      return message.channel.send(card({
+        title: '🎯 Plinko',
+        body: '> `.plinko <bet>` — drop a ball down the pegs. The edges pay big, the middle eats your bet.\n> Or with buttons: `.play`',
+        footer: message.guild?.name || 'Shiro',
+      }));
     }
 
     if ((userData.balance || 0) < bet) {
@@ -120,18 +115,30 @@ module.exports = {
       ? `${CHECK} Ball landed in bucket **${bucket + 1}** — **×${finalMulti}** → **+${profit.toLocaleString()}** coins!`
       : `${XMARK} Ball landed in bucket **${bucket + 1}** — **×${finalMulti}** → lost **${(bet - payout).toLocaleString()}** coins.`;
 
-    const embed = new EmbedBuilder()
-      .setColor(BLACK)
-      .setTitle('PLINKO')
-      .setDescription(
-        `> ${statusLine}\n\n` +
-        `> Risk: \`${riskArg}\` · Bet: \`${bet.toLocaleString()}\`\n` +
-        `> Multiplier: \`×${baseMulti}\`${frenzy > 1 ? ' (+5% winnings, Frenzy)' : ''}\n` +
-        `> Payout: \`${payout.toLocaleString()}\``
-      )
-      .setFooter({ text: `${message.guild?.name || 'Shiro'} — RTP ~97%` });
-
-    await message.channel.send({ embeds: [embed] });
+    const g = message.guild?.name || 'Shiro';
+    // the ball falls: one peg row per frame, drifting toward where it really lands
+    const W = mults.length;
+    let pos = Math.floor(W / 2);
+    const frame = (p, row) => card({ title: '🎯 Plinko', body: `# ${'·'.repeat(Math.max(0, p))}⚪${'·'.repeat(Math.max(0, W - 1 - p))}\n> Row ${row}/4 — **${bet.toLocaleString()}** falling…`, footer: g });
+    const dropMsg = await message.channel.send(frame(pos, 1));
+    for (let r = 2; r <= 4; r++) {
+      pos += Math.sign(bucket - pos) * Math.ceil(Math.abs(bucket - pos) / (5 - r)) + (Math.random() < 0.3 ? (Math.random() < 0.5 ? -1 : 1) : 0);
+      pos = Math.max(0, Math.min(W - 1, pos));
+      await new Promise((res) => setTimeout(res, 320));
+      await dropMsg.edit(frame(pos, r)).catch(() => {});
+    }
+    const opts = {
+      emoji: '🎯', game: 'Plinko', won: won ? true : payout >= bet ? null : false,
+      headline: `×${finalMulti} — bucket ${bucket + 1}/${W}`,
+      lines: [
+        mults.map((m, k) => (k === bucket ? `**[${m}×]**` : `${m}×`)).join(' '),
+        won ? `**+${profit.toLocaleString()}** coins` + (frenzy > 1 ? ' (Frenzy +5%)' : '') : `Paid **${payout.toLocaleString()}** of **${bet.toLocaleString()}**`,
+        `Balance **${(userData.balance || 0).toLocaleString()}**`,
+      ],
+      footer: g, replay: { game: 'plinko', bet },
+    };
+    await dropMsg.edit(gameResult(opts)).catch(() => {});
+    attachReplay(dropMsg, message.author.id, opts);
 
     if (client && won) {
       announceWin(client, {

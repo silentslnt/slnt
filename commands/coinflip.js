@@ -1,5 +1,4 @@
 // commands/coinflip.js
-const { EmbedBuilder } = require('discord.js');
 const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
 
 const BLACK = 0x000000;
@@ -11,6 +10,7 @@ const { awardPoints } = require('../utils/sentinelDb');
 const { announceWin } = require('../utils/winAnnouncer');
 const { recordRound } = require('../utils/houseBank');
 const { casinoPayout, casinoLuck } = require('../utils/houseEdge');
+const { card, gameResult, attachReplay } = require('../utils/casino');
 
 const CF_FEE = 0.10;   // taken from the winnings of every winning flip
 
@@ -27,18 +27,11 @@ module.exports = {
     const bet     = parseBet(betArg, userData.balance || 0);
 
     if (!bet || !['h', 't', 'heads', 'tails'].includes(sideArg)) {
-      return message.channel.send({
-        embeds: [new EmbedBuilder().setColor(BLACK)
-          .setTitle('COINFLIP')
-          .setDescription(
-            '> Usage: `.cf <amount|all|max> <h|t>`\n\n' +
-            '__**Examples**__\n' +
-            '> `.cf 500 h` — bet 500 on heads\n' +
-            '> `.cf all t` — bet all on tails\n' +
-            '> `.cf max h` — bet max on heads'
-          )
-          .setFooter({ text: message.guild?.name || 'Shiro' })],
-      });
+      return message.channel.send(card({
+        title: '🪙 Coinflip',
+        body: '> `.cf <amount|all|max> <h|t>` — call it, double it (a 10% fee comes off a win).\n> Or pick it with buttons: `.play`',
+        footer: message.guild?.name || 'Shiro',
+      }));
     }
 
     if ((userData.balance || 0) < bet) {
@@ -59,20 +52,11 @@ module.exports = {
     const picked      = pickedHeads ? 'Heads 🪙' : 'Tails 🌑';
 
     // Animation
-    const spinMsg = await message.channel.send({
-      embeds: [new EmbedBuilder().setColor(BLACK)
-        .setTitle('FLIPPING...')
-        .setDescription(`${SPIN_FRAMES[0]} Spinning...`)
-        .setFooter({ text: message.guild?.name || 'Shiro' })],
-    });
+    const spin = (f) => card({ title: '🪙 Coinflip', body: `# ${f}\n> ${picked} · **${bet.toLocaleString()}** on the line…`, footer: message.guild?.name || 'Shiro' });
+    const spinMsg = await message.channel.send(spin(SPIN_FRAMES[0]));
     for (let i = 1; i < SPIN_FRAMES.length; i++) {
       await new Promise(r => setTimeout(r, 300));
-      await spinMsg.edit({
-        embeds: [new EmbedBuilder().setColor(BLACK)
-          .setTitle('FLIPPING...')
-          .setDescription(`${SPIN_FRAMES[i]} Spinning...`)
-          .setFooter({ text: message.guild?.name || 'Shiro' })],
-      });
+      await spinMsg.edit(spin(SPIN_FRAMES[i])).catch(() => {});
     }
 
     // Calculate payout
@@ -120,31 +104,19 @@ module.exports = {
     await saveUserData({ stats: userData.stats });
     await checkAchievements(userData, { message, saveUserData });
 
-    const embed = new EmbedBuilder()
-      .setTitle('COINFLIP RESULT')
-      .setColor(BLACK)
-      .addFields(
-        { name: 'Result',     value: result,                                   inline: true },
-        { name: 'You Picked', value: picked,                                   inline: true },
-        { name: 'Bet',        value: bet.toLocaleString(),                     inline: true },
-        { name: won ? 'Won' : 'Lost', value: won ? `+${(payout - bet).toLocaleString()} (fee ${fee.toLocaleString()})` : `-${bet.toLocaleString()}`, inline: true },
-        { name: 'Balance',    value: userData.balance.toLocaleString(),        inline: true },
-        { name: 'CF Streak',  value: `${cfStreak} flips`,                     inline: true },
-      )
-      .setDescription(
-        won
-          ? `> **${result}!** You win **${(payout - bet).toLocaleString()}** coins.\n-# ${fee.toLocaleString()} coin fee${streakNote}`
-          : `> **${result}!** You picked ${picked}. Better luck next time.`
-      )
-      .setFooter({
-        text: [
-          frenzyMult > 1 ? 'Frenzy +5% winnings' : '',
-          luckBonus   > 0 ? '+1% luck' : '',
-          message.guild?.name || 'Shiro',
-        ].filter(Boolean).join(' — '),
-      });
-
-    await spinMsg.edit({ embeds: [embed] });
+    const opts = {
+      emoji: '🪙', game: 'Coinflip', won,
+      headline: won ? `${result} — you win` : `${result} — you lose`,
+      lines: [
+        `You called **${picked}** · bet **${bet.toLocaleString()}**`,
+        won ? `**+${(payout - bet).toLocaleString()}** coins (fee ${fee.toLocaleString()})${streakNote.replace(/\n> /g, ' · ')}` : `**−${bet.toLocaleString()}** coins`,
+        `Balance **${userData.balance.toLocaleString()}** · streak **${cfStreak}**`,
+      ],
+      footer: [frenzyMult > 1 ? 'Frenzy +5% winnings' : '', luckBonus > 0 ? '+1% luck' : '', message.guild?.name || 'Shiro'].filter(Boolean).join(' · '),
+      replay: { game: 'coinflip', bet, extra: [pickedHeads ? 'h' : 't'], picks: [['Heads', '🪙', ['h']], ['Tails', '🌑', ['t']]] },
+    };
+    await spinMsg.edit(gameResult(opts)).catch(() => {});
+    attachReplay(spinMsg, message.author.id, opts);
 
     if (won && client) {
       announceWin(client, {
