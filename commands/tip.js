@@ -36,7 +36,14 @@ module.exports = {
     // Guarded debit (two fast tips can't overspend); the receiver gets it minus the transfer tax
     const { debit, credit } = require('../utils/atomicInv');
     const { TRANSFER_TAX } = require('../utils/config');
-    if (!(await debit(message.author.id, { balance: bet }))) return message.channel.send("You don't have that many coins anymore.");
+    const cap = require('../utils/sendCap');
+    const { left, resets } = await cap.remaining(message.author.id);
+    if (bet > left) return message.channel.send(`You can send **${left.toLocaleString()}** more coins today (gifts, tips and trades share a ${cap.CAP.toLocaleString()} daily limit). Resets <t:${Math.floor(resets / 1000)}:R>.`);
+    if (!(await cap.claim(message.author.id, bet))) return message.channel.send("That's over today's send limit.");
+    if (!(await debit(message.author.id, { balance: bet }))) {
+      await cap.release(message.author.id, bet);
+      return message.channel.send("You don't have that many coins anymore.");
+    }
     const tax = Math.floor(bet * TRANSFER_TAX);
     const net = bet - tax;
     userData.balance = (userData.balance || 0) - bet;

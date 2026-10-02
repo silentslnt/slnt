@@ -132,6 +132,8 @@ module.exports = {
           if (!Number.isFinite(n) || n < 0) return sub2.reply({ content: 'Enter a whole number.', flags: MessageFlags.Ephemeral });
           const fresh = await getUserData(uid);
           if (n > (fresh.balance || 0)) return sub2.reply({ content: `You only have \`${fmt(fresh.balance)}\` coins.`, flags: MessageFlags.Ephemeral });
+          const lim = await require('../utils/sendCap').remaining(uid);
+          if (n > lim.left) return sub2.reply({ content: `You can send \`${fmt(lim.left)}\` more coins today — gifts, tips and trades share one daily limit. Resets <t:${Math.floor(lim.resets / 1000)}:R>.`, flags: MessageFlags.Ephemeral });
           if (t.status !== 'open') return sub2.reply({ content: 'This trade is closed.', flags: MessageFlags.Ephemeral });
           mine.coins = n; changed();
           await sub2.deferUpdate().catch(() => sub2.reply({ content: 'Updated.', flags: MessageFlags.Ephemeral }).catch(() => {}));
@@ -180,8 +182,17 @@ module.exports = {
           const A = { balance: t.offers[t.a].coins, items: { ...t.offers[t.a].items } };
           const B = { balance: t.offers[t.b].coins, items: { ...t.offers[t.b].items } };
           let result;
-          if (!(await debit(t.a, A))) result = `❌ <@${t.a}> no longer has everything they offered — nothing moved.`;
-          else if (!(await debit(t.b, B))) {
+          const cap = require('../utils/sendCap');
+          const capA = await cap.claim(t.a, A.balance);
+          const capB = capA && await cap.claim(t.b, B.balance);
+          if (!capA || !capB) {
+            if (capA) await cap.release(t.a, A.balance);
+            result = `❌ <@${!capA ? t.a : t.b}> is over today's coin send limit (gifts, tips and trades share it) — nothing moved.`;
+          } else if (!(await debit(t.a, A))) {
+            await cap.release(t.a, A.balance); await cap.release(t.b, B.balance);
+            result = `❌ <@${t.a}> no longer has everything they offered — nothing moved.`;
+          } else if (!(await debit(t.b, B))) {
+            await cap.release(t.a, A.balance); await cap.release(t.b, B.balance);
             await credit(t.a, A);
             result = `❌ <@${t.b}> no longer has everything they offered — nothing moved.`;
           } else {
