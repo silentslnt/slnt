@@ -23,15 +23,25 @@ function calcMultiplier(mines, revealed) {
   for (let i = 0; i < revealed; i++) {
     prob *= (safe - i) / (25 - i);
   }
-  // House edge: 5% (stays under 100% even with Frenzy's profit bonus)
-  return Math.max(1.01, Math.round((0.95 / prob) * 100) / 100);
+  // House edge: 6% (stays under 100% even with Frenzy's profit bonus)
+  return Math.max(1.01, Math.round((0.94 / prob) * 100) / 100);
 }
 
 // Active game sessions: userId → { bet, mines, minePositions, revealed: Set, grid: string[] }
 const SESSIONS = new Map();
 
 const GRID_SIZE = 25; // 5×5
-const MINE_COUNTS = [1, 2, 3, 5, 7, 10, 15, 20, 24];
+// One fixed board for everyone (direct: "no game should let the user select the difficulty — the default is
+// always the hardest"; "mines is a little too easy").
+const FIXED_MINES = 6;
+
+// Safe tiles found — after a cash-out the mines are shown too, so never count `revealed` directly
+// (that showed ×4.8 on a board that had cashed out at ×2.68).
+function safeCount(session) {
+  let n = 0;
+  for (const i of session.revealed) if (!session.minePositions.has(i)) n++;
+  return n;
+}
 
 function buildGrid(session) {
   const rows = [];
@@ -61,21 +71,22 @@ function buildGrid(session) {
 }
 
 function buildCashoutRow(session) {
-  const multi = calcMultiplier(session.mines, session.revealed.size);
+  const multi = calcMultiplier(session.mines, safeCount(session));
   const payout = Math.floor(session.bet * multi);
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('mines_cashout')
       .setLabel(`💰 Cash Out  ×${multi}  (+${(payout - session.bet).toLocaleString()})`)
       .setStyle(ButtonStyle.Primary)
-      .setDisabled(session.revealed.size === 0 || session.ended)
+      .setDisabled(safeCount(session) === 0 || session.ended)
   );
 }
 
 function buildEmbed(session, status = '', guildName = 'Shiro') {
-  const multi  = calcMultiplier(session.mines, session.revealed.size);
+  const found  = safeCount(session);
+  const multi  = calcMultiplier(session.mines, found);
   const payout = Math.floor(session.bet * multi);
-  const safe   = 25 - session.mines - session.revealed.size;
+  const safe   = 25 - session.mines - found;
 
   return new EmbedBuilder()
     .setColor(BLACK)
@@ -83,9 +94,9 @@ function buildEmbed(session, status = '', guildName = 'Shiro') {
     .setDescription(
       (status ? `> ${status}\n\n` : '') +
       `> Bet: \`${session.bet.toLocaleString()}\` · Mines: \`${session.mines}\`\n` +
-      `> Revealed: \`${session.revealed.size}\` safe · Multiplier: \`×${multi}\`\n` +
+      `> Revealed: \`${found}\` safe · Multiplier: \`×${multi}\`\n` +
       `> Cash out value: \`${payout.toLocaleString()}\`\n\n` +
-      `-# ${safe} safe tiles remain — dig deeper or cash out.`
+      (session.ended ? '' : `-# ${safe} safe tiles remain — dig deeper or cash out.`)
     )
     .setFooter({ text: `${guildName} — RTP ~97%` });
 }
@@ -93,7 +104,7 @@ function buildEmbed(session, status = '', guildName = 'Shiro') {
 module.exports = {
   name: 'mines',
   aliases: ['mine', 'mn'],
-  description: 'Mines game. `.mines <bet> [mine count 1-24]`',
+  description: 'Mines game. `.mines <bet>` — one board for everyone, ' + FIXED_MINES + ' mines.',
 
   async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
     const userId = message.author.id;
@@ -104,21 +115,17 @@ module.exports = {
     }
 
     const betArg   = args[0];
-    const mineArg  = parseInt(args[1]) || 3;
     const bet      = parseBet(betArg, userData.balance || 0);
-    const mines    = Math.max(1, Math.min(24, mineArg));
+    const mines    = FIXED_MINES;
 
     if (!bet) {
       return message.channel.send({
         embeds: [new EmbedBuilder().setColor(BLACK)
           .setTitle('MINES')
           .setDescription(
-            '> Usage: `.mines <bet> [mines]`\n\n' +
-            '__**Mine Counts**__\n> 1 · 2 · 3 · 5 · 7 · 10 · 15 · 20 · 24\n\n' +
-            '__**Examples**__\n' +
-            '> `.mines 500` — 500 bet, 3 mines (default)\n' +
-            '> `.mines 1000 5` — 1000 bet, 5 mines\n\n' +
-            '-# More mines = higher multipliers per tile revealed.'
+            '> Usage: `.mines <bet>`\n\n' +
+            `> Every board has **${FIXED_MINES} mines** in 25 tiles. Each safe tile raises the multiplier — cash out before you hit one.\n\n` +
+            '__**Example**__\n> `.mines 500`'
           )
           .setFooter({ text: `${message.guild?.name || 'Shiro'} — RTP ~97%` })],
       });
@@ -162,7 +169,8 @@ module.exports = {
 
       // Cash out
       if (i.customId === 'mines_cashout') {
-        const multi  = calcMultiplier(session.mines, session.revealed.size);
+        const found  = safeCount(session);
+        const multi  = calcMultiplier(session.mines, found);
         const payout = Math.floor(session.bet * multi);
         session.ended = true;
         session.won   = true;
@@ -193,7 +201,7 @@ module.exports = {
             bet,
             payout: finalPay,
             multiplier: multi,
-            detail: `${session.revealed.size - mines} tiles revealed, ${mines} mines survived`,
+            detail: `${found} tiles revealed, ${mines} mines survived`,
             logAdminAction,
           }).catch(() => {});
         }
@@ -238,9 +246,9 @@ module.exports = {
 
         // Safe tile — check if all safe tiles revealed (auto-cashout)
         const totalSafe = 25 - session.mines;
-        if (session.revealed.size === totalSafe) {
+        if (safeCount(session) === totalSafe) {
           // Maximum reveal — auto-cashout
-          const multi  = calcMultiplier(session.mines, session.revealed.size);
+          const multi  = calcMultiplier(session.mines, totalSafe);
           const payout = Math.floor(session.bet * multi);
           session.ended = true;
           session.won   = true;
