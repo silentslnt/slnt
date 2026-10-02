@@ -112,6 +112,7 @@ const PREMIUM_GEAR = {
   lords_signet:     { name: "Castle Lord's Signet", emoji: '💍', silvCost: 25, stats: '+6 PWR · +6 DEF · +4 LCK (accessory, Legendary)' },
   colossus_heart:   { name: 'Colossus Heart',      emoji: '💗', silvCost: 25, stats: '+25 Slayer · +10 Hunter · +4 PWR · −3 SPD (accessory, Legendary)' },
   // Not gear — delivered raw (no gear_ prefix). Sentinel's ,race revive restores a lives-out wipe within 14 days.
+  tome_unlearning:  { name: 'Tome of Unlearning',  emoji: '📕', silvCost: 30, stats: 'Forget one class in Sentinel (`,unlearn`) — also costs 20% of your RP (min 5,000)', raw: true, use: '`,unlearn`' },
   fate_shard:       { name: 'Fate Shard',          emoji: '🔮', silvCost: 20, stats: 'Reroll one birth roll in Sentinel (`,fate`): mutation, Dragon kind, Angel halo or Ghoul kagune — same odds as birth, you never pick', raw: true, use: '`,fate`' },
   revive_token:     { name: 'Revive Token',        emoji: '✨', silvCost: 100, stats: 'Lost every life and got wiped? Buy this, then `,race revive` in Sentinel within 14 days — you keep your race, this brings back everything else', raw: true, use: '`,race revive`' },
 };
