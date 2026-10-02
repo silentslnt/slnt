@@ -49,21 +49,26 @@ module.exports = {
     const targetData = await getUserData(target.id);
     if (!targetData) return message.channel.send('That user has no account yet.');
 
+    const { debit, credit } = require('../utils/atomicInv');
+    const { TRANSFER_TAX } = require('../utils/config');
+    if (!(await debit(message.author.id, { balance: capped }))) return message.channel.send("You don't have that many coins anymore.");
+    const tax = Math.floor(capped * TRANSFER_TAX);
+    const net = capped - tax;
     userData.balance        -= capped;
     userData.giftedToday    += capped;
     userData.lastGiftReset   = userData.lastGiftReset || new Date();
-    targetData.balance       = (targetData.balance || 0) + capped;
-    targetData.totalEarned   = (targetData.totalEarned || 0) + capped;
 
-    await saveUserData({ balance: userData.balance, giftedToday: userData.giftedToday, lastGiftReset: userData.lastGiftReset });
-    await require('../utils/atomicInv').credit(target.id, { balance: capped, totalEarned: capped }); // never an absolute write
-    await logAdminAction(message.author.id, message.author.username, 'gift', 'Gift Sent', target.id, target.username, `${capped.toLocaleString()} coins`);
+    await saveUserData({ giftedToday: userData.giftedToday, lastGiftReset: userData.lastGiftReset });
+    await credit(target.id, { balance: net, totalEarned: net }); // never an absolute write
+    if (tax) require('../utils/houseBank').creditHouse(tax, 'transfer');
+    await logAdminAction(message.author.id, message.author.username, 'gift', 'Gift Sent', target.id, target.username, `${capped.toLocaleString()} coins (${tax.toLocaleString()} tax)`);
 
     return message.channel.send({
       embeds: [new EmbedBuilder().setColor(BLACK)
         .setTitle('GIFT SENT')
         .setDescription(
-          `> ${PRESENT} ${message.author} gifted **${capped.toLocaleString()}** coins to ${target}\n\n` +
+          `> ${PRESENT} ${message.author} gifted **${capped.toLocaleString()}** coins to ${target}\n` +
+          `> They receive **${net.toLocaleString()}** · ${Math.round(TRANSFER_TAX * 100)}% transfer tax **${tax.toLocaleString()}**\n\n` +
           `> Your balance: **${userData.balance.toLocaleString()}**\n` +
           `> Daily gift remaining: **${(GIFT_DAILY_CAP - userData.giftedToday).toLocaleString()}** coins`
         )

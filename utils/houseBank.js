@@ -1,4 +1,4 @@
-// utils/houseBank.js — the bot's private casino ledger. Every casino round is
+// utils/houseBank.js — the bot's private game ledger. Every casino round is
 // recorded here: what was bet, what was paid back, and fees taken. It is NOT a
 // user balance — it never appears on leaderboards, .bal, or anywhere else.
 // Only the bot owner sees it (.house).
@@ -12,12 +12,12 @@ const KEY = 'house_bank';
 const roundSchema = new mongoose.Schema({
   userId: { type: String, index: true }, game: String, bet: Number, payout: Number, at: { type: Date, default: Date.now },
 });
-const CasinoRound = mongoose.models.CasinoRound || mongoose.model('CasinoRound', roundSchema);
+const GameRound = mongoose.models.GameRound || mongoose.model('GameRound', roundSchema);
 const HISTORY_KEEP = 200;
 
 async function logPlayerRound(userId, game, bet, payout) {
   await CasinoRound.create({ userId, game, bet, payout });
-  const old = await CasinoRound.find({ userId }).sort({ at: -1 }).skip(HISTORY_KEEP).select('_id').lean();
+  const old = await GameRound.find({ userId }).sort({ at: -1 }).skip(HISTORY_KEEP).select('_id').lean();
   if (old.length) await CasinoRound.deleteMany({ _id: { $in: old.map((o) => o._id) } });
 }
 
@@ -63,4 +63,13 @@ function adjustHouse(amount) {
   return Meta.findOneAndUpdate({ key: KEY }, { $inc: { 'value.balance': Math.floor(amount), 'value.adjusted': Math.floor(amount) } }, { upsert: true });
 }
 
-module.exports = { recordRound, getBank, resetBank, playerHistory, creditHouse, adjustHouse };
+/** Owner pays a player OUT of the house balance — guarded: only if the house holds that much. Returns true if taken. */
+async function withdrawHouse(amount) {
+  amount = Math.floor(amount);
+  if (!(amount > 0)) return false;
+  const res = await Meta.findOneAndUpdate({ key: KEY, 'value.balance': { $gte: amount } },
+    { $inc: { 'value.balance': -amount, 'value.withdrawn': amount } }, { new: true });
+  return !!res;
+}
+
+module.exports = { recordRound, getBank, resetBank, playerHistory, creditHouse, adjustHouse, withdrawHouse };

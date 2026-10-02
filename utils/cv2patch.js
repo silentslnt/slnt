@@ -14,6 +14,37 @@ const {
 
 const V2 = MessageFlags.IsComponentsV2;
 
+// Game cards show who's playing at the top (direct: "it should have the player's name at top… on cashouts and wins too").
+// index.js runs every game command inside asPlayer(user, …); the first card it posts gets a name line, and every later
+// edit/update of that card keeps it (cashouts, replays, results) — no game file has to know about it.
+const { AsyncLocalStorage } = require('async_hooks');
+const playerCtx = new AsyncLocalStorage();
+const GAME_COMMANDS = new Set(['blackjack', 'coinflip', 'crash', 'cups', 'dice', 'mines', 'minesweeper', 'overunder', 'plinko',
+  'roulette', 'rps', 'slots', 'tower', 'wheel', 'spin']);
+const MARK = '-# 🎮 ';
+function asPlayer(user, name, fn) {
+  if (!user || !GAME_COMMANDS.has(name)) return fn();
+  return playerCtx.run(`${MARK}**${user.globalName || user.username}** is playing`, fn);
+}
+function firstText(c) {
+  const j = c && (typeof c.toJSON === 'function' ? c.toJSON() : c);
+  const t = j?.components?.[0];
+  return t && t.type === 10 ? t.content : null;
+}
+function stamp(opts, line) {
+  if (!line || !opts || typeof opts !== 'object' || !Array.isArray(opts.components) || !opts.components.length) return opts;
+  if (!((typeof opts.flags === 'number' ? opts.flags : 0) & V2)) return opts;
+  const c = opts.components[0];
+  if (!(c instanceof ContainerBuilder) || (firstText(c) || '').startsWith(MARK)) return opts;
+  const copy = new ContainerBuilder(c.toJSON());
+  copy.spliceComponents(0, 0, new TextDisplayBuilder().setContent(line));
+  return { ...opts, components: [copy, ...opts.components.slice(1)] };
+}
+function lineOf(msg) {
+  const t = firstText(msg?.components?.[0]);
+  return t && t.startsWith(MARK) ? t : null;
+}
+
 // SHOUTED TITLES ("DAILY REWARD") read as Title Case on a card; mixed-case titles are left alone.
 function titleCase(t) {
   const str = String(t);
@@ -77,6 +108,10 @@ function wrap(proto, method) {
   if (!proto || typeof proto[method] !== 'function' || proto[method].__cv2) return;
   const orig = proto[method];
   const patched = async function (opts, ...rest) {
+    try {
+      const line = playerCtx.getStore() || (method === 'edit' ? lineOf(this) : method === 'update' ? lineOf(this.message) : null);
+      if (line) opts = stamp(opts, line);
+    } catch { /* never block a send over the name line */ }
     const v2 = toV2(opts);
     if (!v2) return orig.call(this, opts, ...rest);
     try {
@@ -95,4 +130,4 @@ for (const C of [ChatInputCommandInteraction, MessageComponentInteraction, Modal
   for (const m of ['reply', 'editReply', 'followUp', 'update']) wrap(C?.prototype, m);
 }
 
-module.exports = { embedToContainer, toV2 };
+module.exports = { embedToContainer, toV2, asPlayer, _stamp: stamp, _lineOf: lineOf };

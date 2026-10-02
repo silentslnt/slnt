@@ -272,3 +272,12 @@ Spells and premium gear (`PREMIUM_GEAR`: 4 Mythic at 60 SILV — Heaven's Edge, 
 - Rebuilt on `takeBet`/`settle` (atomic, never overwrites balances): Blackjack (buttons Hit/Stand/Double down, no reactions; Insurance Slip debited atomically on a bust), Mines (board inside the card; left alone = cash out, or refund before the first dig), Minesweeper (12 tiles/4 mines, button board; refund ONLY before the first pick — the old `cancel` refunded mid-board, an exploit).
 - Coinflip, dice, rps, roulette, slots, plinko keep their money code but end on `gameResult` with frame animations; crash/tower/cups/wheel/over-under got the replay row.
 - `utils/cv2patch.js` (every other embed): SHOUTED titles become Title Case, inline fields collapse into one `**Name** value · …` strip, block fields render as `__**Name**__` + `>` lines.
+
+## Batch: taxes, free spin, Sentinel daily, game naming (latest)
+- **Transfer tax** `TRANSFER_TAX` 10% (config) on `.gift`/`.give`, `.tip` and coin sides of `.trade` — receiver gets the rest, the tax goes to the house ledger (`creditHouse(..., 'transfer')`). Tip/gift now debit atomically (`atomicInv.debit`).
+- **House payouts** — `.shiroset` → Players → pick anyone (yourself too) → **Pay from house…** (`withdrawHouse`, guarded: only if the house holds it; logged). House page has **Pay a player…**; Adjust balance… still there.
+- **"Casino" → "Game"** in every player-facing string (Game floor, Game ledger, game history). Code names (utils/casino.js, CasinoRound model) unchanged on purpose.
+- **Player name on game cards** — `utils/cv2patch.asPlayer(user, cmd, fn)` wraps every command run (typed and `runAs`); for `GAME_COMMANDS` the first card gets `-# 🎮 **name** is playing` and every later edit/update of that card keeps it (cashouts, results). CV2 has no author-icon slot, so it's a name line.
+- **Wallet buttons open privately** — `.bal` Convert/Payout/Daily run via `runAs(i, cmd, [], { private: true })` (sends become ephemeral follow-ups, no channel flood); Play stays public.
+- **`.daily` → Sentinel**: every claim also gives a Healing Draught (`item_potion`) in Sentinel; every 7th day in a row a hard clue scroll + 1,500 Aether. Writes `shiro_events` (kind `daily`) so Sentinel's quest "Claim Shiro's .daily" ticks.
+- **`.freespin`** (aka fs/dailyspin/free): one free spin per 24h (atomic `lastFreeSpin` claim) — coins 100–2,500, 750 Aether, Healing Draught, easy clue, 0.2% 1 SILV. Sentinel unreachable → 500 coins instead.

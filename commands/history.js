@@ -1,4 +1,4 @@
-// commands/history.js — your casino record: every round you played (last 200), wins and losses, net, streaks,
+// commands/history.js — your game record: every round you played (last 200), wins and losses, net, streaks,
 // and how each game has treated you. `.history [@user] [game]`
 const { card, BLACK, WIN, LOSE } = require('../utils/casino');
 const { playerHistory } = require('../utils/houseBank');
@@ -62,7 +62,7 @@ async function historyCard(target, game, guild, rows = []) {
 module.exports = {
   name: 'history',
   aliases: ['hist', 'record', 'gamblelog'],
-  description: 'Your casino history — wins, losses, net and every recent round. `.history [@user] [game]`',
+  description: 'Your game history — wins, losses, net and every recent round. `.history [@user] [game]`',
 
   async execute({ message, args }) {
     const target = message.mentions.users.first() || message.author;

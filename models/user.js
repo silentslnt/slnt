@@ -20,6 +20,7 @@ const userSchema = new mongoose.Schema({
   lastDaily:    { type: Date,   default: null },
   lastWeekly:   { type: Date,   default: null },
   lastMonthly:  { type: Date,   default: null },
+  lastFreeSpin: { type: Date,   default: null },   // .freespin — one free wheel spin a day
 
   // ── Missions ─────────────────────────────────────────────────────────────
   missionDate:     { type: String, default: '' },

@@ -33,17 +33,23 @@ module.exports = {
       return message.channel.send(`You only have **${(userData.balance||0).toLocaleString()}** coins.`);
     }
 
-    // Atomic update both balances
+    // Guarded debit (two fast tips can't overspend); the receiver gets it minus the transfer tax
+    const { debit, credit } = require('../utils/atomicInv');
+    const { TRANSFER_TAX } = require('../utils/config');
+    if (!(await debit(message.author.id, { balance: bet }))) return message.channel.send("You don't have that many coins anymore.");
+    const tax = Math.floor(bet * TRANSFER_TAX);
+    const net = bet - tax;
     userData.balance = (userData.balance || 0) - bet;
-    await saveUserData({ balance: userData.balance });
-    await updateUserBalance(target.id, bet);
-    await logAdminAction(message.author.id, message.author.username, 'tip', 'Tip Sent', target.id, target.username, `${bet.toLocaleString()} coins`);
+    await credit(target.id, { balance: net, totalEarned: net });
+    if (tax) require('../utils/houseBank').creditHouse(tax, 'transfer');
+    await logAdminAction(message.author.id, message.author.username, 'tip', 'Tip Sent', target.id, target.username, `${bet.toLocaleString()} coins (${tax.toLocaleString()} tax)`);
 
     const embed = new EmbedBuilder()
       .setColor(BLACK)
       .setTitle('TIP SENT')
       .setDescription(
-        `> ${message.author} sent **${bet.toLocaleString()}** coins to ${target}\n\n` +
+        `> ${message.author} sent **${bet.toLocaleString()}** coins to ${target}\n` +
+        `> They receive **${net.toLocaleString()}** · ${Math.round(TRANSFER_TAX * 100)}% transfer tax **${tax.toLocaleString()}**\n\n` +
         `> Your new balance: \`${userData.balance.toLocaleString()}\``
       )
       .setFooter({ text: message.guild?.name || 'Shiro' });

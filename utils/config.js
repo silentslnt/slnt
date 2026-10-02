@@ -24,6 +24,7 @@ module.exports = {
   INVESTMENT_CAP:      5_000,       // max coins lockable per vault cycle
   INVESTMENT_RETURN:   1.10,        // 10% profit
   GIFT_DAILY_CAP:      10_000,      // max coins you can gift per day
+  TRANSFER_TAX:        0.10,        // coins moved between players (gift/tip/trade) — 10% goes to the house
 
   // ── XP ─────────────────────────────────────────────────────
   XP_PER_GAME:         25,
@@ -92,7 +93,7 @@ module.exports = {
     aura_essence: {
       name: 'Aura Essence',
       emoji: '💰',
-      effect: '2× coin gains (not casino payouts)',
+      effect: '2× coin gains (not game payouts)',
       durationMs: 30 * 60 * 1000,        // 30 min
       silvCost: 3,
       type: 'coins',
@@ -100,7 +101,7 @@ module.exports = {
     frenzy_essence: {
       name: 'Frenzy Essence',
       emoji: '🎮',
-      effect: '2× minigame rewards · +5% winnings in casino games',
+      effect: '2× minigame rewards · +5% winnings in games',
       durationMs: 30 * 60 * 1000,
       silvCost: 3,
       type: 'frenzy',
@@ -108,7 +109,7 @@ module.exports = {
     luck_essence: {
       name: 'Luck Essence',
       emoji: '🍀',
-      effect: '+1% win chance in casino games',
+      effect: '+1% win chance in games',
       durationMs: 60 * 60 * 1000,
       silvCost: 5,
       type: 'luck',

@@ -2,9 +2,9 @@
 // it takes on average (RTP < 100%, even with essences active). A player who
 // wins got lucky; the house wins over time. Essences give a small edge back,
 // never enough to flip the math:
-//   Frenzy  → +5% on WINNINGS (profit only, not the stake) in casino games
-//   Luck    → +1 percentage point win chance in casino games
-//   Aura    → does NOT apply to casino games (it's for chat/earning coins)
+//   Frenzy  → +5% on WINNINGS (profit only, not the stake) in games
+//   Luck    → +1 percentage point win chance in games
+//   Aura    → does NOT apply to games (it's for chat/earning coins)
 const { isEssenceActive } = require('./essences');
 
 const FRENZY_PROFIT_BONUS = 0.05;

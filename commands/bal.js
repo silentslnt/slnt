@@ -45,7 +45,7 @@ async function body(tab, target, data) {
       `__**XP**__ *(Lv ${level})*`,
       `> ${progressBar(current, needed, 12)} ${current}/${needed}`,
       '',
-      '__**Casino (last 200 rounds)**__',
+      '__**Games (last 200 rounds)**__',
       rounds.length
         ? `> **${signed(net)}** net · ${rounds.length} played · ${won} won (${Math.round((won / rounds.length) * 100)}%)`
         : '> No games yet.',
@@ -119,7 +119,8 @@ module.exports = {
       }
       if (i.customId.startsWith('bal_')) {
         await i.deferUpdate().catch(() => {});
-        await i.client.runAs?.(i, i.customId.slice(4), []);
+        const cmd = i.customId.slice(4);
+        await i.client.runAs?.(i, cmd, [], { private: cmd !== 'play' });   // Convert/Payout/Daily open privately — no channel flood
         const fresh = await getUserData(target.id);
         return msg.edit(await profile('overview', target, fresh, guild, false, own)).catch(() => {});
       }

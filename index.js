@@ -121,16 +121,24 @@ async function logAdminAction(
 // ===== RUN A COMMAND FROM A BUTTON =====
 // (direct: "would you have to type to select a game on a website? no") — cards call client.runAs(interaction, 'mines', ['1000'])
 // and the command runs exactly as if the clicker had typed it: same checks, same cooldowns, same atomic money moves.
-async function runCommandAs(interaction, name, args = []) {
+async function runCommandAs(interaction, name, args = [], opts = {}) {
   const command = client.commands.get(name);
   if (!command) return false;
-  const { Collection } = require('discord.js');
+  const { Collection, MessageFlags: MF } = require('discord.js');
+  // opts.private: everything the command posts goes to the clicker only (wallet buttons — no channel flood)
+  let channel = interaction.channel;
+  if (opts.private && channel) {
+    channel = Object.create(interaction.channel);
+    channel.send = (x) => interaction.followUp(typeof x === 'string'
+      ? { content: x, flags: MF.Ephemeral }
+      : { ...x, flags: (typeof x.flags === 'number' ? x.flags : 0) | MF.Ephemeral });
+  }
   const message = {
     author: interaction.user, member: interaction.member, guild: interaction.guild, guildId: interaction.guildId,
-    channel: interaction.channel, channelId: interaction.channelId, client, id: interaction.id,
+    channel, channelId: interaction.channelId, client, id: interaction.id,
     content: `${currentPrefix}${name} ${args.join(' ')}`.trim(), createdTimestamp: Date.now(),
     mentions: { users: new Collection(), members: new Collection(), roles: new Collection(), channels: new Collection() },
-    reply: (x) => interaction.channel.send(x), react: async () => {}, delete: async () => {},
+    reply: (x) => channel.send(x), react: async () => {}, delete: async () => {},
   };
   if (!LOCK_EXEMPT_COMMANDS.has(command.name)) {
     if (usersInFlight.has(message.author.id)) {
@@ -141,11 +149,11 @@ async function runCommandAs(interaction, name, args = []) {
   }
   try {
     const userData = await getUserData(message.author.id);
-    await command.execute({
+    await require('./utils/cv2patch').asPlayer(message.author, command.name, () => command.execute({
       message, args, userData, saveUserData: makeSaver(message.author.id, userData), saveSpecificUserData: saveUserData,
       updateUserBalance, addKeyToInventory, getUserData, keydrop, guessGame, rarities, prefix: currentPrefix, setPrefix: savePrefix,
       client, logAdminAction, AdminLog, getEconomyLogsChannel, setEconomyLogsChannel,
-    });
+    }));
   } catch (error) {
     if (error instanceof InsufficientFunds) {
       await interaction.followUp({ content: "You don't have enough coins for that anymore.", ephemeral: true }).catch(() => {});
@@ -855,7 +863,7 @@ client.on('messageCreate', async (message) => {
   try {
     const userData = await getUserData(message.author.id);
 
-    await command.execute({
+    await require('./utils/cv2patch').asPlayer(message.author, command.name, () => command.execute({
       message,
       args,
       userData,
@@ -874,7 +882,7 @@ client.on('messageCreate', async (message) => {
       AdminLog,
       getEconomyLogsChannel,
       setEconomyLogsChannel,
-    });
+    }));
   } catch (error) {
     if (error instanceof InsufficientFunds) {
       return message.channel.send("You don't have enough coins for that anymore — your balance changed while it was running.").catch(() => {});

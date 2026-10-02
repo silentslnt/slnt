@@ -1,4 +1,4 @@
-// utils/casino.js — shared plumbing for the CV2 casino games (crash, tower,
+// utils/casino.js — shared plumbing for the CV2 games (crash, tower,
 // cups, wheel, over/under). Bets are taken and paid on FRESH user data, so a
 // game that waits on buttons never overwrites a balance change made in the
 // meantime. Odds live in each game; the house edge rules live in houseEdge.js.
@@ -110,14 +110,14 @@ function gameResult({ emoji = '🎲', game, headline, won = null, lines = [], fo
   return card({ title: `${emoji} ${game}`, body, rows, accent, footer });
 }
 
-/** Again · Double · Half · Casino floor. */
+/** Again · Double · Half · Game floor. */
 function replayRow(game, bet) {
   const half = Math.max(1, Math.floor(bet / 2));
   return row(
     button(`rp:a:${bet}`, `Again · ${fmtN(bet)}`, ButtonStyle.Success, false, '🔁'),
     button(`rp:d:${bet * 2}`, `Double · ${fmtN(bet * 2)}`, ButtonStyle.Primary),
     button(`rp:h:${half}`, `Half · ${fmtN(half)}`, ButtonStyle.Secondary),
-    button('rp:f:0', 'Casino floor', ButtonStyle.Secondary, false, '🎲'),
+    button('rp:f:0', 'Game floor', ButtonStyle.Secondary, false, '🎲'),
   );
 }
 

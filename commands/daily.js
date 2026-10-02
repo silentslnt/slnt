@@ -106,6 +106,23 @@ module.exports = {
       if (logAdminAction) logAdminAction(message.author.id, message.author.username, 'daily', `Monthly bonus: +${bonusSilv} SILV`, message.author.id, message.author.username).catch(() => {});
     }
 
+    // ── Sentinel bonus (direct: ".daily pays into Sentinel… don't give too much free Shiro coins") ──
+    // Every claim: a Healing Draught in Sentinel. Every 7th day in a row: a hard clue scroll + 1,500 Aether.
+    const sdb = require('../utils/sentinelDb');
+    const gid = message.guild?.id;
+    if (gid) {
+      const gave = await sdb.grantItem(gid, message.author.id, 'item_potion', 1);
+      if (gave) lines.push(`> 🧪 Sentinel: **+1 Healing Draught** in your game bag`);
+      if (gave && streak % 7 === 0) {
+        await sdb.grantItem(gid, message.author.id, 'clue_hard', 1);
+        await sdb.awardPoints(gid, message.author.id, 1500);
+        lines.push(`> 📜 7-day streak: **+1 hard clue scroll** and **+1,500 Aether** in Sentinel`);
+      } else if (gave) {
+        lines.push(`-# ${7 - (streak % 7)} more day${7 - (streak % 7) === 1 ? '' : 's'} in a row for a clue scroll + 1,500 Aether in Sentinel`);
+      }
+      sdb.recordShiroEvent(gid, message.author.id, 'daily').catch(() => {});
+    }
+
     // ── apply ─────────────────────────────────────────────────
     userData.balance     = (userData.balance || 0) + coins;
     userData.dailyStreak = streak;

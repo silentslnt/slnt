@@ -278,7 +278,27 @@ async function claimPendingSilvGrants() {
   }
 }
 
+/**
+ * Tell Sentinel something happened in Shiro (e.g. 'daily' claimed) — a small queue Sentinel's minute loop reads
+ * to tick its quests ("Claim Shiro's .daily"). Fire-and-forget; never blocks or breaks Shiro.
+ */
+async function recordShiroEvent(guildId, userId, kind) {
+  const pool = _getPool();
+  if (!pool || !guildId) return false;
+  try {
+    await pool.query(
+      `INSERT INTO shiro_events (guild_id, user_id, kind) VALUES ($1, $2, $3)`,
+      [guildId.toString(), userId.toString(), kind],
+    );
+    return true;
+  } catch (err) {
+    console.error('[sentinel-db] recordShiroEvent failed:', err.message);
+    return false;
+  }
+}
+
 module.exports = {
+  recordShiroEvent,
   awardPoints, grantItem, getOwnedItems, removeItem, setArtifactEffect, getSpellDisplay,
   claimPendingSilvGrants, getPoints, spendPoints, addFishingBait,
 };

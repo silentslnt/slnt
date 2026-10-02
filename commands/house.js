@@ -1,4 +1,4 @@
-// commands/house.js — the bot's private casino ledger (bot owner / trusted list only).
+// commands/house.js — the bot's private game ledger (bot owner / trusted list only).
 // This balance is bookkeeping only: it isn't a user, isn't on any leaderboard,
 // and can't be spent.
 const { getBank, resetBank } = require('../utils/houseBank');
@@ -8,7 +8,7 @@ const { card, button, row, ButtonStyle } = require('../utils/casino');
 module.exports = {
   name: 'house',
   aliases: ['bank', 'casinobank'],
-  description: 'Owner only — the casino ledger: what the games have taken in and paid out.',
+  description: 'Owner only — the game ledger: what the games have taken in and paid out.',
 
   async execute({ message }) {
     if (!isWhitelisted(message) && message.author.id !== process.env.OWNER_ID) return;
@@ -18,7 +18,7 @@ module.exports = {
         .map(([g, v]) => `> **${g}** — ${(v.net || 0) >= 0 ? '+' : ''}${(v.net || 0).toLocaleString()} over ${(v.rounds || 0).toLocaleString()} rounds`).join('\n');
       const edge = b.wagered ? (((b.wagered - b.paid) / b.wagered) * 100).toFixed(2) : '0.00';
       return card({
-        title: '🏦 Casino ledger',
+        title: '🏦 Game ledger',
         body: `# ${(b.balance || 0) >= 0 ? '+' : ''}${(b.balance || 0).toLocaleString()} coins\n`
           + `> Wagered **${(b.wagered || 0).toLocaleString()}** · paid back **${(b.paid || 0).toLocaleString()}** · kept **${edge}%**\n`
           + `> Fees collected **${(b.fees || 0).toLocaleString()}** · ${(b.rounds || 0).toLocaleString()} rounds\n\n`

@@ -1,4 +1,4 @@
-// commands/play.js — the casino floor as a card (direct: "would you have to type to select a game on a website? no…
+// commands/play.js — the game floor as a card (direct: "would you have to type to select a game on a website? no…
 // they pick a game, pick a betting amount and start"). Pick a game → pick a bet → (pick a side if the game has one) →
 // Start. Start runs the real game command for the clicker (client.runAs), so every check, cooldown and atomic money
 // move is the same as typing it. Only the opener can drive their card.
@@ -29,7 +29,7 @@ function render(st, data, guildName, disabled = false) {
   const g = st.game ? GAMES[st.game] : null;
   const c = new ContainerBuilder().setAccentColor(0x000000)
     .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-      `## 🎲 Casino floor\n-# Coins \`${fmt(data.balance)}\` · pick a game, pick a bet, play.`))
+      `## 🎲 Game floor\n-# Coins \`${fmt(data.balance)}\` · pick a game, pick a bet, play.`))
     .addSeparatorComponents(new SeparatorBuilder())
     .addActionRowComponents(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('play_game')
       .setPlaceholder(g ? `${g[1]} ${g[0]}` : 'Pick a game…').setDisabled(disabled)
@@ -58,7 +58,7 @@ module.exports = {
   name: 'play',
   aliases: ['casino', 'games', 'hub'],
   adminOnly: false,
-  description: 'The casino floor — pick a game and a bet with buttons, no typing.',
+  description: 'The game floor — pick a game and a bet with buttons, no typing.',
   GAMES,
 
   async execute({ message, userData, getUserData }) {
