@@ -829,7 +829,9 @@ client.on('messageCreate', async (message) => {
   // Keys/game channel restriction — single source of truth now (see
   // utils/gameChannel.js and utils/commandRegistry.js's KEYS_CHANNEL_ALLOWED
   // comment for why this used to be two separate, disagreeing lists).
-  if (message.channel.id === getGameChannelId() && !KEYS_CHANNEL_ALLOWED.has(command.name)) {
+  // (The old rule here only let a short allowlist run IN the game channel, which is why `.weekly` and most
+  // commands silently did nothing there.) Now: command channels from `.shiroset` → Games.
+  if (!require('./utils/gameChannel').commandAllowed(message.channel, message.member, command.name)) {
     return;
   }
 

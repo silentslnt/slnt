@@ -33,4 +33,18 @@ function setGameChannelId(id) {
   return settings.set('gameChannelId', id);
 }
 
-module.exports = { getGameChannelId, setGameChannelId, fileValue };
+// Command channels (direct: "add game channels where only those commands work… it only allows 1, add more"):
+// when the list has any channel, players' Shiro commands only run in those (plus the chat-game channel);
+// staff (Manage Server) and ALWAYS_OK commands work anywhere. Empty list = everywhere.
+const ALWAYS_OK = new Set(['help', 'redeem', 'claim', 'shiroset', 'gamechannel', 'setchannel', 'commands', 'admin']);
+function getCommandChannels() { return settings.get('commandChannelIds', []) || []; }
+async function setCommandChannels(ids) { return settings.set('commandChannelIds', [...new Set(ids)].slice(0, 25)); }
+function commandAllowed(channel, member, name) {
+  const list = getCommandChannels();
+  if (!list.length || ALWAYS_OK.has(name)) return true;
+  if (member?.permissions?.has?.('ManageGuild')) return true;
+  const ids = [channel.id, channel.parentId].filter(Boolean);
+  return ids.some((id) => list.includes(id) || id === getGameChannelId());
+}
+
+module.exports = { getGameChannelId, setGameChannelId, fileValue, getCommandChannels, setCommandChannels, commandAllowed };

@@ -71,19 +71,26 @@ module.exports = {
         return card({ title: '👥 Players', body, rows, footer: `${guildName} · every change is logged` });
       }
       if (state.page === 'games') {
-        const gc = require('../utils/gameChannel').getGameChannelId();
+        const GCh = require('../utils/gameChannel');
+        const gc = GCh.getGameChannelId();
+        const cmd = GCh.getCommandChannels();
+        const cmdSel = new ChannelSelectMenuBuilder().setCustomId('ss_cmdch').setMinValues(0).setMaxValues(25)
+          .setPlaceholder('Command channels (pick several)…').addChannelTypes(ChannelType.GuildText);
+        if (cmd.length) cmdSel.setDefaultChannels(...cmd.slice(0, 25));
         return card({
-          title: '🎮 Chat games',
-          body: `> Game channel: ${gc ? `<#${gc}>` : '**not set**'} — word scramble, hangman and guess the number run there.\n`
-            + '> Saved in the database now, so it no longer resets when the bot updates.\n\n'
-            + '-# Start puts the game in the game channel. You pick the word for scramble and hangman.',
+          title: '🎮 Games & channels',
+          body: `> Chat-game channel: ${gc ? `<#${gc}>` : '**not set**'} — word scramble, hangman and guess the number run there.\n`
+            + `> Command channels: ${cmd.length ? cmd.map((c) => `<#${c}>`).join(' ') : '**everywhere**'}\n`
+            + '-# With command channels set, players can only use Shiro there (and in the chat-game channel). Staff and `.help` work anywhere. '
+            + 'Untick them all or press Allow everywhere to lift it. Start puts a game in the chat-game channel.',
           rows: [nav(),
             new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('ss_gamech')
-              .setPlaceholder('Set the game channel…').addChannelTypes(ChannelType.GuildText)),
+              .setPlaceholder('Set the chat-game channel…').addChannelTypes(ChannelType.GuildText)),
+            new ActionRowBuilder().addComponents(cmdSel),
             row(button('ss_g_ws', 'Start word scramble', ButtonStyle.Success), button('ss_g_hm', 'Start hangman', ButtonStyle.Success),
               button('ss_g_gn', 'Start guess the number', ButtonStyle.Success)),
             row(button('ss_g_wsx', 'Stop scramble', ButtonStyle.Danger), button('ss_g_hmx', 'Stop hangman', ButtonStyle.Danger),
-              button('ss_g_gnx', 'Stop guess', ButtonStyle.Danger))],
+              button('ss_g_gnx', 'Stop guess', ButtonStyle.Danger), button('ss_cmdall', 'Allow everywhere', ButtonStyle.Secondary, !cmd.length))],
           footer: `${guildName} · every change is logged`,
         });
       }
@@ -133,6 +140,13 @@ module.exports = {
         if (id === 'ss_gamech') {
           await require('../utils/gameChannel').setGameChannelId(i.values[0]);
           await logAdminAction(i.user.id, i.user.username, 'shiroset', 'Set the game channel', null, null, `#${i.values[0]}`);
+          return i.update(await render());
+        }
+        if (id === 'ss_cmdch' || id === 'ss_cmdall') {
+          const ids = id === 'ss_cmdch' ? i.values : [];
+          await require('../utils/gameChannel').setCommandChannels(ids);
+          await logAdminAction(i.user.id, i.user.username, 'shiroset', 'Set command channels', null, null,
+            ids.length ? ids.map((c) => `#${c}`).join(' ') : 'everywhere');
           return i.update(await render());
         }
         if (id.startsWith('ss_g_')) {
