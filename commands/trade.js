@@ -1,441 +1,216 @@
-const { EmbedBuilder } = require('discord.js');
+// commands/trade.js — one shared trade window (direct: "make Shiro trade like Sentinel's — advanced, not manual").
+// .trade @user → they Accept → a CV2 window both players drive with buttons:
+//   Add items (pick from your own bag, then how many) · Coins… (set an amount) · Clear my offer · Confirm · Cancel.
+// Any change to either offer clears BOTH confirmations (no last-second swaps). When both confirm, the swap runs
+// guarded and atomic (utils/atomicInv): each side is debited only if they still hold everything; if the second side
+// fails, the first is credited back — nothing is ever half-moved. One open trade per player; 5 minutes idle closes it.
+const {
+  ActionRowBuilder, ButtonStyle, MessageFlags, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle,
+} = require('discord.js');
+const { card, button, row } = require('../utils/casino');
+const { debit, credit } = require('../utils/atomicInv');
 
-// Track active trades: key = userId, value = tradeState
-const activeTrades = new Map();
+const activeTrades = new Map();   // userId -> trade (both players point at the same object)
+const IDLE_MS = 5 * 60_000;
+const ASK_MS = 60_000;
+const fmt = (n) => Math.floor(n || 0).toLocaleString();
 
-// Helper function to find item in inventory (case-insensitive)
-function findInventoryItem(inventory, itemName) {
-  if (!inventory) return null;
-  const lowerName = itemName.toLowerCase().trim();
-  for (const key of Object.keys(inventory)) {
-    if (key.toLowerCase().trim() === lowerName) {
-      return key; // Return actual key from inventory
-    }
-  }
-  return null;
+function offerText(o) {
+  const items = Object.entries(o.items).filter(([, n]) => n > 0).map(([k, n]) => `${n}× ${k}`);
+  const parts = [];
+  if (o.coins) parts.push(`🪙 \`${fmt(o.coins)}\` coins`);
+  if (items.length) parts.push(...items.map((s) => `• ${s}`));
+  return parts.length ? parts.map((p) => `> ${p}`).join('\n') : '> *nothing yet*';
+}
+
+function windowCard(t, guildName, note = '', closed = false) {
+  const side = (uid, o, ok) => `### ${ok ? '✅' : '⏳'} <@${uid}>${ok ? ' — confirmed' : ''}\n${offerText(o)}`;
+  const body = `${side(t.a, t.offers[t.a], t.ok[t.a])}\n\n${side(t.b, t.offers[t.b], t.ok[t.b])}`
+    + (note ? `\n\n${note}` : '')
+    + (closed ? '' : '\n\n-# Any change clears both confirmations. Both confirm → the swap happens at once.');
+  const rows = closed ? [] : [
+    row(button('tr_items', 'Add items', ButtonStyle.Primary, false, '🎒'), button('tr_coins', 'Coins…', ButtonStyle.Primary, false, '🪙'),
+      button('tr_clear', 'Clear my offer', ButtonStyle.Secondary)),
+    row(button('tr_ok', 'Confirm', ButtonStyle.Success, false, '✅'), button('tr_unok', 'Unconfirm', ButtonStyle.Secondary),
+      button('tr_cancel', 'Cancel trade', ButtonStyle.Danger)),
+  ];
+  return card({ title: '🤝 Trade', body, rows, footer: `${guildName} · only the two traders can use this` });
+}
+
+function endTrade(t) {
+  if (activeTrades.get(t.a) === t) activeTrades.delete(t.a);
+  if (activeTrades.get(t.b) === t) activeTrades.delete(t.b);
+  t.status = 'closed';
 }
 
 module.exports = {
   name: 'trade',
-  description: 'Trade items and currency with other users',
-  async execute({ message, args, userData, saveUserData, getUserData, client, logAdminAction }) {
+  description: 'Trade items and coins with another player in one shared window.',
+
+  async execute({ message, args, getUserData, client, logAdminAction }) {
+    const me = message.author;
+    const guildName = message.guild?.name || 'Shiro';
     const sub = (args[0] || '').toLowerCase();
-    const userId = message.author.id;
 
-    // START TRADE - check if first arg is a mention OR if sub is 'start'
-    const targetUser = message.mentions.users.first();
-
-    if (targetUser || sub === 'start') {
-      if (!targetUser) {
-        return message.channel.send('Usage: `.trade @user` to start a trade');
-      }
-
-      if (targetUser.bot) {
-        return message.channel.send('❌ You cannot trade with bots!');
-      }
-
-      if (targetUser.id === userId) {
-        return message.channel.send('❌ You cannot trade with yourself!');
-      }
-
-      if (activeTrades.has(userId)) {
-        return message.channel.send('❌ You already have an active trade! Finish or cancel it first.');
-      }
-
-      if (activeTrades.has(targetUser.id)) {
-        return message.channel.send('❌ That user already has an active trade!');
-      }
-
-      // Create trade session
-      activeTrades.set(userId, {
-        initiator: userId,
-        partner: targetUser.id,
-        channelId: message.channel.id,
-        initiatorOffer: { currency: 0, items: {} },
-        partnerOffer: { currency: 0, items: {} },
-        initiatorConfirmed: false,
-        partnerConfirmed: false,
-        status: 'open', // open -> completing -> deleted from map on success/cancel
-      });
-
-      activeTrades.set(targetUser.id, activeTrades.get(userId));
-
-      const embed = new EmbedBuilder()
-        .setTitle('TRADE SESSION')
-        .setDescription(
-          `> ${message.author} wants to trade with ${targetUser}.\n\n` +
-          '__**Commands**__\n' +
-          '> `.trade offer currency <amount>` — offer coins\n' +
-          '> `.trade offer item <item name> <amount>` — offer inventory items\n' +
-          '> `.trade remove currency <amount>` — remove coins from offer\n' +
-          '> `.trade remove item <item name> <amount>` — remove items from offer\n' +
-          '> `.trade view` — view current offers\n' +
-          '> `.trade confirm` — confirm your side\n' +
-          '> `.trade cancel` — cancel trade'
-        )
-        .setColor(0x000000)
-        .setFooter({ text: message.guild?.name || 'Shiro' });
-
-      return message.channel.send({ embeds: [embed] });
+    if (sub === 'cancel') {   // a stuck window can always be closed by typing
+      const t = activeTrades.get(me.id);
+      if (!t) return message.channel.send(card({ title: '🤝 Trade', body: '> You have no open trade.', footer: guildName }));
+      if (t.status === 'swapping') return message.channel.send('That trade is finishing right now.');
+      endTrade(t);
+      t.collector?.stop('cancelled');
+      return message.channel.send(card({ title: '🤝 Trade cancelled', body: `> <@${t.a}> ↔ <@${t.b}> — nothing moved.`, footer: guildName }));
     }
 
-    // Check if user has active trade
-    const trade = activeTrades.get(userId);
-    if (!trade) {
-      return message.channel.send("❌ You don't have an active trade. Use `.trade @user` to start one.");
+    const other = message.mentions.users.first();
+    if (!other) {
+      return message.channel.send(card({ title: '🤝 Trade', body: '> `.trade @user` opens a shared trade window with them.\n> `.trade cancel` closes yours.', footer: guildName }));
     }
+    if (other.bot) return message.channel.send('❌ You can\'t trade with a bot.');
+    if (other.id === me.id) return message.channel.send('❌ You can\'t trade with yourself.');
+    if (activeTrades.has(me.id)) return message.channel.send('❌ You already have an open trade — finish it or `.trade cancel`.');
+    if (activeTrades.has(other.id)) return message.channel.send('❌ They already have an open trade.');
 
-    // OFFER CURRENCY OR ITEMS
-    if (sub === 'offer') {
-      const offerType = args[1]?.toLowerCase();
+    // reserve both seats right away so two requests can't overlap
+    const t = { a: me.id, b: other.id, offers: { [me.id]: { coins: 0, items: {} }, [other.id]: { coins: 0, items: {} } },
+      ok: { [me.id]: false, [other.id]: false }, status: 'asking', collector: null };
+    activeTrades.set(me.id, t);
+    activeTrades.set(other.id, t);
 
-      if (offerType === 'currency') {
-        const amount = parseInt(args[2]);
+    const ask = await message.channel.send(card({
+      title: '🤝 Trade request',
+      body: `> <@${me.id}> wants to trade with <@${other.id}>.\n-# ${other.username}, accept within a minute.`,
+      rows: [row(button('tr_accept', 'Accept', ButtonStyle.Success), button('tr_decline', 'Decline', ButtonStyle.Danger))],
+      footer: guildName,
+    }));
+    const answer = await ask.awaitMessageComponent({ time: ASK_MS, filter: async (i) => {
+      if (i.user.id === other.id || (i.user.id === me.id && i.customId === 'tr_decline')) return true;
+      await i.reply({ content: 'This request isn\'t for you.', flags: MessageFlags.Ephemeral }).catch(() => {});
+      return false;
+    } }).catch(() => null);
+    if (!answer || answer.customId === 'tr_decline') {
+      endTrade(t);
+      const why = !answer ? 'No answer — the request expired.' : answer.user.id === me.id ? 'Withdrawn.' : 'Declined.';
+      const payload = card({ title: '🤝 Trade request', body: `> <@${me.id}> ↔ <@${other.id}> — ${why}`, footer: guildName });
+      return answer ? answer.update(payload).catch(() => {}) : ask.edit(payload).catch(() => {});
+    }
+    t.status = 'open';
+    await answer.update(windowCard(t, guildName));
+    const msg = ask;
 
-        if (isNaN(amount) || amount <= 0) {
-          return message.channel.send('❌ Please specify a valid positive amount.');
+    const refresh = (note = '') => msg.edit(windowCard(t, guildName, note)).catch(() => {});
+    const changed = () => { t.ok[t.a] = false; t.ok[t.b] = false; };
+
+    const col = msg.createMessageComponentCollector({ idle: IDLE_MS });
+    t.collector = col;
+    col.on('collect', async (i) => {
+      const uid = i.user.id;
+      if (uid !== t.a && uid !== t.b) return i.reply({ content: 'Only the two traders can use this window.', flags: MessageFlags.Ephemeral });
+      if (t.status !== 'open') return i.reply({ content: 'This trade is already finishing.', flags: MessageFlags.Ephemeral });
+      const mine = t.offers[uid];
+      try {
+        if (i.customId === 'tr_cancel') {
+          endTrade(t);
+          col.stop('cancelled');
+          return i.update(windowCard(t, guildName, `❌ <@${uid}> cancelled the trade — nothing moved.`, true));
         }
-
-        if (userData.balance < amount) {
-          return message.channel.send(`❌ You don't have ${amount} coins! Your balance: ${userData.balance}`);
+        if (i.customId === 'tr_clear') {
+          mine.coins = 0; mine.items = {}; changed();
+          return i.update(windowCard(t, guildName, `<@${uid}> cleared their offer.`));
         }
-
-        const isInitiator = userId === trade.initiator;
-        const offer = isInitiator ? trade.initiatorOffer : trade.partnerOffer;
-
-        offer.currency += amount;
-
-        // Reset confirmations
-        trade.initiatorConfirmed = false;
-        trade.partnerConfirmed = false;
-
-        return message.channel.send(
-          `✅ Added **${amount}** coins to your offer. Total: **${offer.currency}** coins`
-        );
-      }
-
-      if (offerType === 'item') {
-        // Parse item name (collect all words until we hit a number)
-        let itemNameParts = [];
-        let amount = null;
-
-        for (let i = 2; i < args.length; i++) {
-          const parsed = parseInt(args[i]);
-          if (!isNaN(parsed) && parsed > 0) {
-            amount = parsed;
-            break;
+        if (i.customId === 'tr_unok') {
+          t.ok[uid] = false;
+          return i.update(windowCard(t, guildName));
+        }
+        if (i.customId === 'tr_coins') {
+          const mid = `trc_${i.id}`;
+          await i.showModal(new ModalBuilder().setCustomId(mid).setTitle('Coins in your offer').addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('n').setLabel('How many coins? (0 to remove)').setStyle(TextInputStyle.Short)
+              .setRequired(true).setMaxLength(14).setValue(String(mine.coins || 0)))));
+          const sub2 = await i.awaitModalSubmit({ time: 120_000, filter: (m) => m.customId === mid && m.user.id === uid }).catch(() => null);
+          if (!sub2) return;
+          const n = parseInt(String(sub2.fields.getTextInputValue('n')).replace(/[, ]/g, ''), 10);
+          if (!Number.isFinite(n) || n < 0) return sub2.reply({ content: 'Enter a whole number.', flags: MessageFlags.Ephemeral });
+          const fresh = await getUserData(uid);
+          if (n > (fresh.balance || 0)) return sub2.reply({ content: `You only have \`${fmt(fresh.balance)}\` coins.`, flags: MessageFlags.Ephemeral });
+          if (t.status !== 'open') return sub2.reply({ content: 'This trade is closed.', flags: MessageFlags.Ephemeral });
+          mine.coins = n; changed();
+          await sub2.deferUpdate().catch(() => sub2.reply({ content: 'Updated.', flags: MessageFlags.Ephemeral }).catch(() => {}));
+          return refresh(`<@${uid}> set their coins to \`${fmt(n)}\`.`);
+        }
+        if (i.customId === 'tr_items') {
+          const fresh = await getUserData(uid);
+          const bag = Object.entries(fresh.inventory || {}).filter(([, n]) => n > 0)
+            .sort((x, y) => y[1] - x[1]).slice(0, 25);
+          if (!bag.length) return i.reply({ content: 'Your bag is empty.', flags: MessageFlags.Ephemeral });
+          const pick = await i.reply({
+            content: 'Pick an item to put in (or change how many).',
+            components: [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('tr_pick').setPlaceholder('Your bag…')
+              .addOptions(bag.map(([k, n]) => ({ label: k.slice(0, 100), value: k.slice(0, 100), description: `You have ${n} · offering ${mine.items[k] || 0}` }))))],
+            flags: MessageFlags.Ephemeral, withResponse: true,
+          });
+          const pm = pick.resource?.message || await i.fetchReply();
+          const si = await pm.awaitMessageComponent({ time: 120_000, filter: (x) => x.user.id === uid }).catch(() => null);
+          if (!si) return;
+          const item = si.values[0];
+          const have = (fresh.inventory || {})[item] || 0;
+          const mid = `tri_${si.id}`;
+          await si.showModal(new ModalBuilder().setCustomId(mid).setTitle('How many?').addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('n').setLabel(`${item}`.slice(0, 45)).setStyle(TextInputStyle.Short)
+              .setPlaceholder(`0 to remove · you have ${have}`).setRequired(true).setMaxLength(9).setValue(String(mine.items[item] || 1)))));
+          const sub2 = await si.awaitModalSubmit({ time: 120_000, filter: (m) => m.customId === mid && m.user.id === uid }).catch(() => null);
+          if (!sub2) return;
+          const n = parseInt(String(sub2.fields.getTextInputValue('n')).replace(/[, ]/g, ''), 10);
+          const now = (await getUserData(uid)).inventory?.[item] || 0;
+          if (!Number.isFinite(n) || n < 0) return sub2.reply({ content: 'Enter a whole number.', flags: MessageFlags.Ephemeral });
+          if (n > now) return sub2.reply({ content: `You only have ${now}× ${item}.`, flags: MessageFlags.Ephemeral });
+          if (t.status !== 'open') return sub2.reply({ content: 'This trade is closed.', flags: MessageFlags.Ephemeral });
+          if (n === 0) delete mine.items[item]; else mine.items[item] = n;
+          changed();
+          await sub2.reply({ content: n ? `✅ ${n}× ${item} in your offer.` : `Removed ${item}.`, flags: MessageFlags.Ephemeral }).catch(() => {});
+          return refresh(`<@${uid}> ${n ? `put in ${n}× **${item}**` : `took out **${item}**`}.`);
+        }
+        if (i.customId === 'tr_ok') {
+          const empty = (o) => !o.coins && !Object.values(o.items).some((n) => n > 0);
+          if (empty(t.offers[t.a]) && empty(t.offers[t.b])) return i.reply({ content: 'Both offers are empty.', flags: MessageFlags.Ephemeral });
+          t.ok[uid] = true;
+          if (!(t.ok[t.a] && t.ok[t.b])) return i.update(windowCard(t, guildName));
+          // both confirmed — lock synchronously before any await
+          t.status = 'swapping';
+          await i.update(windowCard(t, guildName, '⏳ Swapping…', true));
+          const A = { balance: t.offers[t.a].coins, items: { ...t.offers[t.a].items } };
+          const B = { balance: t.offers[t.b].coins, items: { ...t.offers[t.b].items } };
+          let result;
+          if (!(await debit(t.a, A))) result = `❌ <@${t.a}> no longer has everything they offered — nothing moved.`;
+          else if (!(await debit(t.b, B))) {
+            await credit(t.a, A);
+            result = `❌ <@${t.b}> no longer has everything they offered — nothing moved.`;
+          } else {
+            await credit(t.b, { ...A, stats: { trades: 1 } });
+            await credit(t.a, { ...B, stats: { trades: 1 } });
+            result = '✅ **Trade complete.** Everything changed hands.';
+            const ua = await client.users.fetch(t.a).catch(() => null);
+            const ub = await client.users.fetch(t.b).catch(() => null);
+            const sum = (o) => [o.coins ? `${o.coins} coins` : '', ...Object.entries(o.items).map(([k, n]) => `${n}x ${k}`)].filter(Boolean).join(', ') || 'nothing';
+            await logAdminAction?.(t.a, ua?.username || t.a, 'trade', 'Trade completed', t.b, ub?.username || t.b,
+              `${ua?.username || t.a} gave ${sum(t.offers[t.a])} / ${ub?.username || t.b} gave ${sum(t.offers[t.b])}`);
           }
-          itemNameParts.push(args[i]);
+          endTrade(t);
+          col.stop('done');
+          return msg.edit(windowCard(t, guildName, result, true)).catch(() => {});
         }
-
-        const itemNameInput = itemNameParts.join(' ').trim();
-
-        if (!itemNameInput || !amount || amount <= 0) {
-          return message.channel.send('Usage: `.trade offer item <item name> <amount>`');
-        }
-
-        // Find actual item name in inventory (case-insensitive)
-        const actualItemName = findInventoryItem(userData.inventory, itemNameInput);
-
-        if (!actualItemName) {
-          return message.channel.send(
-            `❌ You don't have any item called **${itemNameInput}** in your inventory.`
-          );
-        }
-
-        const userItems = userData.inventory[actualItemName] || 0;
-        const isInitiator = userId === trade.initiator;
-        const offer = isInitiator ? trade.initiatorOffer : trade.partnerOffer;
-        const alreadyOffered = offer.items[actualItemName] || 0;
-
-        if (userItems < alreadyOffered + amount) {
-          return message.channel.send(
-            `❌ You don't have enough **${actualItemName}**. You have: ${userItems}, already offered: ${alreadyOffered}.`
-          );
-        }
-
-        offer.items[actualItemName] = alreadyOffered + amount;
-
-        // Reset confirmations
-        trade.initiatorConfirmed = false;
-        trade.partnerConfirmed = false;
-
-        return message.channel.send(
-          `✅ Added **${amount} ${actualItemName}** to your offer. Total: **${offer.items[actualItemName]}**`
-        );
+        return i.deferUpdate();
+      } catch (e) {
+        console.error('trade:', e);
+        if (!i.replied && !i.deferred) i.reply({ content: 'Something went wrong — try again.', flags: MessageFlags.Ephemeral }).catch(() => {});
       }
-
-      return message.channel.send(
-        'Usage: `.trade offer currency <amount>` or `.trade offer item <item name> <amount>`'
-      );
-    }
-
-    // REMOVE FROM OFFER
-    if (sub === 'remove') {
-      const removeType = args[1]?.toLowerCase();
-
-      if (removeType === 'currency') {
-        const amount = parseInt(args[2]);
-
-        if (isNaN(amount) || amount <= 0) {
-          return message.channel.send('❌ Please specify a valid positive amount.');
-        }
-
-        const isInitiator = userId === trade.initiator;
-        const offer = isInitiator ? trade.initiatorOffer : trade.partnerOffer;
-
-        if (offer.currency < amount) {
-          return message.channel.send(`❌ You only offered ${offer.currency} coins.`);
-        }
-
-        offer.currency -= amount;
-
-        // Reset confirmations
-        trade.initiatorConfirmed = false;
-        trade.partnerConfirmed = false;
-
-        return message.channel.send(
-          `✅ Removed **${amount}** coins from your offer. Remaining: **${offer.currency}** coins`
-        );
+    });
+    col.on('end', (_c, reason) => {
+      if (t.status === 'open') {
+        endTrade(t);
+        msg.edit(windowCard(t, guildName, '⌛ The trade window closed after 5 quiet minutes — nothing moved.', true)).catch(() => {});
+      } else if (reason !== 'done' && reason !== 'cancelled') {
+        endTrade(t);
       }
-
-      if (removeType === 'item') {
-        // Parse item name (collect all words until we hit a number)
-        let itemNameParts = [];
-        let amount = null;
-
-        for (let i = 2; i < args.length; i++) {
-          const parsed = parseInt(args[i]);
-          if (!isNaN(parsed) && parsed > 0) {
-            amount = parsed;
-            break;
-          }
-          itemNameParts.push(args[i]);
-        }
-
-        const itemNameInput = itemNameParts.join(' ').trim();
-
-        if (!itemNameInput || !amount || amount <= 0) {
-          return message.channel.send('Usage: `.trade remove item <item name> <amount>`');
-        }
-
-        const isInitiator = userId === trade.initiator;
-        const offer = isInitiator ? trade.initiatorOffer : trade.partnerOffer;
-
-        // Find actual item name in offer (case-insensitive)
-        const lowerInput = itemNameInput.toLowerCase();
-        let actualItemName = null;
-        for (const key of Object.keys(offer.items)) {
-          if (key.toLowerCase() === lowerInput) {
-            actualItemName = key;
-            break;
-          }
-        }
-
-        if (!actualItemName) {
-          return message.channel.send(`❌ You haven't offered any **${itemNameInput}**.`);
-        }
-
-        const offered = offer.items[actualItemName] || 0;
-
-        if (offered < amount) {
-          return message.channel.send(`❌ You only offered ${offered} ${actualItemName}.`);
-        }
-
-        offer.items[actualItemName] = offered - amount;
-        if (offer.items[actualItemName] === 0) {
-          delete offer.items[actualItemName];
-        }
-
-        // Reset confirmations
-        trade.initiatorConfirmed = false;
-        trade.partnerConfirmed = false;
-
-        return message.channel.send(
-          `✅ Removed **${amount} ${actualItemName}** from your offer.`
-        );
-      }
-
-      return message.channel.send(
-        'Usage: `.trade remove currency <amount>` or `.trade remove item <item name> <amount>`'
-      );
-    }
-
-    // VIEW TRADE
-    if (sub === 'view') {
-      const initiator = await client.users.fetch(trade.initiator);
-      const partner = await client.users.fetch(trade.partner);
-
-      const initiatorItems =
-        Object.entries(trade.initiatorOffer.items)
-          .map(([k, v]) => `${v}x ${k}`)
-          .join(', ') || 'None';
-
-      const partnerItems =
-        Object.entries(trade.partnerOffer.items)
-          .map(([k, v]) => `${v}x ${k}`)
-          .join(', ') || 'None';
-
-      const embed = new EmbedBuilder()
-        .setTitle('TRADE OVERVIEW')
-        .setDescription('-# Both players must confirm with `.trade confirm` to finish the trade.')
-        .addFields(
-          {
-            name: `${initiator.username}'s Offer ${trade.initiatorConfirmed ? '✅' : '❌'}`,
-            value: `Coins: **${trade.initiatorOffer.currency}**\nItems: ${initiatorItems}`,
-            inline: false,
-          },
-          {
-            name: `${partner.username}'s Offer ${trade.partnerConfirmed ? '✅' : '❌'}`,
-            value: `Coins: **${trade.partnerOffer.currency}**\nItems: ${partnerItems}`,
-            inline: false,
-          }
-        )
-        .setColor(0x000000)
-        .setFooter({ text: message.guild?.name || 'Shiro' });
-
-      return message.channel.send({ embeds: [embed] });
-    }
-
-    // CONFIRM TRADE
-    if (sub === 'confirm') {
-      // Already being fulfilled (or done) — block re-entry. Without this, a
-      // player spamming .trade confirm while the first confirm's async
-      // fulfillment (several awaits below) is still in flight could re-enter
-      // this branch a second time and double-execute the transfer.
-      if (trade.status !== 'open') {
-        return message.channel.send('This trade is already being processed.');
-      }
-
-      const isInitiator = userId === trade.initiator;
-
-      if (isInitiator) {
-        trade.initiatorConfirmed = true;
-      } else {
-        trade.partnerConfirmed = true;
-      }
-
-      if (!trade.initiatorConfirmed || !trade.partnerConfirmed) {
-        return message.channel.send(
-          `${message.author.username} confirmed. Waiting for the other person to confirm.`
-        );
-      }
-
-      // Both confirmed — lock the trade synchronously (no await above this
-      // line since the flags were set) before doing any async work.
-      trade.status = 'completing';
-
-      // Both confirmed - execute trade
-      const initiatorData = await getUserData(trade.initiator);
-      const partnerData = await getUserData(trade.partner);
-
-      // Validate both users still have what they offered
-      if (initiatorData.balance < trade.initiatorOffer.currency) {
-        activeTrades.delete(trade.initiator);
-        activeTrades.delete(trade.partner);
-        return message.channel.send(
-          "❌ Trade failed. Initiator doesn't have enough coins anymore."
-        );
-      }
-
-      if (partnerData.balance < trade.partnerOffer.currency) {
-        activeTrades.delete(trade.initiator);
-        activeTrades.delete(trade.partner);
-        return message.channel.send(
-          "❌ Trade failed. Partner doesn't have enough coins anymore."
-        );
-      }
-
-      // Validate items
-      for (const [itemName, amount] of Object.entries(trade.initiatorOffer.items)) {
-        if ((initiatorData.inventory?.[itemName] || 0) < amount) {
-          activeTrades.delete(trade.initiator);
-          activeTrades.delete(trade.partner);
-          return message.channel.send(
-            `❌ Trade failed. Initiator doesn't have enough ${itemName}.`
-          );
-        }
-      }
-
-      for (const [itemName, amount] of Object.entries(trade.partnerOffer.items)) {
-        if ((partnerData.inventory?.[itemName] || 0) < amount) {
-          activeTrades.delete(trade.initiator);
-          activeTrades.delete(trade.partner);
-          return message.channel.send(
-            `❌ Trade failed. Partner doesn't have enough ${itemName}.`
-          );
-        }
-      }
-
-      // Execute trade — atomic and guarded (both balances used to be written back as absolute
-      // numbers read earlier, so anything that happened meanwhile was erased or duplicated).
-      const { debit, credit } = require('../utils/atomicInv');
-      const aOffer = { balance: trade.initiatorOffer.currency, items: trade.initiatorOffer.items };
-      const bOffer = { balance: trade.partnerOffer.currency, items: trade.partnerOffer.items };
-      if (!(await debit(trade.initiator, aOffer))) {
-        activeTrades.delete(trade.initiator); activeTrades.delete(trade.partner);
-        return message.channel.send("❌ Trade failed. The initiator doesn't have everything they offered anymore.");
-      }
-      if (!(await debit(trade.partner, bOffer))) {
-        await credit(trade.initiator, aOffer); // give the first side back — nothing moved
-        activeTrades.delete(trade.initiator); activeTrades.delete(trade.partner);
-        return message.channel.send("❌ Trade failed. The partner doesn't have everything they offered anymore.");
-      }
-      // 'Complete a trade' mission/achievement stat for both sides.
-      await credit(trade.partner, { ...aOffer, stats: { trades: 1 } });
-      await credit(trade.initiator, { ...bOffer, stats: { trades: 1 } });
-
-      const initiator = await client.users.fetch(trade.initiator);
-      const partner = await client.users.fetch(trade.partner);
-
-      const initiatorItemsSummary = Object.entries(trade.initiatorOffer.items).map(([k, v]) => `${v}x ${k}`).join(', ') || 'nothing';
-      const partnerItemsSummary   = Object.entries(trade.partnerOffer.items).map(([k, v]) => `${v}x ${k}`).join(', ') || 'nothing';
-      await logAdminAction(
-        initiator.id, initiator.username, 'trade', 'Trade Completed', partner.id, partner.username,
-        `${initiator.username} gave ${trade.initiatorOffer.currency} coins + ${initiatorItemsSummary} / ${partner.username} gave ${trade.partnerOffer.currency} coins + ${partnerItemsSummary}`,
-      );
-
-      const embed = new EmbedBuilder()
-        .setTitle('TRADE COMPLETED')
-        .setDescription(`> Trade between ${initiator} and ${partner} finished successfully.`)
-        .setColor(0x000000)
-        .setFooter({ text: message.guild?.name || 'Shiro' });
-
-      message.channel.send({ embeds: [embed] });
-
-      activeTrades.delete(trade.initiator);
-      activeTrades.delete(trade.partner);
-      return;
-    }
-
-    // CANCEL TRADE
-    if (sub === 'cancel') {
-      const initiator = await client.users.fetch(trade.initiator);
-      const partner = await client.users.fetch(trade.partner);
-
-      activeTrades.delete(trade.initiator);
-      activeTrades.delete(trade.partner);
-
-      const embed = new EmbedBuilder()
-        .setTitle('TRADE CANCELLED')
-        .setDescription(`> Trade between ${initiator} and ${partner} was cancelled.`)
-        .setColor(0x000000)
-        .setFooter({ text: message.guild?.name || 'Shiro' });
-
-      return message.channel.send({ embeds: [embed] });
-    }
-
-    // Default help
-    return message.channel.send(
-      '**Trade Commands:**\n' +
-        '`.trade @user` - Start trade\n' +
-        '`.trade offer currency <amount>` - Offer coins\n' +
-        '`.trade offer item <item name> <amount>` - Offer any inventory item\n' +
-        '`.trade remove currency <amount>` - Remove coins\n' +
-        '`.trade remove item <item name> <amount>` - Remove items\n' +
-        '`.trade view` - View offers\n' +
-        '`.trade confirm` - Confirm trade\n' +
-        '`.trade cancel` - Cancel trade'
-    );
+    });
   },
 };
