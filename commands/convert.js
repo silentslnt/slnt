@@ -13,6 +13,8 @@ const SILV_KEY = 'Silv token';
 const COINS_PER_SILV = 100_000;
 const AETHER_PER_SILV = 10_000;
 const COIN_TO_SILV_DAILY_CAP = 5;
+// SILV → coins (direct: "1 SILV is 100k coins but it can be exchanged into coins with 50% tax, the other 50% goes to the house")
+const SILV_TO_COINS_TAX = 0.5;
 const ACCENT = 0x000000;
 const busy = new Set();
 
@@ -35,13 +37,17 @@ function card(userData, guildName) {
       .addTextDisplayComponents(new TextDisplayBuilder().setContent(
         `**SILV → Aether**\n-# ${AETHER_PER_SILV.toLocaleString()} Aether each · for Sentinel's RPG · one-way`))
       .setButtonAccessory(new ButtonBuilder().setCustomId('cv_s2a').setLabel('Convert').setStyle(ButtonStyle.Secondary)))
+    .addSectionComponents(new SectionBuilder()
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+        `**SILV → Coins**\n-# ${(COINS_PER_SILV * (1 - SILV_TO_COINS_TAX)).toLocaleString()} coins each · ${Math.round(SILV_TO_COINS_TAX * 100)}% exchange tax goes to the house`))
+      .setButtonAccessory(new ButtonBuilder().setCustomId('cv_s2c').setLabel('Convert').setStyle(ButtonStyle.Secondary)))
     .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${guildName} · 1 SILV = 10 Robux`));
 }
 
 module.exports = {
   name: 'convert',
   aliases: ['swap', 'conversion'],
-  description: 'Convert coins → SILV and SILV → Aether (Sentinel). One card, buttons.',
+  description: 'Convert coins → SILV, SILV → coins (50% tax) and SILV → Aether (Sentinel). One card, buttons.',
   COINS_PER_SILV,
   AETHER_PER_SILV,
 
@@ -56,7 +62,7 @@ module.exports = {
       const kind = i.customId.split('_')[1];
       const modalId = `cvm_${kind}_${i.id}`;
       await i.showModal(new ModalBuilder().setCustomId(modalId)
-        .setTitle(kind === 'c2s' ? 'Coins → SILV' : 'SILV → Aether')
+        .setTitle(kind === 'c2s' ? 'Coins → SILV' : kind === 's2c' ? 'SILV → Coins' : 'SILV → Aether')
         .addComponents(new ActionRowBuilder().addComponents(
           new TextInputBuilder().setCustomId('n').setLabel(kind === 'c2s' ? 'How many SILV to buy?' : 'How many SILV to convert?')
             .setStyle(TextInputStyle.Short).setPlaceholder('1').setRequired(true).setMaxLength(4))));
@@ -85,6 +91,16 @@ module.exports = {
             await saveSpecificUserData(i.user.id, { silvConvert: data.silvConvert });
             await logAdminAction(i.user.id, i.user.username, 'convert', 'Coins → SILV', null, null, `${cost} coins → ${n} SILV`);
             note = `✅ \`${cost.toLocaleString()}\` coins → **${n} SILV**.`;
+          }
+        } else if (kind === 's2c') {
+          if (!(await debit(i.user.id, { items: { [SILV_KEY]: n } }))) note = `❌ You have \`${silv}\` SILV.`;
+          else {
+            const gross = n * COINS_PER_SILV;
+            const tax = Math.floor(gross * SILV_TO_COINS_TAX);
+            await credit(i.user.id, { balance: gross - tax });
+            await require('../utils/houseBank').creditHouse(tax, 'silv_exchange');
+            await logAdminAction(i.user.id, i.user.username, 'convert', 'SILV → Coins', null, null, `${n} SILV → ${gross - tax} coins (${tax} tax to the house)`);
+            note = `✅ **${n} SILV** → \`${(gross - tax).toLocaleString()}\` coins.\n-# \`${tax.toLocaleString()}\` coins exchange tax went to the house.`;
           }
         } else if (!(await debit(i.user.id, { items: { [SILV_KEY]: n } }))) {
           note = `❌ You have \`${silv}\` SILV.`;

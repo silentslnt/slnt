@@ -87,4 +87,20 @@ async function announceWin(client, opts) {
   }
 }
 
-module.exports = { announceWin, updateCfg };
+/**
+ * A rare pull (SILV, a mythic, a big key) shown in the live-wins channel (direct: "a live pull of people who get rare
+ * stuff… so people can see that they can win and it works"). No ping.
+ */
+async function announcePull(client, { userId, prize, source }) {
+  const id = cachedCfg.winsChannelId;
+  if (!id || !client) return;
+  try {
+    const ch = await client.channels.fetch(id);
+    await ch.send({
+      embeds: [new EmbedBuilder().setColor(0xE8C766).setDescription(`✨ **Live pull** — <@${userId}> pulled **${prize}**\n-# from ${source}`)],
+      allowedMentions: { parse: [] },
+    });
+  } catch { /* wins channel not set */ }
+}
+
+module.exports = { announceWin, announcePull, updateCfg };

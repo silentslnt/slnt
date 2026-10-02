@@ -48,7 +48,7 @@ function getRandomRole() {
 module.exports = {
   name: 'openmysterybox',
   description: 'Open a Mystery Box to get random rewards',
-  async execute({ message, getUserData, saveUserData }) {
+  async execute({ message, getUserData, saveUserData, logAdminAction }) {
     const userId = message.author.id;
     const userData = await getUserData(userId);
     
@@ -115,6 +115,8 @@ module.exports = {
       userData.inventory[SILV_TOKEN_KEY] = (userData.inventory[SILV_TOKEN_KEY] || 0) + amount;
       rewardEmoji = '✨';
       rewardMessage = `**${amount}x Silv Token${amount > 1 ? 's' : ''}**!`;
+      require('../utils/winAnnouncer').announcePull(message.client, { userId: message.author.id, prize: `${amount} SILV`, source: 'a Mystery Box' }).catch(() => {});
+      if (logAdminAction) logAdminAction(message.author.id, message.author.username, 'mysterybox', `Won ${amount} SILV`, message.author.id, message.author.username).catch(() => {});
       
     } else if (rewardType.type === 'prismatic') {
       // Prismatic keys

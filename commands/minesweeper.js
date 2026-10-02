@@ -39,7 +39,7 @@ function nCr(n, k) {
 
 module.exports = {
   name: 'minesweeper',
-  description: 'Play a personalized minesweeper! Usage: .minesweeper start <size> <mines> <bet>',
+  description: 'Play a personalized minesweeper! Usage: .minesweeper start <bet> (12 tiles, 4 mines)',
   async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
     const sub = (args[0] || '').toLowerCase();
     const userId = message.author.id;
@@ -49,9 +49,10 @@ module.exports = {
       if (userGames.has(userId)) {
         return message.channel.send('You already have a minesweeper game in progress!');
       }
-      const size = parseInt(args[1]);
-      const mineCount = parseInt(args[2]);
-      const bet = parseInt(args[3]);
+      // One board for everyone (direct: "no game should let the user select the difficulty"): 12 tiles, 4 mines.
+      const size = 12;
+      const mineCount = 4;
+      const bet = parseInt(args[args.length - 1]);
 
       if (isNaN(size) || size < 5 || size > 20) return message.channel.send('Size must be 5–20.');
       if (isNaN(mineCount) || mineCount < 1 || mineCount >= size)
@@ -194,7 +195,7 @@ module.exports = {
     // HELP
     return message.channel.send(
       '**Minesweeper Commands:**\n' +
-        '`.minesweeper start <size> <mines> <bet>` - Start your own game\n' +
+        '`.minesweeper start <bet>` - Start a game (12 tiles, 4 mines)\n' +
         '`.minesweeper pick <tile number>` - Play your game\n' +
         '`.minesweeper cancel` - Cancel your game (refunds bet)'
     );

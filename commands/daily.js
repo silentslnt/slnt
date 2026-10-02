@@ -34,7 +34,7 @@ module.exports = {
   adminOnly: false,
   description: 'Claim your daily reward with streak bonuses.',
 
-  async execute({ message, userData, saveUserData, getUserData }) {
+  async execute({ message, userData, saveUserData, getUserData, logAdminAction }) {
     const now      = Date.now();
     const last     = userData.lastDaily ? new Date(userData.lastDaily).getTime() : 0;
     const elapsed  = now - last;
@@ -103,6 +103,7 @@ module.exports = {
         newBadges.push(MONTHLY_BADGE);
       }
       lines.push(`> ${CMOON} Monthly bonus: +${MONTHLY_BONUS_COINS} coins + ${bonusSilv} SILV token`);
+      if (logAdminAction) logAdminAction(message.author.id, message.author.username, 'daily', `Monthly bonus: +${bonusSilv} SILV`, message.author.id, message.author.username).catch(() => {});
     }
 
     // ── apply ─────────────────────────────────────────────────

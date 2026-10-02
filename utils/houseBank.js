@@ -47,4 +47,20 @@ async function resetBank() {
   await Meta.findOneAndUpdate({ key: KEY }, { $set: { value: { balance: 0, wagered: 0, paid: 0, fees: 0, rounds: 0, games: {} } } }, { upsert: true });
 }
 
-module.exports = { recordRound, getBank, resetBank, playerHistory };
+/** Money the house takes outside a round (exchange taxes etc.) — kept in the same ledger, by label. */
+function creditHouse(amount, label = 'tax') {
+  amount = Math.floor(amount);
+  if (!amount) return Promise.resolve();
+  return Meta.findOneAndUpdate(
+    { key: KEY },
+    { $inc: { 'value.balance': amount, 'value.fees': amount, [`value.taxes.${label}`]: amount } },
+    { upsert: true },
+  ).catch(() => {});
+}
+
+/** Owner adjustment of the house balance (+/-), logged by the caller. */
+function adjustHouse(amount) {
+  return Meta.findOneAndUpdate({ key: KEY }, { $inc: { 'value.balance': Math.floor(amount), 'value.adjusted': Math.floor(amount) } }, { upsert: true });
+}
+
+module.exports = { recordRound, getBank, resetBank, playerHistory, creditHouse, adjustHouse };

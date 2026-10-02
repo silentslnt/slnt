@@ -66,22 +66,17 @@ module.exports = {
 
   async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
     const betArg  = args[0];
-    const riskArg = (args[1] || 'medium').toLowerCase();
+    const riskArg = 'high';   // one table for everyone (direct: "no game should let the user select the difficulty")
     const bet     = parseBet(betArg, userData.balance || 0);
 
-    if (!bet || !['low','medium','high'].includes(riskArg)) {
+    if (!bet) {
       return message.channel.send({
         embeds: [new EmbedBuilder().setColor(BLACK)
           .setTitle('PLINKO')
           .setDescription(
-            '> Usage: `.plinko <bet> [risk]`\n\n' +
-            '__**Risk Levels**__\n' +
-            '> `low` — steady, 0.5×–15×\n' +
-            '> `medium` — balanced, up to 2×\n' +
-            '> `high` — volatile, up to 10×\n\n' +
-            '__**Examples**__\n' +
-            '> `.plinko 500 medium`\n' +
-            '> `.plinko all high`'
+            '> Usage: `.plinko <bet>`\n\n' +
+            '> One board for everyone — the edges pay big, the middle eats your bet.\n\n' +
+            '__**Example**__\n> `.plinko 500`'
           )
           .setFooter({ text: `${message.guild?.name || 'Shiro'} — RTP ~97%` })],
       });

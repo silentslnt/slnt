@@ -118,6 +118,43 @@ async function logAdminAction(
   }
 }
 
+// ===== RUN A COMMAND FROM A BUTTON =====
+// (direct: "would you have to type to select a game on a website? no") — cards call client.runAs(interaction, 'mines', ['1000'])
+// and the command runs exactly as if the clicker had typed it: same checks, same cooldowns, same atomic money moves.
+async function runCommandAs(interaction, name, args = []) {
+  const command = client.commands.get(name);
+  if (!command) return false;
+  const { Collection } = require('discord.js');
+  const message = {
+    author: interaction.user, member: interaction.member, guild: interaction.guild, guildId: interaction.guildId,
+    channel: interaction.channel, channelId: interaction.channelId, client, id: interaction.id,
+    content: `${currentPrefix}${name} ${args.join(' ')}`.trim(), createdTimestamp: Date.now(),
+    mentions: { users: new Collection(), members: new Collection(), roles: new Collection(), channels: new Collection() },
+    reply: (x) => interaction.channel.send(x), react: async () => {}, delete: async () => {},
+  };
+  if (!LOCK_EXEMPT_COMMANDS.has(command.name)) {
+    if (usersInFlight.has(message.author.id)) {
+      await interaction.followUp({ content: '⏳ Finish your current command first.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+    usersInFlight.add(message.author.id);
+  }
+  try {
+    const userData = await getUserData(message.author.id);
+    await command.execute({
+      message, args, userData, saveUserData: makeSaver(message.author.id, userData), saveSpecificUserData: saveUserData,
+      updateUserBalance, addKeyToInventory, getUserData, keydrop, guessGame, rarities, prefix: currentPrefix, setPrefix: savePrefix,
+      client, logAdminAction, AdminLog, getEconomyLogsChannel, setEconomyLogsChannel,
+    });
+  } catch (error) {
+    if (error instanceof InsufficientFunds) {
+      await interaction.followUp({ content: "You don't have enough coins for that anymore.", ephemeral: true }).catch(() => {});
+    } else console.error(`runAs ${name}:`, error);
+  } finally {
+    usersInFlight.delete(message.author.id);
+  }
+  return true;
+}
 // ===== DB HELPERS =====
 async function getUserData(userId) {
   let user = await User.findOne({ userId });
@@ -267,6 +304,7 @@ const client = new Client({
 
 client.commands = new Collection();
 let currentPrefix = loadPrefix();
+client.runAs = runCommandAs;
 
 // Ready event listener
 client.once('clientReady', async () => {
@@ -366,6 +404,10 @@ async function claimPendingSilvTokens() {
           ],
         }).catch(() => {});
       }
+      // every SILV that lands is logged (direct: "I should see all logs… even when people earn silv from inviting or playing")
+      const src = String(grant.source || 'sentinel');
+      await logAdminAction(grant.userId, user?.username || grant.userId, 'silvgrant', `+${grant.amount} SILV from Sentinel`,
+        grant.userId, user?.username || grant.userId, src);
     } catch (err) {
       console.error(`Failed to credit SILV token grant to ${grant.userId}:`, err.message);
     }

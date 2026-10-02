@@ -72,7 +72,17 @@ async function body(tab, target, data) {
     chars ? `> 🃏 Characters **${chars}**` : '', (keys.length || items.length) ? '' : '> Nothing else yet.'].filter((x) => x !== '').join('\n');
 }
 
-async function profile(tab, target, data, guild, disabled = false) {
+// The wallet's own buttons (direct: "bal is basically the player's wallet — payout and other needed buttons there too").
+// Only on your own card; each runs the real command for you.
+function walletRow(disabled) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('bal_play').setLabel('Play').setEmoji('🎲').setStyle(ButtonStyle.Success).setDisabled(disabled),
+    new ButtonBuilder().setCustomId('bal_convert').setLabel('Convert').setEmoji('💎').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+    new ButtonBuilder().setCustomId('bal_payout').setLabel('Payout').setEmoji('💸').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+    new ButtonBuilder().setCustomId('bal_daily').setLabel('Daily').setEmoji('📅').setStyle(ButtonStyle.Secondary).setDisabled(disabled));
+}
+
+async function profile(tab, target, data, guild, disabled = false, own = false) {
   if (tab === 'history') return historyCard(target, null, guild, [tabRow(tab, disabled)]);
   const c = new ContainerBuilder().setAccentColor(BLACK)
     .addSectionComponents(new SectionBuilder()
@@ -80,8 +90,9 @@ async function profile(tab, target, data, guild, disabled = false) {
       .setThumbnailAccessory(new ThumbnailBuilder().setURL(target.displayAvatarURL({ dynamic: true }))))
     .addActionRowComponents(tabRow(tab, disabled))
     .addSeparatorComponents(new SeparatorBuilder())
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(await body(tab, target, data)))
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${guild}`));
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(await body(tab, target, data)));
+  if (own) c.addSeparatorComponents(new SeparatorBuilder()).addActionRowComponents(walletRow(disabled));
+  c.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${guild}${own ? ' · only you can use these buttons' : ''}`));
   return { components: [c], flags: MessageFlags.IsComponentsV2 };
 }
 
@@ -99,19 +110,26 @@ module.exports = {
       if (!data) return message.channel.send('No data for that user.');
     }
     const guild = message.guild?.name || 'Shiro';
-    const msg = await message.channel.send(await profile('overview', target, data, guild));
+    const own = target.id === message.author.id;
+    const msg = await message.channel.send(await profile('overview', target, data, guild, false, own));
     const collector = msg.createMessageComponentCollector({ time: 300_000 });
     collector.on('collect', async (i) => {
       if (i.user.id !== message.author.id) {
         return i.reply({ content: 'Open your own with `.bal`.', ephemeral: true }).catch(() => {});
       }
+      if (i.customId.startsWith('bal_')) {
+        await i.deferUpdate().catch(() => {});
+        await i.client.runAs?.(i, i.customId.slice(4), []);
+        const fresh = await getUserData(target.id);
+        return msg.edit(await profile('overview', target, fresh, guild, false, own)).catch(() => {});
+      }
       const tab = i.customId.replace('prof_', '');
       const fresh = await getUserData(target.id);
-      await i.update(await profile(tab, target, fresh, guild)).catch(() => {});
+      await i.update(await profile(tab, target, fresh, guild, false, own)).catch(() => {});
     });
     collector.on('end', async () => {
       const fresh = await getUserData(target.id).catch(() => data);
-      await msg.edit(await profile('overview', target, fresh || data, guild, true)).catch(() => {});
+      await msg.edit(await profile('overview', target, fresh || data, guild, true, own)).catch(() => {});
     });
   },
 };
