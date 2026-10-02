@@ -7,7 +7,7 @@
 //   Logs     — set the economy log channel and the live-wins channel; recent actions
 const {
   ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags,
-  UserSelectMenuBuilder, ChannelSelectMenuBuilder, ChannelType,
+  UserSelectMenuBuilder, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder,
 } = require('discord.js');
 const { isWhitelisted } = require('../utils/permissions');
 const { card, button, row, ButtonStyle } = require('../utils/casino');
@@ -74,6 +74,7 @@ module.exports = {
         const GCh = require('../utils/gameChannel');
         const gc = GCh.getGameChannelId();
         const cmd = GCh.getCommandChannels();
+        const wk = require('../utils/weeklyLive').cfg();
         const cmdSel = new ChannelSelectMenuBuilder().setCustomId('ss_cmdch').setMinValues(0).setMaxValues(25)
           .setPlaceholder('Command channels (pick several)…').addChannelTypes(ChannelType.GuildText);
         if (cmd.length) cmdSel.setDefaultChannels(...cmd.slice(0, 25));
@@ -82,7 +83,11 @@ module.exports = {
           body: `> Chat-game channel: ${gc ? `<#${gc}>` : '**not set**'} — word scramble, hangman and guess the number run there.\n`
             + `> Command channels: ${cmd.length ? cmd.map((c) => `<#${c}>`).join(' ') : '**everywhere**'}\n`
             + '-# With command channels set, players can only use Shiro there (and in the chat-game channel). Staff and `.help` work anywhere. '
-            + 'Untick them all or press Allow everywhere to lift it. Start puts a game in the chat-game channel.',
+            + 'Untick them all or press Allow everywhere to lift it. Start puts a game in the chat-game channel.\n\n'
+            + `### 🏆 Weekly boards (games + chatters)\n`
+            + `> Live card: ${wk.channelId && wk.messageId ? `<#${wk.channelId}>` : '**not posted**'} · notify role: ${wk.roleId ? `<@&${wk.roleId}>` : '**not set**'}\n`
+            + '-# Players press 🔔 Notify me on the card to get the role (press again to drop it); it pings when the top 3 changes (max every 3h) and when prizes are paid. '
+            + 'Chatters: 1st 3 SILV · 2nd/3rd 1 SILV · 4th–10th 1,000 coins.',
           rows: [nav(),
             new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('ss_gamech')
               .setPlaceholder('Set the chat-game channel…').addChannelTypes(ChannelType.GuildText)),
@@ -90,7 +95,11 @@ module.exports = {
             row(button('ss_g_ws', 'Start word scramble', ButtonStyle.Success), button('ss_g_hm', 'Start hangman', ButtonStyle.Success),
               button('ss_g_gn', 'Start guess the number', ButtonStyle.Success)),
             row(button('ss_g_wsx', 'Stop scramble', ButtonStyle.Danger), button('ss_g_hmx', 'Stop hangman', ButtonStyle.Danger),
-              button('ss_g_gnx', 'Stop guess', ButtonStyle.Danger), button('ss_cmdall', 'Allow everywhere', ButtonStyle.Secondary, !cmd.length))],
+              button('ss_g_gnx', 'Stop guess', ButtonStyle.Danger), button('ss_cmdall', 'Allow everywhere', ButtonStyle.Secondary, !cmd.length)),
+            new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('ss_wkpost')
+              .setPlaceholder('Post the live weekly board in…').addChannelTypes(ChannelType.GuildText)),
+            new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId('ss_wkrole')
+              .setPlaceholder('Weekly notify role…'))],
           footer: `${guildName} · every change is logged`,
         });
       }
@@ -140,6 +149,24 @@ module.exports = {
         if (id === 'ss_gamech') {
           await require('../utils/gameChannel').setGameChannelId(i.values[0]);
           await logAdminAction(i.user.id, i.user.username, 'shiroset', 'Set the game channel', null, null, `#${i.values[0]}`);
+          return i.update(await render());
+        }
+        if (id === 'ss_wkpost') {
+          const ch = await message.client.channels.fetch(i.values[0]).catch(() => null);
+          if (!ch) return i.reply({ content: "I can't see that channel.", flags: MessageFlags.Ephemeral });
+          await i.deferUpdate();
+          const ok = await require('../utils/weeklyLive').post(message.client, ch).then(() => true).catch(() => false);
+          if (!ok) return i.followUp({ content: "I couldn't post there — check my permissions.", flags: MessageFlags.Ephemeral });
+          await logAdminAction(i.user.id, i.user.username, 'shiroset', 'Posted the live weekly board', null, null, `#${ch.id}`);
+          return i.editReply(await render());
+        }
+        if (id === 'ss_wkrole') {
+          const role = message.guild.roles.cache.get(i.values[0]);
+          if (!role || role.managed || role.id === message.guild.id) return i.reply({ content: 'Pick a normal role.', flags: MessageFlags.Ephemeral });
+          if (role.position >= message.guild.members.me.roles.highest.position)
+            return i.reply({ content: `Move my role above ${role} first so I can give it out.`, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
+          await require('../utils/weeklyLive').setCfg({ roleId: role.id });
+          await logAdminAction(i.user.id, i.user.username, 'shiroset', 'Set the weekly notify role', null, null, role.name);
           return i.update(await render());
         }
         if (id === 'ss_cmdch' || id === 'ss_cmdall') {

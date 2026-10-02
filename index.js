@@ -378,9 +378,11 @@ client.once('clientReady', async () => {
   claimPendingSilvTokens();
 
   // Weekly game board: pays last week's top 10 once (claimed in Mongo), checked every 10 minutes.
-  const payWeekly = () => require('./utils/weeklyBoard').payWeek(client, logAdminAction).catch((e) => console.error('weekly board:', e.message));
+  const WL = require('./utils/weeklyLive');
+  const payWeekly = () => WL.weekTick(client, logAdminAction).catch((e) => console.error('weekly boards:', e.message));
   setInterval(payWeekly, 10 * 60 * 1000);
   payWeekly();
+  setInterval(() => WL.refresh(client).catch((e) => console.error('weekly live board:', e.message)), 5 * 60 * 1000);
 });
 
 // Sentinel's ,fish command can drop an astronomically rare SILV token — it
@@ -803,6 +805,9 @@ client.on('messageCreate', async (message) => {
   // configured currentPrefix (Dank Memer-style, direct request) — additive,
   // the configured prefix keeps working exactly as before.
   const SECONDARY_PREFIXES = ['shiro ', 'Shiro ', 'SHIRO '];
+  if (!message.content.startsWith(currentPrefix) && !SECONDARY_PREFIXES.some((p) => message.content.startsWith(p))) {
+    require('./utils/weeklyLive').countChat(message);   // weekly chatters board (commands don't count)
+  }
   const matchedPrefix = message.content.startsWith(currentPrefix)
     ? currentPrefix
     : SECONDARY_PREFIXES.find(p => message.content.startsWith(p));
@@ -912,6 +917,9 @@ client.on('interactionCreate', async (interaction) => {
   try {
     if (await require('./commands/payout').handleInteraction(interaction)) return;
   } catch (e) { console.error('payout interaction failed:', e); }
+  try {
+    if (await require('./utils/weeklyLive').handleInteraction(interaction)) return;
+  } catch (e) { console.error('weekly notify failed:', e); }
 
   // /setup vouch — admin: pick channel then appearance modal
   if (interaction.isChatInputCommand() && interaction.commandName === 'setup') {

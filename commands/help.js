@@ -19,7 +19,7 @@ const SECTIONS = {
     ['play', 'hub'], ['blackjack', 'bj'], ['slots', 'sl'], ['coinflip', 'cf'], ['roulette', 'rl'], ['dice', 'd'], ['rps', ''],
     ['mines', 'mn'], ['minesweeper', 'msw'], ['plinko', 'pl'], ['crash', 'cr'], ['tower', 'tw'], ['cups', ''], ['wheel', 'wh'],
     ['overunder', 'ou'], ['duel', 'dl'], ['history', 'hist'], ['weekly', 'wlb'],
-  ], '`.<game> <bet|all>` — or `.play` to pick one with buttons. `.weekly`: the 10 most active players win SILV, coins and Aether every week.'],
+  ], '`.<game> <bet|all>` — or `.play` to pick one with buttons. `.weekly`: the 10 most active players and the 10 most active chatters win SILV and coins every week.'],
   chat: ['Chat games', 'Started by staff in the game channel', [
     ['wordscramble', 'ws'], ['hangman', ''], ['guess', ''], ['cipher', ''], ['redeem', 'rd'],
   ], 'Type the answer in the game channel to win. `.rd` claims a dropped key.'],
