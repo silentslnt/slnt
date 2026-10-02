@@ -153,16 +153,16 @@ async function handleInteraction(interaction) {
   const roleId = cfg().roleId;
   const role = roleId && interaction.guild?.roles.cache.get(roleId);
   if (!role) {
-    await interaction.reply({ content: 'Notifications aren\'t set up yet — staff can pick the role in `.shiroset` → Weekly.', flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: 'Leaderboard pings aren\'t set up yet — staff can make the ping role in `.shiroset` → Games.', flags: MessageFlags.Ephemeral });
     return true;
   }
   const member = interaction.member;
   try {
     if (member.roles.cache.has(role.id)) {
-      await member.roles.remove(role, 'Weekly board: notify off');
+      await member.roles.remove(role, 'Leaderboard pings: off');
       await interaction.reply({ content: '🔕 You won\'t be pinged about the weekly boards any more.', flags: MessageFlags.Ephemeral });
     } else {
-      await member.roles.add(role, 'Weekly board: notify on');
+      await member.roles.add(role, 'Leaderboard pings: on');
       await interaction.reply({ content: `🔔 You'll be pinged (${role}) when the weekly top 3 changes and when prizes are paid. Press again to stop.`,
         flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
     }

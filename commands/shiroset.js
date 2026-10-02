@@ -85,8 +85,8 @@ module.exports = {
             + '-# With command channels set, players can only use Shiro there (and in the chat-game channel). Staff and `.help` work anywhere. '
             + 'Untick them all or press Allow everywhere to lift it. Start puts a game in the chat-game channel.\n\n'
             + `### 🏆 Weekly boards (games + chatters)\n`
-            + `> Live card: ${wk.channelId && wk.messageId ? `<#${wk.channelId}>` : '**not posted**'} · notify role: ${wk.roleId ? `<@&${wk.roleId}>` : '**not set**'}\n`
-            + '-# Players press 🔔 Notify me on the card to get the role (press again to drop it); it pings when the top 3 changes (max every 3h) and when prizes are paid. '
+            + `> Live card: ${wk.channelId && wk.messageId ? `<#${wk.channelId}>` : '**not posted**'} · leaderboard ping role: ${wk.roleId ? `<@&${wk.roleId}>` : '**not set**'}\n`
+            + '-# A separate role only for the weekly board pings (not the Player role). Players press 🔔 Notify me on the card to get it (press again to drop it); it pings when the top 3 changes (max every 3h) and when prizes are paid. '
             + 'Chatters: 1st 3 SILV · 2nd/3rd 1 SILV · 4th–10th 1,000 coins.',
           rows: [nav(),
             new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('ss_gamech')
@@ -99,7 +99,8 @@ module.exports = {
             new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('ss_wkpost')
               .setPlaceholder('Post the live weekly board in…').addChannelTypes(ChannelType.GuildText)),
             new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId('ss_wkrole')
-              .setPlaceholder('Weekly notify role…'))],
+              .setPlaceholder('Or pick an existing ping role…')),
+            row(button('ss_wkmk', wk.roleId ? 'Ping role made' : 'Create the leaderboard ping role', ButtonStyle.Success, !!wk.roleId, '🔔'))],
           footer: `${guildName} · every change is logged`,
         });
       }
@@ -159,6 +160,14 @@ module.exports = {
           if (!ok) return i.followUp({ content: "I couldn't post there — check my permissions.", flags: MessageFlags.Ephemeral });
           await logAdminAction(i.user.id, i.user.username, 'shiroset', 'Posted the live weekly board', null, null, `#${ch.id}`);
           return i.editReply(await render());
+        }
+        if (id === 'ss_wkmk') {
+          const role = await message.guild.roles.create({ name: 'Leaderboard Pings', mentionable: true,
+            reason: 'Weekly board ping role (opt-in via the board)' }).catch(() => null);
+          if (!role) return i.reply({ content: 'I need Manage Roles to create it.', flags: MessageFlags.Ephemeral });
+          await require('../utils/weeklyLive').setCfg({ roleId: role.id });
+          await logAdminAction(i.user.id, i.user.username, 'shiroset', 'Created the leaderboard ping role', null, null, role.name);
+          return i.update(await render());
         }
         if (id === 'ss_wkrole') {
           const role = message.guild.roles.cache.get(i.values[0]);
