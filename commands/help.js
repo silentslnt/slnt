@@ -1,134 +1,87 @@
-// commands/help.js
-const { EmbedBuilder } = require('discord.js');
-const CHECK = '<:check:1547659779877642360>';
-const XMARK = '<:xmark:1547659816783061153>';
-const BLACK = 0x000000;
+// commands/help.js — one CV2 card, same look as Sentinel's ,help (direct: "Sentinel's help redesign is amazing,
+// why isn't Shiro's like that"): an overview, a section picker, each section as compact command chips, and the
+// Terms / Privacy links. The card edits in place (no new messages); only the person who opened it can switch it.
+const {
+  ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SectionBuilder, ThumbnailBuilder,
+  ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, MessageFlags,
+} = require('discord.js');
 
+const BLACK = 0x000000;
+const TOS_URL = 'https://app.notion.com/p/Terms-of-Service-Shiro-3edf8824fc1180e18603dc791550b243?source=copy_link';
+const PRIVACY_URL = 'https://app.notion.com/p/Privacy-Policy-Shiro-3edf8824fc118091bf82d9d6a0ac339f?source=copy_link';
+// key: [label, one-line blurb, [[command, alias], …], note]
 const SECTIONS = {
-  economy: {
-    emoji: '💰',
-    title: '💰 Economy',
-    commands: [
-      { cmd: '.bal / .b',          desc: 'Check your balance & stats'        },
-      { cmd: '.payout',            desc: 'Cash out SILV for Robux (min 100 SILV = 1,000 Robux)' },
-      { cmd: '.daily / .day',      desc: 'Claim daily reward + streak bonus' },
-      { cmd: '.missions / .ms',    desc: 'View and complete daily missions'  },
-      { cmd: '.profile / .pf',     desc: 'View your full profile'            },
-      { cmd: '.invest / .vault',   desc: 'Lock coins for 10% profit (24h)'  },
-      { cmd: '.leaderboard / .lb', desc: '.lb [coins|silv|streak|level...]'  },
-      { cmd: '.gift / .give',      desc: 'Gift coins to someone (cap 10k/d)' },
-      { cmd: '.duel / .dl',        desc: 'Challenge someone to a coin duel'  },
-    ],
-  },
-  games: {
-    emoji: '🎮',
-    title: '🎮 Games (Admin-start)',
-    commands: [
-      { cmd: '.blackjack / .bj',    desc: '.bj <amount|all>  — Hit or Stand'  },
-      { cmd: '.slots / .sl',        desc: '.sl <amount|all>  — Spin the reels' },
-      { cmd: '.coinflip / .cf',     desc: '.cf <amount|all> <h|t>'             },
-      { cmd: '.roulette / .rl',     desc: '.rl <amount|all> <color/num>'       },
-      { cmd: '.dice / .d',          desc: '.d <amount|all>  — Roll the dice'   },
-      { cmd: '.rps',                desc: '.rps <amount|all> <r|p|s>'          },
-      { cmd: '.minesweeper / .mine',desc: '.mine <bet> <rows> <cols> <mines>'  },
-      { cmd: '.mines',              desc: '.mines <bet> <mines>  — Reveal safe tiles, cash out' },
-      { cmd: '.plinko',             desc: '.plinko <bet> <low|medium|high>' },
-      { cmd: '.crash / .cr',        desc: '.crash <bet> [2x]  — Cash out before it crashes' },
-      { cmd: '.tower / .tw',        desc: '.tower <bet>  — Climb, avoid traps (1 of 2 doors is a trap)' },
-      { cmd: '.history / .hist',    desc: '.history [@user] [game]  — Your win/loss record' },
-      { cmd: '.cups',               desc: '.cups <bet>  — Find the coin (2.8×)' },
-      { cmd: '.wheel / .wh',        desc: '.wheel <bet>  — Spin 0×–5×' },
-      { cmd: '.ou',                 desc: '.ou <bet> <over|under> <5-95>  — Riskier call, bigger pay' },
-    ],
-  },
-  minigames: {
-    emoji: '🎪',
-    title: '🎪 Minigames (Respond)',
-    commands: [
-      { cmd: '.hangman / .hm',       desc: 'Admin-start word guessing game'    },
-      { cmd: '.cipher / .cph',       desc: 'Admin-start decode challenge'      },
-      { cmd: '.wordscramble / .ws',  desc: 'Admin-start word scramble'         },
-      { cmd: '.guess',               desc: 'Admin-start number guessing'       },
-    ],
-  },
-  shop: {
-    emoji: '🛍',
-    title: '🛍 Shop (1 SILV = 10 Robux)',
-    commands: [
-      { cmd: '.shop / .sh',          desc: 'Main shop overview'                },
-      { cmd: '.sh essences',         desc: 'Active boost items (SILV)'         },
-      { cmd: '.sh bundles',          desc: 'Value bundles (SILV)'              },
-      { cmd: '.sh cosmetics',        desc: 'Titles & badges (SILV)'            },
-      { cmd: '.sh utility',          desc: 'Utility items (coins)'             },
-      { cmd: '.sh spells',           desc: 'SILV race spells for Sentinel'     },
-      { cmd: '.sh buy <id>',         desc: 'Purchase an item'                  },
-      { cmd: '.inv / .i',            desc: 'View your inventory'               },
-    ],
-  },
-  keys: {
-    emoji: '🔑',
-    title: '🔑 Keys & Characters',
-    commands: [
-      { cmd: '.redeem / .rd',        desc: 'Claim a dropped key'               },
-      { cmd: '.open / .op',          desc: '.op <rarity> [amount]'             },
-      { cmd: '.roll / .r',           desc: 'Spend 2,000 coins for a character' },
-      { cmd: '.characters / .chars', desc: 'View all characters'               },
-      { cmd: '.charinfo / .ci',      desc: '.ci <name>  — Character details'   },
-      { cmd: '.battle / .bt',        desc: '.bt @user  — Character battle'     },
-      { cmd: '.mysterybox',          desc: 'Open a mystery box'                },
-    ],
-  },
-  progress: {
-    emoji: '📈',
-    title: '📈 Progression',
-    commands: [
-      { cmd: '.achievements / .ach', desc: 'View all achievements'            },
-      { cmd: '.profile / .pf',       desc: 'XP, level, rank, badges'          },
-      { cmd: '.trade / .tr',         desc: '.tr @user  — Trade with someone'  },
-      { cmd: '.lottery / .lot',      desc: 'Buy lottery tickets'              },
-    ],
-  },
+  wallet: ['Wallet', 'Balance, daily, missions, trading', [
+    ['bal', 'b'], ['daily', 'day'], ['freespin', 'fs'], ['missions', 'ms'], ['profile', 'pf'], ['inventory', ''],
+    ['invest', 'vault'], ['gift', 'give'], ['tip', 'send'], ['trade', ''], ['convert', 'swap'], ['payout', 'cashout'],
+  ], 'Coins you give or trade lose a 10% transfer tax. `.convert` turns coins into SILV and SILV into Sentinel Aether.'],
+  games: ['Games', 'Every game, one bet each', [
+    ['play', 'hub'], ['blackjack', 'bj'], ['slots', 'sl'], ['coinflip', 'cf'], ['roulette', 'rl'], ['dice', 'd'], ['rps', ''],
+    ['mines', 'mn'], ['minesweeper', 'msw'], ['plinko', 'pl'], ['crash', 'cr'], ['tower', 'tw'], ['cups', ''], ['wheel', 'wh'],
+    ['overunder', 'ou'], ['duel', 'dl'], ['history', 'hist'], ['weekly', 'wlb'],
+  ], '`.<game> <bet|all>` — or `.play` to pick one with buttons. `.weekly`: the 10 most active players win SILV, coins and Aether every week.'],
+  chat: ['Chat games', 'Started by staff in the game channel', [
+    ['wordscramble', 'ws'], ['hangman', ''], ['guess', ''], ['cipher', ''], ['redeem', 'rd'],
+  ], 'Type the answer in the game channel to win. `.rd` claims a dropped key.'],
+  shop: ['Shop & SILV', 'Spend coins and SILV', [
+    ['shop', 'sh'], ['store', 'market'], ['artifact', 'ashop'], ['silvexchange', 'sx'], ['rate', ''],
+  ], '1 SILV = 10 Robux. `.store` sells Sentinel items (spells, gear, Fate Shards, Revive Tokens) delivered straight to your game bag.'],
+  keys: ['Keys & characters', 'Open keys, roll and battle characters', [
+    ['open', ''], ['openmysterybox', ''], ['roll', ''], ['characters', ''], ['charinfo', ''], ['battle', ''],
+  ], ''],
+  progress: ['Progress', 'Levels, achievements, boards', [
+    ['achievements', 'ach'], ['leaderboard', 'lb'], ['livelb', ''], ['lottery', 'lot'],
+  ], ''],
 };
+
+const chips = (list) => list.map(([c, a]) => `\`${c}\`${a ? ` *${a}*` : ''}`).join(' · ');
+
+function render(page, client, guildName) {
+  const c = new ContainerBuilder().setAccentColor(BLACK);
+  if (page === 'home') {
+    c.addSectionComponents(new SectionBuilder()
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+        "## Shiro\n-# Prefix `.` · bets take `all` or `max` · Sentinel's brother — what you do here helps you there"))
+      .setThumbnailAccessory(new ThumbnailBuilder().setURL(client.user.displayAvatarURL())));
+    c.addSeparatorComponents(new SeparatorBuilder());
+    c.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      Object.values(SECTIONS).map(([label, blurb]) => `> **${label}** — ${blurb}`).join('\n')
+      + '\n-# Start here: `.daily` · `.freespin` · `.play`'));
+  } else {
+    const [label, blurb, list, note] = SECTIONS[page];
+    c.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${label}\n-# ${blurb}`));
+    c.addSeparatorComponents(new SeparatorBuilder());
+    c.addTextDisplayComponents(new TextDisplayBuilder().setContent(`> ${chips(list)}` + (note ? `\n-# ${note}` : '')));
+  }
+  c.addActionRowComponents(new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder().setCustomId('help_pick').setPlaceholder('Pick a section…').addOptions(
+      [{ label: 'Overview', value: 'home', default: page === 'home' },
+        ...Object.entries(SECTIONS).map(([k, [label, blurb]]) => ({ label, value: k, description: blurb.slice(0, 100), default: page === k }))])));
+  c.addActionRowComponents(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Terms of Service').setURL(TOS_URL),
+    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Privacy Policy').setURL(PRIVACY_URL)));
+  c.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${guildName}`));
+  return { components: [c], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } };
+}
 
 module.exports = {
   name: 'help',
   aliases: ['h', 'cmds'],
   adminOnly: false,
-  description: 'View all bot commands. `.help [section]`',
+  description: 'Every Shiro command on one card. `.help [section]`',
 
-  async execute({ message, args }) {
-    const section = (args[0] || '').toLowerCase();
-    const secData = SECTIONS[section];
-
-    if (secData) {
-      const embed = new EmbedBuilder()
-        .setTitle(secData.title.replace(/^\p{Extended_Pictographic}\s*/u, '').toUpperCase())
-        .setColor(BLACK)
-        .setDescription(secData.commands.map(c => `> \`${c.cmd}\` — ${c.desc}`).join('\n'))
-        .setFooter({ text: `Sections: ${Object.keys(SECTIONS).join(', ')} — .help [section]` });
-      return message.channel.send({ embeds: [embed] });
-    }
-
-    // Main overview
-    const embed = new EmbedBuilder()
-      .setTitle('COMMAND GUIDE')
-      .setColor(BLACK)
-      .setDescription(
-        '-# Use `.help [section]` to view a section in detail\n\n' +
-        `> ${CHECK} **Non-admin commands:** \`.rd .lb .bal .pf .inv .daily .missions .ach .help\`\n` +
-        `> ${XMARK} **All other commands are admin-only**\n\n` +
-        `> **1 SILV Token = 10 Robux** — spend SILV in the shop for the best value\n\n` +
-        '__**Sections**__\n' +
-        Object.values(SECTIONS).map(s =>
-          `> **${s.title}** — \`.help ${Object.keys(SECTIONS).find(k => SECTIONS[k] === s)}\``
-        ).join('\n')
-      )
-      .addFields(
-        { name: 'All-in Shortcuts', value: '`all` or `max` — bet full balance\nExample: `.bj all`, `.cf max h`, `.sl all`', inline: false },
-        { name: 'Shop Highlights',  value: '`.sh essences` — boost your gains\n`.sh bundles` — best SILV value packs', inline: false },
-      )
-      .setFooter({ text: message.guild?.name || 'Shiro' });
-
-    return message.channel.send({ embeds: [embed] });
+  async execute({ message, args, client }) {
+    const want = (args[0] || '').toLowerCase();
+    let page = SECTIONS[want] ? want
+      : (want && Object.keys(SECTIONS).find((k) => SECTIONS[k][0].toLowerCase().startsWith(want))) || 'home';
+    const bot = client || message.client;
+    const guildName = message.guild?.name || 'Shiro';
+    const msg = await message.channel.send(render(page, bot, guildName));
+    const col = msg.createMessageComponentCollector({ time: 180_000 });
+    col.on('collect', async (i) => {
+      if (i.user.id !== message.author.id) return i.reply({ content: 'Open your own with `.help`.', flags: MessageFlags.Ephemeral }).catch(() => {});
+      page = i.values[0];
+      await i.update(render(page, bot, guildName)).catch(() => {});
+    });
   },
 };

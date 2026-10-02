@@ -104,6 +104,26 @@ function toV2(opts) {
   return out;
 }
 
+// Plain-text replies become a small card too (direct: "nothing in Shiro should be old") — a bare string or a
+// { content } with nothing else (no embeds, components, files, polls, stickers). Edits only convert when the
+// message is already a card (a card can't hold plain content).
+function plainToV2(opts, method, self) {
+  const o = typeof opts === 'string' ? { content: opts } : opts;
+  if (!o || typeof o !== 'object' || typeof o.content !== 'string' || !o.content.trim()) return null;
+  if ((o.embeds && o.embeds.length) || (o.components && o.components.length) || (o.files && o.files.length)
+      || o.poll || o.stickers || o.attachments) return null;
+  if (o.content.length > 3900) return null;
+  if (method === 'edit' && !(self?.flags?.has?.(V2))) return null;
+  const out = { ...o };
+  delete out.content;
+  out.components = [new ContainerBuilder().setAccentColor(0x000000)
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(o.content))];
+  let flags = typeof out.flags === 'number' ? out.flags : 0;
+  if (out.ephemeral) { flags |= MessageFlags.Ephemeral; delete out.ephemeral; }
+  out.flags = flags | V2;
+  return out;
+}
+
 function wrap(proto, method) {
   if (!proto || typeof proto[method] !== 'function' || proto[method].__cv2) return;
   const orig = proto[method];
@@ -112,7 +132,7 @@ function wrap(proto, method) {
       const line = playerCtx.getStore() || (method === 'edit' ? lineOf(this) : method === 'update' ? lineOf(this.message) : null);
       if (line) opts = stamp(opts, line);
     } catch { /* never block a send over the name line */ }
-    const v2 = toV2(opts);
+    const v2 = toV2(opts) || plainToV2(opts, method, this);
     if (!v2) return orig.call(this, opts, ...rest);
     try {
       return await orig.call(this, v2, ...rest);
