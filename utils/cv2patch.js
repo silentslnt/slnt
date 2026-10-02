@@ -14,13 +14,31 @@ const {
 
 const V2 = MessageFlags.IsComponentsV2;
 
+// SHOUTED TITLES ("DAILY REWARD") read as Title Case on a card; mixed-case titles are left alone.
+function titleCase(t) {
+  const str = String(t);
+  if (str !== str.toUpperCase() || !/[A-Z]/.test(str)) return str;
+  return str.toLowerCase().replace(/(^|[\s—–-])(\p{L})/gu, (m, sep, ch) => sep + ch.toUpperCase());
+}
+
 function embedToContainer(e) {
   const d = (e && (e.data || (typeof e.toJSON === 'function' ? e.toJSON() : e))) || {};
   const c = new ContainerBuilder();
   if (typeof d.color === 'number') c.setAccentColor(d.color);
-  const head = [d.author?.name ? `-# ${d.author.name}` : '', d.title ? `## ${d.title}` : ''].filter(Boolean).join('\n');
+  const head = [d.author?.name ? `-# ${d.author.name}` : '', d.title ? `## ${titleCase(d.title)}` : ''].filter(Boolean).join('\n');
   let body = d.description || '';
-  for (const f of d.fields || []) body += `${body ? '\n\n' : ''}**${f.name}**\n${f.value}`;
+  // inline fields become one compact stat strip; block fields get the house style (__**Label**__ then > lines)
+  const fields = d.fields || [];
+  let strip = [];
+  const flush = () => { if (strip.length) { body += `${body ? '\n\n' : ''}${strip.join('  ·  ')}`; strip = []; } };
+  for (const f of fields) {
+    const v = String(f.value ?? '');
+    if (f.inline && !v.includes('\n') && v.length <= 60) { strip.push(`**${f.name}** ${v}`); continue; }
+    flush();
+    const quoted = v.split('\n').map((l) => (l.startsWith('>') || l.startsWith('-#') || !l.trim() ? l : `> ${l}`)).join('\n');
+    body += `${body ? '\n\n' : ''}__**${f.name}**__\n${quoted}`;
+  }
+  flush();
   const top = head || body || '​';
   const rest = head ? body : '';
   if (d.thumbnail?.url) {

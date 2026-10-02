@@ -266,3 +266,9 @@ SILV → Robux, no staff judgement needed. 100 SILV = 1,000 Robux (`ROBUX_PER_SI
 
 ## SILV store purchases (commands/store.js)
 Spells and premium gear (`PREMIUM_GEAR`: 4 Mythic at 60 SILV — Heaven's Edge, Aegis of the Seraph, Eye of the Abyss, Greatsword of Ruin — and 7 Legendary at 25 — Bloodthorn Blade, Dragonhide, Crown of Thorns, Twin Shadow Daggers, Gatebreaker Mail, Castle Lord's Signet, Colossus Heart; ids must match Sentinel's `cogs/gear.py GEAR`) are bought with a guarded `atomicInv.debit` of `Silv token`; a failed Sentinel delivery credits the SILV back automatically (spells too — no more "contact an admin"). Never use the Unicode-15 🪽 in component emojis (it broke cards) — 🕊 instead.
+
+## Casino card system (utils/casino.js)
+- `gameResult(opts)` — every finished game: `# headline`, `>` lines, WIN/LOSE accent, footer; `opts.replay = { game, bet, extra, picks }` adds **Again · Double · Half · Casino floor** (and a pick row: heads/tails, red/black/green, rock/paper/scissors). `attachReplay(msg, uid, opts)` wires it (owner only, `client.runAs` → the real command, same checks/atomic bets); after 2 min it edits to `opts.final()` (games with their own board) or the card without buttons.
+- Rebuilt on `takeBet`/`settle` (atomic, never overwrites balances): Blackjack (buttons Hit/Stand/Double down, no reactions; Insurance Slip debited atomically on a bust), Mines (board inside the card; left alone = cash out, or refund before the first dig), Minesweeper (12 tiles/4 mines, button board; refund ONLY before the first pick — the old `cancel` refunded mid-board, an exploit).
+- Coinflip, dice, rps, roulette, slots, plinko keep their money code but end on `gameResult` with frame animations; crash/tower/cups/wheel/over-under got the replay row.
+- `utils/cv2patch.js` (every other embed): SHOUTED titles become Title Case, inline fields collapse into one `**Name** value · …` strip, block fields render as `__**Name**__` + `>` lines.
