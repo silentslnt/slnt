@@ -2,7 +2,7 @@
 // of the doors. Cash out whenever you like. Multiplier after n floors =
 // 0.94 / P(surviving n floors) — a 6% house edge at every floor.
 const { shuffle } = require('../utils/shuffle');
-const { card, button, row, takeBet, settle, WIN, LOSE, BLACK, ButtonStyle } = require('../utils/casino');
+const { card, button, row, takeBet, settle, WIN, LOSE, BLACK, ButtonStyle, replayRow, attachReplay } = require('../utils/casino');
 const { casinoPayout } = require('../utils/houseEdge');
 
 const FLOORS = 8;
@@ -70,15 +70,17 @@ module.exports = {
       const m = multiplier(mode, floor);
       const payout = cashed ? casinoPayout(bet, bet * m, userData) : 0;
       const balance = await settle(ctx, { bet, payout, game: 'tower', detail: `${floor} floors` });
-      const result = card({
+      const result = (r) => card({
+        rows: r ? [replayRow('tower', bet)] : [],
         title: cashed ? (floor >= FLOORS ? '🏆 Top of the tower!' : '🗼 Cashed out') : '💥 Trap!',
         body: cashed
           ? `> Climbed **${floor}** floor${floor === 1 ? '' : 's'} — **×${m}** → **+${(payout - bet).toLocaleString()}** coins.`
           : `> Floor ${floor + 1} was a trap. You lost **${bet.toLocaleString()}** coins.${history.length ? `\n> Made it past ${history.length} floor${history.length === 1 ? '' : 's'}.` : ''}`,
         accent: cashed ? WIN : LOSE, footer: `${guild} · balance ${balance.toLocaleString()}`,
       });
-      if (i) await i.update(result).catch(() => {});
-      else await msg.edit(result).catch(() => {});
+      if (i) await i.update(result(true)).catch(() => {});
+      else await msg.edit(result(true)).catch(() => {});
+      attachReplay(msg, uid, { replay: { game: 'tower', bet }, final: () => result(false) });
     };
 
     collector.on('collect', async (i) => {

@@ -1,7 +1,7 @@
 // commands/crash.js — the multiplier climbs until it crashes; cash out before it does.
 // Crash point: P(reaching x) = 0.94 / x, so every cash-out target returns 94% on
 // average (6% of rounds crash instantly at 1.00×). The server times everything.
-const { card, button, row, takeBet, settle, WIN, LOSE, BLACK, ButtonStyle } = require('../utils/casino');
+const { card, button, row, takeBet, settle, WIN, LOSE, BLACK, ButtonStyle, replayRow, attachReplay } = require('../utils/casino');
 const { casinoPayout, casinoLuck } = require('../utils/houseEdge');
 
 const TICK_MS = 1500;
@@ -58,15 +58,17 @@ module.exports = {
       active.delete(uid);
       const payout = cashed ? casinoPayout(bet, bet * at, userData) : 0;
       const balance = await settle(ctx, { bet, payout, game: 'crash', detail: cashed ? `cashed at ×${at}` : `crashed at ×${crashAt}` });
-      const view = card({
+      const view = (r) => card({
+        rows: r ? [replayRow('crash', bet)] : [],
         title: cashed ? '🚀 Cashed out!' : '💥 Crashed',
         body: cashed
           ? `> You cashed out at **×${at.toFixed(2)}** — **+${(payout - bet).toLocaleString()}** coins.\n> It would have crashed at ×${crashAt.toFixed(2)}.`
           : `> It crashed at **×${crashAt.toFixed(2)}** — you lost **${bet.toLocaleString()}** coins.`,
         accent: cashed ? WIN : LOSE, footer: `${guild} · balance ${balance.toLocaleString()}`,
       });
-      if (i) await i.update(view).catch(() => {});
-      else await msg.edit(view).catch(() => {});
+      if (i) await i.update(view(true)).catch(() => {});
+      else await msg.edit(view(true)).catch(() => {});
+      attachReplay(msg, uid, { replay: { game: 'crash', bet }, final: () => view(false) });
     };
 
     const collector = msg.createMessageComponentCollector({ time: 120_000 });

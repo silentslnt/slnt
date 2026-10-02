@@ -1,6 +1,6 @@
 // commands/wheel.js — spin the wheel of fortune. 50 segments; the multipliers
 // below average 0.91× per spin (a 9% house edge).
-const { card, takeBet, settle, WIN, LOSE } = require('../utils/casino');
+const { card, takeBet, settle, WIN, LOSE, replayRow, attachReplay } = require('../utils/casino');
 const { casinoPayout } = require('../utils/houseEdge');
 
 // [multiplier, segments, emoji]
@@ -33,10 +33,13 @@ module.exports = {
     const payout = mult > 0 ? casinoPayout(bet, bet * mult, userData) : 0;
     const balance = await settle(ctx, { bet, payout, game: 'wheel', detail: `landed ×${mult}` });
     await sleep(650);
-    await msg.edit(card({
+    const final = (r) => card({
+      rows: r ? [replayRow('wheel', bet)] : [],
       title: mult >= 1 ? '🎡 Winner' : '🎡 Wheel',
       body: `# ${strip(land)}\n> ${'　'.repeat(2)}🔺\n> Landed on **×${mult}** — ${payout - bet >= 0 ? `**+${(payout - bet).toLocaleString()}**` : `**−${(bet - payout).toLocaleString()}**`} coins.`,
       accent: payout > bet ? WIN : LOSE, footer: `${guild} · balance ${balance.toLocaleString()}\n${legend}`,
-    })).catch(() => {});
+    });
+    await msg.edit(final(true)).catch(() => {});
+    attachReplay(msg, message.author.id, { replay: { game: 'wheel', bet }, final: () => final(false) });
   },
 };

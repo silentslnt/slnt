@@ -1,6 +1,6 @@
 // commands/cups.js — the shell game. The coin is under one of three cups;
 // find it and win 2.8× (a 1-in-3 shot — 93% return).
-const { card, button, row, takeBet, settle, WIN, LOSE, BLACK, ButtonStyle } = require('../utils/casino');
+const { card, button, row, takeBet, settle, WIN, LOSE, BLACK, ButtonStyle, replayRow, attachReplay } = require('../utils/casino');
 const { casinoPayout } = require('../utils/houseEdge');
 
 const PAYOUT = 2.8;
@@ -46,13 +46,15 @@ module.exports = {
       const payout = won ? casinoPayout(bet, bet * PAYOUT, userData) : 0;
       const balance = await settle(ctx, { bet, payout, game: 'cups', detail: 'found the coin' });
       const reveal = [0, 1, 2].map((n) => (n === coin ? '🪙' : '🥤')).join(' ');
-      const view = card({
+      const view = (r) => card({
+        rows: r ? [replayRow('cups', bet)] : [],
         title: won ? '🪙 Found it!' : '🥤 Empty',
         body: `# ${reveal}\n> ${pick === null ? 'Too slow — ' : ''}${won ? `**+${(payout - bet).toLocaleString()}** coins.` : `The coin was under cup ${coin + 1}. Lost **${bet.toLocaleString()}**.`}`,
         accent: won ? WIN : LOSE, footer: `${guild} · balance ${balance.toLocaleString()}`,
       });
-      if (i) await i.update(view).catch(() => {});
-      else await msg.edit(view).catch(() => {});
+      if (i) await i.update(view(true)).catch(() => {});
+      else await msg.edit(view(true)).catch(() => {});
+      attachReplay(msg, uid, { replay: { game: 'cups', bet }, final: () => view(false) });
     };
     collector.on('collect', async (i) => {
       if (i.user.id !== uid) return i.reply({ content: 'Start your own with `.cups <bet>`.', ephemeral: true });
