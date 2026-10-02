@@ -249,3 +249,14 @@ SILV → Robux, no staff judgement needed. 100 SILV = 1,000 Robux (`ROBUX_PER_SI
   Never `$set` a whole `inventory` again, and never copy it (`{...inv}` loses the snapshot and logs a warning).
 - Other players' balances are never written as absolute numbers: trade, duel, gift, silvexchange, convert, cipher/guess rewards use
   `utils/atomicInv` (`debit` = guarded `$gte` + `$inc`, `credit` = `$inc`).
+
+
+## Owner panel, game floor, wallet
+- **`.shiroset`** (aka sset/econpanel/shiropanel, trusted list / OWNER_ID): one card — Home (house + log status), **House** (ledger by game, taxes, **Adjust balance…** via `houseBank.adjustHouse`, Reset), **Players** (UserSelect → wallet; Give/Take coins and SILV via `atomicInv` credit/debit, every change logged), **Logs** (set the economy log channel by ChannelSelect, shows the live-wins channel, last 10 actions). `.house` still works.
+- **`client.runAs(interaction, name, args)`** (index.js `runCommandAs`): runs any command as the clicker with the normal context (lock, atomic saver) — how cards launch games without typing.
+- **`.play`** (aka casino/games/hub): the casino floor — game select → bet buttons (100 · 1k · 5k · 10k · 50k · All in · Custom…) → side buttons where the game has one (coinflip, roulette, rps) → Play runs the game via `runAs`.
+- **`.bal` wallet row** on your own card: Play · Convert · Payout · Daily (each via `runAs`); only the owner can press them.
+- **SILV → coins** in `.convert`: 1 SILV = 100,000 gross, **50% tax** to the house (`houseBank.creditHouse(tax, 'silv_exchange')`, shown under Taxes).
+- **No difficulty picking**: Mines is one board (6 mines, 6% edge; the card no longer counts revealed mines as safe tiles after a cash-out), Plinko always the high table, Minesweeper always 12 tiles / 4 mines.
+- **Live pulls**: `winAnnouncer.announcePull(client, {userId, prize, source})` posts to the live-wins channel (`/setup wins`) — Mystery Box SILV. Sentinel posts its own pulls (fishing / dungeon / S-Gate SILV, mythic gear) in its main channel.
+- **Logs**: every SILV claimed from Sentinel (`claimPendingSilvTokens`, with the source), Mystery Box SILV, monthly daily SILV and every `.shiroset` action go through `logAdminAction` → the economy log channel.
