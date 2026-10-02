@@ -12,12 +12,12 @@ const KEY = 'house_bank';
 const roundSchema = new mongoose.Schema({
   userId: { type: String, index: true }, game: String, bet: Number, payout: Number, at: { type: Date, default: Date.now },
 });
-const GameRound = mongoose.models.GameRound || mongoose.model('GameRound', roundSchema);
+const CasinoRound = mongoose.models.CasinoRound || mongoose.model('CasinoRound', roundSchema);
 const HISTORY_KEEP = 200;
 
 async function logPlayerRound(userId, game, bet, payout) {
   await CasinoRound.create({ userId, game, bet, payout });
-  const old = await GameRound.find({ userId }).sort({ at: -1 }).skip(HISTORY_KEEP).select('_id').lean();
+  const old = await CasinoRound.find({ userId }).sort({ at: -1 }).skip(HISTORY_KEEP).select('_id').lean();
   if (old.length) await CasinoRound.deleteMany({ _id: { $in: old.map((o) => o._id) } });
 }
 
