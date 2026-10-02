@@ -27,7 +27,7 @@ let vouchConfig = loadVouchConfig();
 async function saveVouchConfig(c) {
   vouchConfig = c;
   winAnnouncer.updateCfg(c);
-  try { await fs.promises.writeFile(VOUCH_CONFIG_FILE, JSON.stringify(c, null, 2)); } catch(e) {}
+  await require('./utils/settings').set('vouch', c);   // MongoDB — the disk file doesn't survive a redeploy
 }
 
 // ── Economy/moderation log channel (auto-posts every logAdminAction call) ──
@@ -126,7 +126,7 @@ async function runCommandAs(interaction, name, args = [], opts = {}) {
   if (!command) return false;
   const { Collection, MessageFlags: MF } = require('discord.js');
   // opts.private: everything the command posts goes to the clicker only (wallet buttons — no channel flood)
-  let channel = interaction.channel;
+  let channel = opts.channel || interaction.channel;   // opts.channel: run it as if typed in another channel (panel → game channel)
   if (opts.private && channel) {
     channel = Object.create(interaction.channel);
     channel.send = (x) => interaction.followUp(typeof x === 'string'
@@ -540,7 +540,7 @@ function loadPrefix() {
 }
 async function savePrefix(p) {
   currentPrefix = p;
-  try { await fs.promises.writeFile(PREFIX_FILE, JSON.stringify({ prefix: p }, null, 2)); } catch(e) {}
+  await require('./utils/settings').set('prefix', p);   // MongoDB — the disk file doesn't survive a redeploy
 }
 
 // Global cooldowns
@@ -1120,6 +1120,13 @@ async function startBot() {
 
     await mongoose.connect(process.env.MONGO_URI);
     console.log('✅ Connected to MongoDB');
+
+    // Settings live in MongoDB (Railway's disk is wiped on every deploy); the old files only seed it once.
+    const settings = require('./utils/settings');
+    await settings.load({ vouch: loadVouchConfig(), prefix: loadPrefix(), gameChannelId: require('./utils/gameChannel').fileValue });
+    vouchConfig = settings.get('vouch', vouchConfig) || {};
+    winAnnouncer.updateCfg(vouchConfig);
+    currentPrefix = settings.get('prefix', currentPrefix) || '.';
 
     await client.login(process.env.DISCORD_TOKEN);
     console.log('🔄 Bot login initiated...');

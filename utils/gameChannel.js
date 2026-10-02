@@ -20,19 +20,17 @@ function load() {
   return DEFAULT_CHANNEL_ID;
 }
 
-let gameChannelId = load();
+// The real store is MongoDB (utils/settings.js) — the disk file is wiped by every Railway redeploy and is only
+// read once as a fallback for what was set before the move.
+const settings = require('./settings');
+const fileValue = load();
 
 function getGameChannelId() {
-  return gameChannelId;
+  return settings.get('gameChannelId', fileValue);
 }
 
 function setGameChannelId(id) {
-  gameChannelId = id;
-  try {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify({ gameChannelId: id }, null, 2));
-  } catch (err) {
-    console.error('[gameChannel] failed to persist channel change:', err.message);
-  }
+  return settings.set('gameChannelId', id);
 }
 
-module.exports = { getGameChannelId, setGameChannelId };
+module.exports = { getGameChannelId, setGameChannelId, fileValue };

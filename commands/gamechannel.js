@@ -4,8 +4,10 @@ const { getGameChannelId, setGameChannelId } = require('../utils/gameChannel');
 
 module.exports = {
   name: 'gamechannel',
+  aliases: ['game', 'gamech', 'gc'],
   description: 'View or set the shared minigame channel (hangman, word scramble, guess). Admin only.',
   async execute({ message, args }) {
+    if ((args[0] || '').toLowerCase() === 'channel') args = args.slice(1);   // `.game channel #x` works too
     const channel = message.mentions.channels.first()
       || (args[0] && message.guild.channels.cache.get(args[0].replace(/[<#>]/g, '')));
 
@@ -28,7 +30,7 @@ module.exports = {
       });
     }
 
-    setGameChannelId(channel.id);
+    await setGameChannelId(channel.id);
     return message.channel.send({
       embeds: [new EmbedBuilder()
         .setColor(0x000000)

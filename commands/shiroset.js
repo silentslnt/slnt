@@ -3,6 +3,7 @@
 //   Home     — house balance at a glance, log channels
 //   House    — the game ledger, adjust (+/−) or reset it
 //   Players  — pick anyone: coins / SILV give or take, look at their wallet
+//   Games    — set the game channel; start/stop word scramble, hangman and guess the number
 //   Logs     — set the economy log channel and the live-wins channel; recent actions
 const {
   ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags,
@@ -26,12 +27,13 @@ module.exports = {
     const guildName = message.guild?.name || 'Shiro';
     const state = { page: 'home', target: null };
     const winsCfg = () => {
-      try { return JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'vouch-config.json'), 'utf8')); } catch { return {}; }
+      return require('../utils/settings').get('vouch', {}) || {};
     };
     const nav = () => row(
       button('ss_home', 'Home', state.page === 'home' ? ButtonStyle.Primary : ButtonStyle.Secondary),
       button('ss_house', 'House', state.page === 'house' ? ButtonStyle.Primary : ButtonStyle.Secondary),
       button('ss_players', 'Players', state.page === 'players' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      button('ss_games', 'Games', state.page === 'games' ? ButtonStyle.Primary : ButtonStyle.Secondary),
       button('ss_logs', 'Logs', state.page === 'logs' ? ButtonStyle.Primary : ButtonStyle.Secondary),
     );
 
@@ -67,6 +69,23 @@ module.exports = {
           body += `\n-# Pay from house moves coins out of the house balance (now ${fmt(b.balance)}) into their wallet — works on yourself too.`;
         }
         return card({ title: '👥 Players', body, rows, footer: `${guildName} · every change is logged` });
+      }
+      if (state.page === 'games') {
+        const gc = require('../utils/gameChannel').getGameChannelId();
+        return card({
+          title: '🎮 Chat games',
+          body: `> Game channel: ${gc ? `<#${gc}>` : '**not set**'} — word scramble, hangman and guess the number run there.\n`
+            + '> Saved in the database now, so it no longer resets when the bot updates.\n\n'
+            + '-# Start puts the game in the game channel. You pick the word for scramble and hangman.',
+          rows: [nav(),
+            new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('ss_gamech')
+              .setPlaceholder('Set the game channel…').addChannelTypes(ChannelType.GuildText)),
+            row(button('ss_g_ws', 'Start word scramble', ButtonStyle.Success), button('ss_g_hm', 'Start hangman', ButtonStyle.Success),
+              button('ss_g_gn', 'Start guess the number', ButtonStyle.Success)),
+            row(button('ss_g_wsx', 'Stop scramble', ButtonStyle.Danger), button('ss_g_hmx', 'Stop hangman', ButtonStyle.Danger),
+              button('ss_g_gnx', 'Stop guess', ButtonStyle.Danger))],
+          footer: `${guildName} · every change is logged`,
+        });
       }
       if (state.page === 'logs') {
         const logs = AdminLog ? await AdminLog.find({}).sort({ timestamp: -1 }).limit(10).lean() : [];
@@ -111,7 +130,35 @@ module.exports = {
       if (i.user.id !== message.author.id) return i.reply({ content: 'Only whoever opened this panel can use it.', flags: MessageFlags.Ephemeral });
       const id = i.customId;
       try {
-        if (['ss_home', 'ss_house', 'ss_players', 'ss_logs'].includes(id)) {
+        if (id === 'ss_gamech') {
+          await require('../utils/gameChannel').setGameChannelId(i.values[0]);
+          await logAdminAction(i.user.id, i.user.username, 'shiroset', 'Set the game channel', null, null, `#${i.values[0]}`);
+          return i.update(await render());
+        }
+        if (id.startsWith('ss_g_')) {
+          const gc = require('../utils/gameChannel').getGameChannelId();
+          const chan = gc && await message.client.channels.fetch(gc).catch(() => null);
+          if (!chan) return i.reply({ content: 'Set the game channel first (the menu above).', flags: MessageFlags.Ephemeral });
+          const what = { ws: ['ws', 'start'], hm: ['hangman', 'start'], gn: ['guess', 'start'],
+            wsx: ['ws', 'cancel'], hmx: ['hangman', 'cancel'], gnx: ['guess', 'stop'] }[id.slice(5)];
+          let extra = [];
+          let target = i;
+          if (id === 'ss_g_ws' || id === 'ss_g_hm') {
+            const mid = `ssw_${i.id}`;
+            await i.showModal(new ModalBuilder().setCustomId(mid).setTitle(id === 'ss_g_ws' ? 'Word scramble' : 'Hangman').addComponents(
+              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('w').setLabel('The word (or phrase)')
+                .setStyle(TextInputStyle.Short).setRequired(true).setMinLength(3).setMaxLength(40))));
+            const sub = await i.awaitModalSubmit({ time: 90_000, filter: (m) => m.customId === mid && m.user.id === i.user.id }).catch(() => null);
+            if (!sub) return;
+            extra = sub.fields.getTextInputValue('w').trim().split(/\s+/);
+            target = sub;
+          }
+          await target.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+          await message.client.runAs(target, what[0], [what[1], ...extra], { channel: chan });
+          await logAdminAction(i.user.id, i.user.username, 'shiroset', `Chat game: ${what[0]} ${what[1]}`, null, null, `#${gc}`);
+          return target.editReply({ content: `Done — check <#${gc}>.` }).catch(() => {});
+        }
+        if (['ss_home', 'ss_house', 'ss_players', 'ss_games', 'ss_logs'].includes(id)) {
           state.page = id.slice(3);
           return i.update(await render());
         }
