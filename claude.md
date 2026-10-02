@@ -194,7 +194,7 @@ Railway auto-redeploys in ~60-90 seconds.
 - Delete stray pakage.json typo file from repo
 ## Who sells what (rule: one place per currency)
 - **Shiro `.sh`** — Shiro's own economy: essences, bundles, cosmetics, utility, admin items. Button hub; each section replaces the hub in place with a Back button.
-- **Shiro `.store`** — SILV-priced items for Sentinel's RPG: Spells, premium Gear (+ Revive Token). Same in-place hub. Points Items (Aether trinkets) were moved OUT to Sentinel's `,shop` → Trinkets; `.store items` points there.
+- **Shiro `.store`** — SILV-priced items for Sentinel's RPG: Spells, premium Gear (+ Revive Token, Fate Shard 20 SILV — raw `fate_shard`, used with Sentinel `,fate` to reroll mutation / Dragon kind / halo / kagune at birth odds; each raw item has a `use` hint shown on delivery). Same in-place hub. Points Items (Aether trinkets) were moved OUT to Sentinel's `,shop` → Trinkets; `.store items` points there.
 - **Shiro `.artifact`** — the weekend Artifact Shop (Fri 18:00 → Sun 23:59 UTC, random stock). Sentinel's `,shop` → Premium and `,guide` mention it.
 - **Shiro `.convert`** — coins → SILV (100k, 5/day) and SILV → Aether (10k/SILV). The only coins→Aether path: `.sh aether` packs were removed (they were a second, inconsistent rate).
 - **Sentinel `,shop`** — everything priced in Aether (gear, potions, bait, lures, rods, trinkets) + a Premium page that lists the SILV items and says to buy them with `shiro store`.

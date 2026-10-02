@@ -112,7 +112,8 @@ const PREMIUM_GEAR = {
   lords_signet:     { name: "Castle Lord's Signet", emoji: '💍', silvCost: 25, stats: '+6 PWR · +6 DEF · +4 LCK (accessory, Legendary)' },
   colossus_heart:   { name: 'Colossus Heart',      emoji: '💗', silvCost: 25, stats: '+25 Slayer · +10 Hunter · +4 PWR · −3 SPD (accessory, Legendary)' },
   // Not gear — delivered raw (no gear_ prefix). Sentinel's ,race revive restores a lives-out wipe within 14 days.
-  revive_token:     { name: 'Revive Token',        emoji: '✨', silvCost: 100, stats: 'Lost every life and got wiped? Buy this, then `,race revive` in Sentinel within 14 days — you keep your race, this brings back everything else', raw: true },
+  fate_shard:       { name: 'Fate Shard',          emoji: '🔮', silvCost: 20, stats: 'Reroll one birth roll in Sentinel (`,fate`): mutation, Dragon kind, Angel halo or Ghoul kagune — same odds as birth, you never pick', raw: true, use: '`,fate`' },
+  revive_token:     { name: 'Revive Token',        emoji: '✨', silvCost: 100, stats: 'Lost every life and got wiped? Buy this, then `,race revive` in Sentinel within 14 days — you keep your race, this brings back everything else', raw: true, use: '`,race revive`' },
 };
 
 async function showGear({ message, interaction, onBack, getUserData, saveSpecificUserData, logAdminAction }) {
@@ -143,7 +144,7 @@ async function showGear({ message, interaction, onBack, getUserData, saveSpecifi
         return { ok: false, message: `SILV refunded — couldn't reach Sentinel right now. Try again shortly.` };
       }
       await logAdminAction(interaction.user.id, interaction.user.username, 'store', 'Gear Purchase', null, null, `${g.name} for ${g.silvCost} SILV`);
-      return { ok: true, message: g.raw ? `**${g.name}** delivered — use it with Sentinel's \`,race revive\`.` : `**${g.name}** delivered — equip it with Sentinel's \`,inventory\`.` };
+      return { ok: true, message: g.raw ? `**${g.name}** delivered — use it with Sentinel's ${g.use || '`,inventory`'}.` : `**${g.name}** delivered — equip it with Sentinel's \`,inventory\`.` };
     },
   });
 }
