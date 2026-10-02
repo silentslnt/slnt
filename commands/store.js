@@ -78,21 +78,17 @@ async function showSpells({ message, interaction, onBack, getUserData, saveSpeci
     onBuy: async (interaction, itemId) => {
       const s = SPELLS[itemId];
       if (!s) return { ok: false, message: 'Unknown spell.' };
-      const userData = await getUserData(interaction.user.id);
-      userData.inventory = userData.inventory || {};
-      const silv = userData.inventory[SILV_KEY] || 0;
-      if (silv < s.silvCost) {
-        return { ok: false, message: `Not enough SILV. Need **${s.silvCost}**, you have **${silv}**.` };
+      const { debit, credit } = require('../utils/atomicInv');
+      if (!(await debit(interaction.user.id, { items: { [SILV_KEY]: s.silvCost } }))) {
+        const have = (await getUserData(interaction.user.id)).inventory?.[SILV_KEY] || 0;
+        return { ok: false, message: `Not enough SILV. Need **${s.silvCost}**, you have **${have}**.` };
       }
-      userData.inventory[SILV_KEY] = silv - s.silvCost;
-      userData.stats = userData.stats || {};
-      userData.stats.silvSpent = (userData.stats.silvSpent || 0) + s.silvCost;
-      await saveSpecificUserData(interaction.user.id, { inventory: userData.inventory, stats: userData.stats });
-      await trackStat(userData, 'silvSpent', 0, { saveUserData: (d) => saveSpecificUserData(interaction.user.id, d) });
+      await credit(interaction.user.id, { stats: { silvSpent: s.silvCost } });
       const delivered = await grantItem(guild.id, interaction.user.id, itemId, 1);
-      await logAdminAction(interaction.user.id, interaction.user.username, 'store', 'Spell Purchase', null, null, `${s.name} for ${s.silvCost} SILV${delivered ? '' : ' (DELIVERY FAILED)'}`);
+      await logAdminAction(interaction.user.id, interaction.user.username, 'store', 'Spell Purchase', null, null, `${s.name} for ${s.silvCost} SILV${delivered ? '' : ' (DELIVERY FAILED — refunded)'}`);
       if (!delivered) {
-        return { ok: true, message: `**${s.silvCost}** SILV was spent, but delivery to Sentinel failed (bridge unreachable). Contact an admin for a manual grant or refund — don't re-buy yet.` };
+        await credit(interaction.user.id, { items: { [SILV_KEY]: s.silvCost }, stats: { silvSpent: -s.silvCost } }); // never eat a payment
+        return { ok: false, message: 'SILV refunded — couldn\'t reach Sentinel right now. Try again shortly.' };
       }
       return { ok: true, message: `**${s.name}** delivered to your SILV inventory. Cast with \`,cast ${itemId} @member\`.` };
     },
@@ -105,11 +101,16 @@ async function showSpells({ message, interaction, onBack, getUserData, saveSpeci
 // only World Boss drops, so SILV is the one paid shortcut to them.
 const PREMIUM_GEAR = {
   heavens_edge:     { name: "Heaven's Edge",       emoji: '🌟', silvCost: 60, stats: '+22 PWR · +5 DEF (weapon, Mythic)' },
-  seraph_aegis:     { name: 'Aegis of the Seraph', emoji: '🪽', silvCost: 60, stats: '+20 DEF · +60 HP (armor, Mythic)' },
+  seraph_aegis:     { name: 'Aegis of the Seraph', emoji: '🕊', silvCost: 60, stats: '+20 DEF · +60 HP (armor, Mythic)' },
+  ruin_greatsword:  { name: 'Greatsword of Ruin',  emoji: '⚔', silvCost: 60, stats: '+26 PWR · +20 HP · −4 SPD (weapon, Mythic, a sword)' },
   eye_of_the_abyss: { name: 'Eye of the Abyss',    emoji: '👁', silvCost: 60, stats: '+12 LCK · +5 SPD (accessory, Mythic)' },
   bloodthorn_blade: { name: 'Bloodthorn Blade',    emoji: '🩸', silvCost: 25, stats: '+16 PWR · +3 LCK · −15 HP (weapon, Legendary)' },
   dragonhide:       { name: 'Dragonhide Mantle',   emoji: '🔥', silvCost: 25, stats: '+16 DEF · +40 HP · −3 SPD (armor, Legendary)' },
   crown_of_thorns:  { name: 'Crown of Thorns',     emoji: '👑', silvCost: 25, stats: '+8 PWR · +5 LCK · −6 DEF (accessory, Legendary)' },
+  monarchs_daggers: { name: 'Twin Shadow Daggers', emoji: '🌘', silvCost: 25, stats: '+15 PWR · +7 SPD · −4 DEF (weapon, Legendary)' },
+  gatebreaker_mail: { name: 'Gatebreaker Mail',    emoji: '🌀', silvCost: 25, stats: '+17 DEF · +35 HP · +3 PWR · −2 SPD (armor, Legendary)' },
+  lords_signet:     { name: "Castle Lord's Signet", emoji: '💍', silvCost: 25, stats: '+6 PWR · +6 DEF · +4 LCK (accessory, Legendary)' },
+  colossus_heart:   { name: 'Colossus Heart',      emoji: '💗', silvCost: 25, stats: '+25 Slayer · +10 Hunter · +4 PWR · −3 SPD (accessory, Legendary)' },
   // Not gear — delivered raw (no gear_ prefix). Sentinel's ,race revive restores a lives-out wipe within 14 days.
   revive_token:     { name: 'Revive Token',        emoji: '✨', silvCost: 100, stats: 'Lost every life and got wiped? Buy this, then `,race revive` in Sentinel within 14 days — you keep your race, this brings back everything else', raw: true },
 };
@@ -129,19 +130,16 @@ async function showGear({ message, interaction, onBack, getUserData, saveSpecifi
     onBuy: async (interaction, itemId) => {
       const g = PREMIUM_GEAR[itemId];
       if (!g) return { ok: false, message: 'Unknown item.' };
-      const userData = await getUserData(interaction.user.id);
-      userData.inventory = userData.inventory || {};
-      const silv = userData.inventory[SILV_KEY] || 0;
-      if (silv < g.silvCost) return { ok: false, message: `Not enough SILV. Need **${g.silvCost}**, you have **${silv}**.` };
-      userData.inventory[SILV_KEY] = silv - g.silvCost;
-      userData.stats = userData.stats || {};
-      userData.stats.silvSpent = (userData.stats.silvSpent || 0) + g.silvCost;
-      await saveSpecificUserData(interaction.user.id, { inventory: userData.inventory, stats: userData.stats });
+      // guarded + atomic: the SILV only leaves if it's there right now (two fast clicks can't double-spend)
+      const { debit, credit } = require('../utils/atomicInv');
+      if (!(await debit(interaction.user.id, { items: { [SILV_KEY]: g.silvCost } }))) {
+        const have = (await getUserData(interaction.user.id)).inventory?.[SILV_KEY] || 0;
+        return { ok: false, message: `Not enough SILV. Need **${g.silvCost}**, you have **${have}**.` };
+      }
+      await credit(interaction.user.id, { stats: { silvSpent: g.silvCost } });
       const delivered = await grantItem(guild.id, interaction.user.id, g.raw ? itemId : `gear_${itemId}`, 1);
       if (!delivered) {
-        userData.inventory[SILV_KEY] = (userData.inventory[SILV_KEY] || 0) + g.silvCost; // refund, never eat a payment
-        userData.stats.silvSpent -= g.silvCost;
-        await saveSpecificUserData(interaction.user.id, { inventory: userData.inventory, stats: userData.stats });
+        await credit(interaction.user.id, { items: { [SILV_KEY]: g.silvCost }, stats: { silvSpent: -g.silvCost } }); // refund, never eat a payment
         return { ok: false, message: `SILV refunded — couldn't reach Sentinel right now. Try again shortly.` };
       }
       await logAdminAction(interaction.user.id, interaction.user.username, 'store', 'Gear Purchase', null, null, `${g.name} for ${g.silvCost} SILV`);

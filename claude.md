@@ -263,3 +263,6 @@ SILV → Robux, no staff judgement needed. 100 SILV = 1,000 Robux (`ROBUX_PER_SI
 
 ## Trade window (commands/trade.js)
 `.trade @user` → Accept/Decline request (60s) → ONE shared CV2 window both players drive: **Add items** (ephemeral pick from your own bag → modal for how many, 0 removes), **Coins…** (modal, checked against your balance), Clear my offer, Confirm / Unconfirm, Cancel. Any change clears both confirmations. Both confirm → status locks synchronously, then `atomicInv.debit` side A, debit side B (on failure A is credited back), credit both (+`stats.trades`), logged via `logAdminAction`. One open trade per player (`activeTrades`, seats reserved at request time), 5 min idle closes it, `.trade cancel` closes a stuck one. No tax.
+
+## SILV store purchases (commands/store.js)
+Spells and premium gear (`PREMIUM_GEAR`: 4 Mythic at 60 SILV — Heaven's Edge, Aegis of the Seraph, Eye of the Abyss, Greatsword of Ruin — and 7 Legendary at 25 — Bloodthorn Blade, Dragonhide, Crown of Thorns, Twin Shadow Daggers, Gatebreaker Mail, Castle Lord's Signet, Colossus Heart; ids must match Sentinel's `cogs/gear.py GEAR`) are bought with a guarded `atomicInv.debit` of `Silv token`; a failed Sentinel delivery credits the SILV back automatically (spells too — no more "contact an admin"). Never use the Unicode-15 🪽 in component emojis (it broke cards) — 🕊 instead.
