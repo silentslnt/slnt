@@ -92,7 +92,7 @@ const SECTIONS = {
 
 module.exports = {
   name: 'help',
-  aliases: ['h', 'commands', 'cmds'],
+  aliases: ['h', 'cmds'],
   adminOnly: false,
   description: 'View all bot commands. `.help [section]`',
 
