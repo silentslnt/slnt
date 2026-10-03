@@ -36,11 +36,11 @@ module.exports = {
 
   // ── PRESTIGE RANKS ─────────────────────────────────────────
   PRESTIGE_RANKS: [
-    { name: 'Wanderer',   min: 0,         bonus: 0,    passive: 0  },
-    { name: 'Pilgrim',    min: 5_000,     bonus: 0.05, passive: 0  },
-    { name: 'Seeker',     min: 25_000,    bonus: 0.10, passive: 0  },
-    { name: 'Oracle',     min: 100_000,   bonus: 0.15, passive: 10 },
-    { name: 'Celestial',  min: 500_000,   bonus: 0.20, passive: 20 },
+    { name: 'Initiate',   min: 0,         bonus: 0,    passive: 0  },
+    { name: 'Adept',      min: 5_000,     bonus: 0.05, passive: 0  },
+    { name: 'Oracle',     min: 25_000,    bonus: 0.10, passive: 0  },
+    { name: 'Celestial',  min: 100_000,   bonus: 0.15, passive: 10 },
+    { name: 'Exalted',    min: 500_000,   bonus: 0.20, passive: 20 },
     { name: 'Ascendant',  min: 2_000_000, bonus: 0.25, passive: 30 },
   ],
 
