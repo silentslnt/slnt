@@ -39,12 +39,18 @@ function setGameChannelId(id) {
 const ALWAYS_OK = new Set(['help', 'redeem', 'claim', 'shiroset', 'gamechannel', 'setchannel', 'commands', 'admin']);
 function getCommandChannels() { return settings.get('commandChannelIds', []) || []; }
 async function setCommandChannels(ids) { return settings.set('commandChannelIds', [...new Set(ids)].slice(0, 25)); }
+// The chat-game channel is for the chat games only (direct: "i have it set to only games like word scramble in this
+// channel — why can they do bal and coins"): .bal/.coins etc. answer only in the command channels.
+const CHAT_GAME_CMDS = new Set(['wordscramble', 'hangman', 'guess', 'guessthenumber']);
 function commandAllowed(channel, member, name) {
   const list = getCommandChannels();
-  if (!list.length || ALWAYS_OK.has(name)) return true;
+  if (ALWAYS_OK.has(name)) return true;
   if (member?.permissions?.has?.('ManageGuild')) return true;
   const ids = [channel.id, channel.parentId].filter(Boolean);
-  return ids.some((id) => list.includes(id) || id === getGameChannelId());
+  const inGameChannel = ids.includes(getGameChannelId());
+  if (inGameChannel && !list.some((id) => ids.includes(id))) return CHAT_GAME_CMDS.has(name);
+  if (!list.length) return true;
+  return ids.some((id) => list.includes(id));
 }
 
 module.exports = { getGameChannelId, setGameChannelId, fileValue, getCommandChannels, setCommandChannels, commandAllowed };

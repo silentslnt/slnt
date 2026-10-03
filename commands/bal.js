@@ -15,7 +15,7 @@ const SILV_ICON  = '<:zzsilvtoken:1486364646796431427>';
 const WHITESWIRL = '<a:cwhiteswirl:1512869492492079184>';
 const CSTAR      = '<a:cstar:1545032606603812954>';
 const BLACK      = 0x000000;
-const TABS = [['overview', 'Overview'], ['history', 'Game history'], ['stats', 'Stats'], ['bag', 'Bag']];
+const TABS = [['overview', 'Overview'], ['profile', 'Profile'], ['history', 'Game history'], ['stats', 'Stats'], ['bag', 'Bag']];
 const KEY_TIERS = ['Common', 'Uncommon', 'Rare', 'Legendary', 'Mythical', 'Prismatic'];
 
 const fmt = (n) => Math.round(n || 0).toLocaleString();
@@ -27,7 +27,31 @@ function tabRow(tab, disabled = false) {
     .setStyle(id === tab ? ButtonStyle.Primary : ButtonStyle.Secondary)));
 }
 
-async function body(tab, target, data) {
+async function body(tab, target, data, own = false) {
+  if (tab === 'profile') {   // what .profile shows (direct: "shouldn't .profile be on the bal card")
+    const { TITLES, BADGES } = require('../utils/config');
+    const rank = getRank(data.totalEarned || 0);
+    const next = getNextRank ? getNextRank(data.totalEarned || 0) : null;
+    const title = data.equippedTitle && TITLES[data.equippedTitle] ? TITLES[data.equippedTitle].name : null;
+    const badges = (data.unlockedBadges || []).map((id) => BADGES[id]?.name).filter(Boolean).join('  ');
+    let ess = '';
+    try { ess = own ? require('../utils/essences').getActiveEssenceSummary(data) : ''; } catch { ess = ''; }
+    const rp = next ? `${progressBar((data.totalEarned || 0) - rank.min, next.min - rank.min, 12)} → **${next.name}** in ${fmt(next.min - (data.totalEarned || 0))} earned`
+      : 'Max rank reached';
+    return [
+      title ? `## ✨ ${title}` : '## No title equipped',
+      (data.prestige || 0) > 0 ? `> Prestige **${data.prestige}**` : '',
+      `> ${WHITESWIRL} Rank **${rank.name}**`,
+      `> ${rp}`,
+      '',
+      '__**Badges**__',
+      `> ${badges || 'None yet'}`,
+      '',
+      `__**Achievements**__ \`${(data.achievements || []).length}\` — \`.achievements\``,
+      ess ? `\n__**Active essences**__\n${ess}` : '',
+      '-# Change your title and badges with `.pf customize`.',
+    ].filter((x) => x !== '').join('\n');
+  }
   if (tab === 'overview') {
     const { level, current, needed } = xpProgress(data.xp || 0);
     const rank = getRank(data.totalEarned || 0);
@@ -90,7 +114,7 @@ async function profile(tab, target, data, guild, disabled = false, own = false) 
       .setThumbnailAccessory(new ThumbnailBuilder().setURL(target.displayAvatarURL({ dynamic: true }))))
     .addActionRowComponents(tabRow(tab, disabled))
     .addSeparatorComponents(new SeparatorBuilder())
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(await body(tab, target, data)));
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(await body(tab, target, data, own)));
   if (own) c.addSeparatorComponents(new SeparatorBuilder()).addActionRowComponents(walletRow(disabled));
   c.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${guild}${own ? ' · only you can use these buttons' : ''}`));
   return { components: [c], flags: MessageFlags.IsComponentsV2 };
