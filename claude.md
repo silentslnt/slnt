@@ -108,7 +108,7 @@ Sections: essences / bundles / cosmetics / utility / admin items
 
 ## Progression
 - XP & Levels — every game, daily, mission. Level-up announced in channel.
-- Prestige Ranks — 6 ranks (Bronze, Silver, Gold, Platinum, Diamond, Champion) based on total coins earned.
+- Prestige Ranks — 6 ranks (Wanderer to Ascendant) based on total coins earned.
 - Daily Streak — 1x to 3x multiplier. Day 7: +1000 coins + key. Day 28: +10000 + 1 SILV.
 - Missions — 3 daily missions seeded by date, reward coins + XP. **Fixed a long-standing bug**: `commands/missions.js` only ever read `missionProgress[id].progress`, but nothing anywhere ever wrote to it from actual gameplay — every mission's progress bar was permanently stuck at 0/N regardless of what anyone did. `utils/missions.js` (`syncMissionProgress`) is now the single source of truth: derives today's progress as `(current lifetime stat) - (stat value snapshotted at the start of today)`, called from `checkAchievements()` (persists it) and `getUserData()` in index.js (rolls the day over BEFORE any command can mutate a stat, avoiding an off-by-one on the first action of a new day).
 - Achievements — 22 auto-tracked. Announce on unlock. Same call site (`checkAchievements`) now also drives mission progress — see above.
