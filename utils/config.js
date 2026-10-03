@@ -34,14 +34,14 @@ module.exports = {
   XP_LEVEL_BASE:       500,         // XP needed for level 1→2
   XP_LEVEL_SCALE:      1.25,        // multiplier per level
 
-  // ── PRESTIGE RANKS ─────────────────────────────────────────
+  // ── PRESTIGE RANKS (by total coins ever earned; direct: "just ranks like gold silver platinum") ──
   PRESTIGE_RANKS: [
-    { name: 'Wanderer',   min: 0,         bonus: 0,    passive: 0  },
-    { name: 'Pilgrim',    min: 5_000,     bonus: 0.05, passive: 0  },
-    { name: 'Seeker',     min: 25_000,    bonus: 0.10, passive: 0  },
-    { name: 'Oracle',     min: 100_000,   bonus: 0.15, passive: 10 },
-    { name: 'Celestial',  min: 500_000,   bonus: 0.20, passive: 20 },
-    { name: 'Ascendant',  min: 2_000_000, bonus: 0.25, passive: 30 },
+    { name: 'Bronze',     min: 0,         bonus: 0,    passive: 0  },
+    { name: 'Silver',     min: 5_000,     bonus: 0.05, passive: 0  },
+    { name: 'Gold',       min: 25_000,    bonus: 0.10, passive: 0  },
+    { name: 'Platinum',   min: 100_000,   bonus: 0.15, passive: 10 },
+    { name: 'Diamond',    min: 500_000,   bonus: 0.20, passive: 20 },
+    { name: 'Champion',   min: 2_000_000, bonus: 0.25, passive: 30 },
   ],
 
   // ── DAILY STREAKS ──────────────────────────────────────────

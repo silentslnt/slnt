@@ -87,7 +87,8 @@ module.exports = {
             + `### 🏆 Weekly boards (games + chatters)\n`
             + `> Live card: ${wk.channelId && wk.messageId ? `<#${wk.channelId}>` : '**not posted**'} · leaderboard ping role: ${wk.roleId ? `<@&${wk.roleId}>` : '**not set**'}\n`
             + '-# A separate role only for the weekly board pings (not the Player role). Players press 🔔 Notify me on the card to get it (press again to drop it); it pings when the top 3 changes (max every 3h) and when prizes are paid. '
-            + 'Chatters: 1st 3 SILV · 2nd/3rd 1 SILV · 4th–10th 1,000 coins.',
+            + 'Chatters: 1st 3 SILV · 2nd/3rd 1 SILV · 4th–10th 1,000 coins.\n'
+            + `> Top 3 chatters role: ${(() => { const r = wk.crownRoleId === undefined ? require('../utils/weeklyLive').CROWN_DEFAULT : wk.crownRoleId; return r ? `<@&${r}>` : '**off**'; })()} — held live by this week's top 3, moves when they change.`,
           rows: [nav(),
             new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('ss_gamech')
               .setPlaceholder('Set the chat-game channel…').addChannelTypes(ChannelType.GuildText)),
@@ -100,6 +101,8 @@ module.exports = {
               .setPlaceholder('Post the live weekly board in…').addChannelTypes(ChannelType.GuildText)),
             new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId('ss_wkrole')
               .setPlaceholder('Or pick an existing ping role…')),
+            new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId('ss_crown')
+              .setPlaceholder('Top 3 chatters role (e.g. Crowned)…')),
             row(button('ss_wkmk', wk.roleId ? 'Ping role made' : 'Create the leaderboard ping role', ButtonStyle.Success, !!wk.roleId, '🔔'))],
           footer: `${guildName} · every change is logged`,
         });
@@ -160,6 +163,24 @@ module.exports = {
           if (!ok) return i.followUp({ content: "I couldn't post there — check my permissions.", flags: MessageFlags.Ephemeral });
           await logAdminAction(i.user.id, i.user.username, 'shiroset', 'Posted the live weekly board', null, null, `#${ch.id}`);
           return i.editReply(await render());
+        }
+        if (id === 'ss_crown') {
+          const role = message.guild.roles.cache.get(i.values[0]);
+          if (!role || role.managed || role.id === message.guild.id) return i.reply({ content: 'Pick a normal role.', flags: MessageFlags.Ephemeral });
+          if (role.position >= message.guild.members.me.roles.highest.position)
+            return i.reply({ content: `Move my role above ${role} first so I can give it out.`, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
+          const WL = require('../utils/weeklyLive');
+          // take it off whoever held the old role, then hand the new one out
+          const old = WL.cfg();
+          const oldRole = message.guild.roles.cache.get(old.crownRoleId === undefined ? WL.CROWN_DEFAULT : old.crownRoleId);
+          if (oldRole && oldRole.id !== role.id) for (const uid of old.crownHolders || []) {
+            const m = await message.guild.members.fetch(uid).catch(() => null);
+            await m?.roles.remove(oldRole).catch(() => {});
+          }
+          await WL.setCfg({ crownRoleId: role.id, crownHolders: [] });
+          await WL.syncCrown(message.client).catch(() => {});
+          await logAdminAction(i.user.id, i.user.username, 'shiroset', 'Set the top 3 chatters role', null, null, role.name);
+          return i.update(await render());
         }
         if (id === 'ss_wkmk') {
           const role = await message.guild.roles.create({ name: 'Leaderboard Pings', mentionable: true,

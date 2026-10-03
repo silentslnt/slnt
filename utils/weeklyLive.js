@@ -121,7 +121,32 @@ async function repostWithPing(client, why) {
   await setCfg({ messageId: msg.id, lastKey: key, lastPingAt: Date.now(), pingMessageId: pingMsg?.id || null });
 }
 
+// Top-3 chatters role (direct: "the top 3 will get this role called crowned"): the current week's top 3 chatters
+// hold it, synced on every refresh. Set in .shiroset → Games; holders tracked so dropped players lose it.
+const CROWN_DEFAULT = '1488413385228812418';
+async function syncCrown(client) {
+  const c = cfg();
+  const roleId = c.crownRoleId === undefined ? CROWN_DEFAULT : c.crownRoleId;
+  if (!roleId) return;
+  const ch = c.channelId && await client.channels.fetch(c.channelId).catch(() => null);
+  const guild = ch?.guild || (process.env.GUILD_ID && await client.guilds.fetch(process.env.GUILD_ID).catch(() => null));
+  const role = guild && (guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null));
+  if (!role) return;
+  const want = (await topChat(W.weekNo(), 3)).map((r) => r.userId);
+  const had = Array.isArray(c.crownHolders) ? c.crownHolders : [];
+  for (const id of had.filter((x) => !want.includes(x))) {
+    const m = await guild.members.fetch(id).catch(() => null);
+    if (m?.roles.cache.has(role.id)) await m.roles.remove(role, 'No longer a top 3 chatter this week').catch(() => {});
+  }
+  for (const id of want) {
+    const m = await guild.members.fetch(id).catch(() => null);
+    if (m && !m.roles.cache.has(role.id)) await m.roles.add(role, 'Top 3 chatter this week').catch(() => {});
+  }
+  if (want.join() !== had.join()) await setCfg({ crownHolders: want });
+}
+
 async function refresh(client) {
+  await syncCrown(client).catch((e) => console.error('crown role:', e.message));
   const c = cfg();
   if (!c.channelId || !c.messageId) return;
   const ch = await client.channels.fetch(c.channelId).catch(() => null);
@@ -199,4 +224,4 @@ async function handleInteraction(interaction) {
   return true;
 }
 
-module.exports = { boardLines, countChat, topChat, render, post, refresh, weekTick, handleInteraction, cfg, setCfg, CHAT_PRIZES, chatPrize };
+module.exports = { syncCrown, CROWN_DEFAULT, boardLines, countChat, topChat, render, post, refresh, weekTick, handleInteraction, cfg, setCfg, CHAT_PRIZES, chatPrize };
