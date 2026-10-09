@@ -44,7 +44,7 @@ module.exports = {
     const landed = Math.random() < 0.5 ? 'Heads' : 'Tails';
     const wi = landed === calls[0] ? 0 : 1;
     const res = await finish([a, b][wi].id);
-    await msg.edit(card({ title: '🪙 Flip Duel', body: `# ${landed}\n> ${res}`, footer, accent: WIN,
+    await msg.edit(card({ title: '🪙 Flip Duel', body: `# ${landed}${res}`, footer, accent: WIN,
       image: img({ calls, face: landed, winner: wi }), rows: [] })).catch(() => {});
   },
 };

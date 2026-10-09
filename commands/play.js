@@ -4,10 +4,11 @@
 // move is the same as typing it. Only the opener can drive their card.
 const {
   ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, ActionRowBuilder, StringSelectMenuBuilder,
-  ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle,
+  ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
 } = require('discord.js');
 
-// game → [label, emoji, blurb, choices (null = none): [[value, label], …]]
+// game → [label, emoji, blurb, choices (null = none): [[value, label], …], duel (needs an opponent)]
+// Duels (direct: "how will they even know they exist, it's not in the game board") get an opponent picker.
 const GAMES = {
   mines:     ['Mines', '💣', 'Dig safe tiles, cash out before a mine.', null],
   tower:     ['Tower', '🗼', 'Climb floor by floor — one door hides a trap.', null],
@@ -22,6 +23,10 @@ const GAMES = {
   roulette:  ['Roulette', '🔴', 'Red, black or green.', [['red', 'Red'], ['black', 'Black'], ['green', 'Green']]],
   rps:       ['Rock Paper Scissors', '✊', 'Beat the house hand.', [['r', 'Rock'], ['p', 'Paper'], ['s', 'Scissors']]],
   scratch:   ['Scratch card', '🎟', 'Match three — up to 1,000×.', null],
+  rpsduel:   ['RPS Duel', '🤜', 'Rock Paper Scissors against a player — winner takes the pot.', null, true],
+  flipduel:  ['Flip Duel', '🪙', 'A coin toss against a player — winner takes the pot.', null, true],
+  connect4:  ['Connect Four', '🔴', 'Four in a row against a player — winner takes the pot.', null, true],
+  battleship:['Battleship', '🚢', 'Place your fleet, sink theirs first — winner takes the pot.', null, true],
 };
 const BETS = [100, 1_000, 5_000, 10_000, 50_000];
 const fmt = (n) => Number(n || 0).toLocaleString();
@@ -47,9 +52,14 @@ function render(st, data, guildName, disabled = false) {
     if (g[3]) for (const [v, l] of g[3]) r2.addComponents(new ButtonBuilder().setCustomId(`play_side_${v}`).setLabel(l)
       .setStyle(st.choice === v ? ButtonStyle.Primary : ButtonStyle.Secondary).setDisabled(disabled));
     c.addActionRowComponents(r2);
-    const ready = st.bet && (!g[3] || st.choice);
+    if (g[4]) {
+      c.addTextDisplayComponents(new TextDisplayBuilder().setContent(`> Opponent: ${st.opp ? `<@${st.opp}>` : '**pick one**'} · they put up the same bet · 5% fee`));
+      c.addActionRowComponents(new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('play_opp')
+        .setPlaceholder('Challenge who?').setDisabled(disabled)));
+    }
+    const ready = st.bet && (!g[3] || st.choice) && (!g[4] || st.opp);
     c.addActionRowComponents(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('play_start')
-      .setLabel(ready ? `Play ${g[0]}` : 'Pick a bet' + (g[3] ? ' and a side' : '')).setStyle(ButtonStyle.Success).setDisabled(disabled || !ready)));
+      .setLabel(ready ? (g[4] ? `Challenge to ${g[0]}` : `Play ${g[0]}`) : 'Pick a bet' + (g[3] ? ' and a side' : '') + (g[4] ? ' and an opponent' : '')).setStyle(ButtonStyle.Success).setDisabled(disabled || !ready)));
   }
   c.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${guildName} · every game keeps a house edge · your results: \`.history\``));
   return { components: [c], flags: MessageFlags.IsComponentsV2 };
@@ -63,7 +73,7 @@ module.exports = {
   GAMES,
 
   async execute({ message, userData, getUserData }) {
-    const st = { game: null, bet: null, choice: null };
+    const st = { game: null, bet: null, choice: null, opp: null };
     const guildName = message.guild?.name || 'Shiro';
     const msg = await message.channel.send(render(st, userData, guildName));
     const col = msg.createMessageComponentCollector({ time: 10 * 60_000 });
@@ -71,6 +81,11 @@ module.exports = {
       if (i.user.id !== message.author.id) return i.reply({ content: 'Open your own with `.play`.', flags: MessageFlags.Ephemeral });
       const id = i.customId;
       if (id === 'play_game') { st.game = i.values[0]; st.choice = null; }
+      else if (id === 'play_opp') {
+        const u = i.users.first();
+        if (!u || u.bot || u.id === i.user.id) return i.reply({ content: 'Pick another player.', flags: MessageFlags.Ephemeral });
+        st.opp = u.id;
+      }
       else if (id.startsWith('play_bet_')) { const v = id.slice(9); st.bet = v === 'all' ? 'all' : parseInt(v, 10); }
       else if (id.startsWith('play_side_')) st.choice = id.slice(10);
       else if (id === 'play_custom') {
@@ -87,9 +102,9 @@ module.exports = {
         return msg.edit(render(st, fresh, guildName)).catch(() => {});
       } else if (id === 'play_start') {
         const g = GAMES[st.game];
-        if (!g || !st.bet || (g[3] && !st.choice)) return i.deferUpdate();
+        if (!g || !st.bet || (g[3] && !st.choice) || (g[4] && !st.opp)) return i.deferUpdate();
         await i.deferUpdate();
-        const args = [String(st.bet)];
+        const args = g[4] ? [`<@${st.opp}>`, String(st.bet)] : [String(st.bet)];
         if (st.choice) args.push(st.choice);
         await i.client.runAs(i, st.game, args);
         const fresh = await getUserData(i.user.id);

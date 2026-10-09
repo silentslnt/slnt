@@ -1,5 +1,6 @@
 // commands/connect4.js — Connect Four against another player for coins, on a drawn board (direct: "cant this look
 // better"). 7 columns × 6 rows, the column buttons drop a disc; 60s per move or you forfeit. A full board is a draw.
+// Each move reposts the board at the bottom (old one deleted) and pings whose move it is (direct: "they will lose the message").
 const { ButtonStyle } = require('discord.js');
 const { card, button, row } = require('../utils/casino');
 const { challenge } = require('../utils/wager');
@@ -40,18 +41,24 @@ module.exports = {
       image: { name: 'c4.png', buffer: art.connect4({ grid: g, last, line, names: [a.username, b.username], turn: done ? null : turn }) },
     });
     const deadline = () => `<t:${Math.floor((Date.now() + MOVE_MS) / 1000)}:R>`;
-    await msg.edit(payload(`${players[turn]} drops first ${turn ? '🟡' : '🔴'} — ${deadline()}`)).catch(() => {});
+    let table = msg;
+    const post = async (p, ping) => {
+      const old = table;
+      table = await old.channel.send({ ...p, allowedMentions: { users: ping } }).catch(() => old);
+      if (table !== old) await old.delete().catch(() => {});
+    };
+    await post(payload(`${players[turn]} drops first ${turn ? '🟡' : '🔴'} — ${deadline()}`), [players[turn].id]);
 
     await new Promise((resolve) => {
       let timer;
-      const col = msg.createMessageComponentCollector({ filter: (i) => i.customId.startsWith('c4_') });
+      const col = table.channel.createMessageComponentCollector({ filter: (i) => i.message?.id === table.id && i.customId.startsWith('c4_') });
       const arm = () => {
         clearTimeout(timer);
         timer = setTimeout(async () => {
           if (over) return;
           over = true; col.stop();
           const res = await finish(players[1 - turn].id);
-          await msg.edit(payload(`${players[turn].username} ran out of time — forfeit. ${res}`, { done: true, accent: WIN })).catch(() => {});
+          await post(payload(`${players[turn].username} ran out of time — forfeit.${res}`, { done: true, accent: WIN }), [a.id, b.id]);
           resolve();
         }, MOVE_MS);
       };
@@ -71,19 +78,20 @@ module.exports = {
           over = true; clearTimeout(timer); col.stop();
           await i.deferUpdate().catch(() => {});
           const res = await finish(players[turn].id);
-          await msg.edit(payload(`**Four in a row!** ${res}`, { done: true, line, accent: WIN })).catch(() => {});
+          await post(payload(`**Four in a row!**${res}`, { done: true, line, accent: WIN }), [a.id, b.id]);
           return resolve();
         }
         if (g[0].every((c) => c !== 0)) {
           over = true; clearTimeout(timer); col.stop();
           await i.deferUpdate().catch(() => {});
           const res = await finish(null);
-          await msg.edit(payload(`The board is full. ${res}`, { done: true })).catch(() => {});
+          await post(payload(`The board is full.${res}`, { done: true }), [a.id, b.id]);
           return resolve();
         }
         turn = 1 - turn;
         arm();
-        await i.update(payload(`${players[turn]}'s move ${turn ? '🟡' : '🔴'} — ${deadline()}`)).catch(() => {});
+        await i.deferUpdate().catch(() => {});
+        await post(payload(`${players[turn]}'s move ${turn ? '🟡' : '🔴'} — ${deadline()}`), [players[turn].id]);
       });
     });
   },

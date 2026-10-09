@@ -1,5 +1,8 @@
 // commands/battleship.js — Battleship against another player for coins (direct: "how does this simulate battleship,
-// can't even pick where to put the boat… realistic games… good picture art").
+// can't even pick where to put the boat… realistic games… good picture art"; "4 by 4… pinging both users per their
+// turn… the initial message should be visible, showing who's ready or picking… send match result").
+// The public table card is reposted at the bottom (old one deleted) on every turn and pings the player whose shot it
+// is, so nobody loses it under chat. Placement is a public card with a drawn status of both harbours.
 // 1) PLACEMENT — each player opens a private harbour (only they see it): pick a column and row for the bow, turn the
 //    ship, Place it; or Random. A ghost hull shows where it'll go (green fits, red doesn't). 2 minutes; anyone not
 //    ready gets a random fleet. 2) BATTLE — turns; fire from the menus at cells you haven't hit. Sinking a ship reveals
@@ -10,9 +13,9 @@ const { card, button, row } = require('../utils/casino');
 const { challenge } = require('../utils/wager');
 const art = require('../utils/gameArt');
 
-const N = 6;
-const SHIPS = [['Cruiser', 3], ['Destroyer', 2], ['Patrol boat', 2]];
-const COLS = 'ABCDEF';
+const N = 4;
+const SHIPS = [['Cruiser', 3], ['Patrol boat', 2]];
+const COLS = 'ABCD';
 const PLACE_MS = 120_000, SHOT_MS = 60_000;
 const WIN = 0x3FA34D;
 const cellName = (x, y) => `${COLS[x]}${y + 1}`;
@@ -68,9 +71,10 @@ module.exports = {
     const placeUntil = Math.floor((Date.now() + PLACE_MS) / 1000);
     const placeCard = () => card({
       title: '🚢 Battleship — man the harbour',
-      body: players.map((p, k) => `> ${fleets[k] ? '✅' : '⚓'} **${p.username}** — ${fleets[k] ? 'fleet ready' : 'placing…'}`).join('\n')
-        + `\n-# ${SHIPS.map(([n, l]) => `${n} (${l})`).join(' · ')} on a ${N}×${N} sea · <t:${placeUntil}:R> anyone not ready gets a random fleet.`,
-      footer, image: seaArt(),
+      body: players.map((p, k) => `> ${fleets[k] ? '✅' : '⚓'} ${p} — ${fleets[k] ? '**ready**' : `placing… ${harbour[k].ships.length}/${SHIPS.length} ships`}`).join('\n')
+        + `\n-# ${SHIPS.map(([n, l]) => `${n} (${l})`).join(' · ')} on a ${N}×${N} sea · press **Place my fleet** (only you see your harbour) · `
+        + `<t:${placeUntil}:R> anyone not ready gets a random fleet. The battle starts the moment both are ready.`,
+      footer, image: { name: 'harbours.png', buffer: art.harbours({ n: N, names, ready: fleets.map(Boolean), placed: harbour.map((h) => h.ships.length), total: SHIPS.length }) },
       rows: [row(button('bs_place', 'Place my fleet', ButtonStyle.Primary, false, '⚓'), button('bs_rand', 'Random fleet', ButtonStyle.Secondary, false, '🎲'))],
     });
     const harbourView = (k, note = '') => {
@@ -104,6 +108,15 @@ module.exports = {
     };
 
     let readyCheck = async () => {};
+    let lastStatus = 0;
+    const statusEdit = async () => {   // the public card follows each player's progress (throttled)
+      if (Date.now() - lastStatus < 1500) return;
+      lastStatus = Date.now();
+      await table.edit(placeCard()).catch(() => {});
+    };
+    // a fresh public card at the bottom that pings both players (the Accept card is replaced)
+    await msg.delete().catch(() => {});
+    let table = await msg.channel.send({ ...placeCard(), allowedMentions: { users: [a.id, b.id] } });
     const openHarbour = async (i, k) => {
       const resp = await i.reply({ ...harbourView(k), withResponse: true }).catch(() => null);
       const hm = resp?.resource?.message;
@@ -128,14 +141,16 @@ module.exports = {
           return readyCheck();
         }
         await x.update(harbourView(k, note)).catch(() => {});
+        await statusEdit();
       });
     };
 
     await new Promise((resolve) => {
-      const col = msg.createMessageComponentCollector({ time: PLACE_MS, filter: (i) => i.customId === 'bs_place' || i.customId === 'bs_rand' });
+      const col = table.createMessageComponentCollector({ time: PLACE_MS, filter: (i) => i.customId === 'bs_place' || i.customId === 'bs_rand' });
       readyCheck = async () => {
         if (fleets[0] && fleets[1]) { col.stop('ready'); return; }
-        await msg.edit(placeCard()).catch(() => {});
+        lastStatus = 0;
+        await statusEdit();
       };
       col.on('collect', async (i) => {
         const k = idx(i.user.id);
@@ -150,7 +165,6 @@ module.exports = {
         await openHarbour(i, k);
       });
       col.on('end', () => resolve());
-      msg.edit(placeCard()).catch(() => {});
     });
     for (const k of [0, 1]) if (!fleets[k]) fleets[k] = harbour[k].ships.length === SHIPS.length ? harbour[k].ships : randomFleet();
     phase = 'battle';
@@ -164,12 +178,9 @@ module.exports = {
     const battleCard = (note, { aim = null, accent, done = false } = {}) => {
       const rows = [];
       if (!done) {
-        const cells = open(turn);
-        for (const [lo, hi, ph] of [[0, 3, 'rows 1–3'], [3, 6, 'rows 4–6']]) {
-          const opts = cells.filter(([, y]) => y >= lo && y < hi).map(([x, y]) => ({ label: cellName(x, y), value: `${x},${y}` }));
-          if (opts.length) rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`bs_fire_${lo}`)
-            .setPlaceholder(`${names[turn]}: fire at… (${ph})`).addOptions(opts)));
-        }
+        const opts = open(turn).map(([x, y]) => ({ label: cellName(x, y), value: `${x},${y}` }));
+        if (opts.length) rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('bs_fire')
+          .setPlaceholder(`${names[turn]}: fire at…`).addOptions(opts)));
         rows.push(row(button('bs_me', 'My fleet', ButtonStyle.Secondary, false, '⚓')));
       }
       return card({ title: '🚢 Battleship', body: note, footer, accent, rows, image: seaArt(aim) });
@@ -188,27 +199,32 @@ module.exports = {
       return { line, won: target.sunk.size === SHIPS.length };
     };
 
-    await msg.edit(battleCard(`> Both fleets are in the water. **${names[turn]}** fires first — ${deadline()}`)).catch(() => {});
+    // Every turn the table is posted fresh at the bottom (old one deleted) and pings whoever shoots — nobody loses it.
+    const post = async (payload, ping) => {
+      const old = table;
+      table = await old.channel.send({ ...payload, allowedMentions: { users: ping } }).catch(() => old);
+      if (table !== old) await old.delete().catch(() => {});
+    };
+    await post(battleCard(`> Both fleets are in the water. ${players[turn]} fires first — ${deadline()}`), [players[turn].id]);
     await new Promise((resolve) => {
       let timer;
-      const col = msg.createMessageComponentCollector({ filter: (i) => i.customId.startsWith('bs_') });
+      const col = table.channel.createMessageComponentCollector({ filter: (i) => i.message?.id === table.id && i.customId.startsWith('bs_') });
       const end = async (text, accent) => {
         over = true; clearTimeout(timer); col.stop();
-        await msg.edit(battleCard(text, { accent, done: true })).catch(() => {});
+        await post(battleCard(text, { accent, done: true }), [a.id, b.id]);   // the match result, at the bottom, both pinged
         resolve();
       };
       const shoot = async (k, x, y, i) => {
         const { line, won } = fireAt(k, x, y);
+        if (i) await i.deferUpdate().catch(() => {});
         if (won) {
           over = true;
-          if (i) await i.deferUpdate().catch(() => {});
           const res = await finish(players[k].id);
-          return end(`> ${line}\n> **The whole fleet is sunk!** ${res}`, WIN);
+          return end(`> ${line}\n> **The whole fleet is sunk!**${res}`, WIN);
         }
         turn = 1 - turn;
         arm();
-        const p = battleCard(`> ${line}\n> **${names[turn]}**'s shot — ${deadline()}`, { aim: [1 - turn, [x, y]] });
-        if (i) await i.update(p).catch(() => {}); else await msg.edit(p).catch(() => {});
+        await post(battleCard(`> ${line}\n> ${players[turn]}, your shot — ${deadline()}`, { aim: [1 - turn, [x, y]] }), [players[turn].id]);
       };
       const arm = () => {
         clearTimeout(timer);
@@ -218,7 +234,7 @@ module.exports = {
           if (missed[turn] >= 2) {
             over = true;
             const res = await finish(players[1 - turn].id);
-            return end(`> **${names[turn]}** missed two turns — forfeit. ${res}`, WIN);
+            return end(`> **${names[turn]}** missed two turns — forfeit.${res}`, WIN);
           }
           const cells = open(turn);
           const [x, y] = cells[Math.floor(Math.random() * cells.length)];

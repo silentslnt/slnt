@@ -68,7 +68,7 @@ async function challenge(ctx, { title, emoji, usage }) {
   const finish = async (winnerId) => {
     if (done) return '';
     done = true; free();
-    if (!winnerId) { await give(a.id, bet); await give(b.id, bet); return `Draw — both stakes returned.`; }
+    if (!winnerId) { await give(a.id, bet); await give(b.id, bet); return `\n> 🤝 **Draw** — both stakes (**${fmt(bet)}** each) returned.`; }
     const pot = bet * 2;
     const fee = Math.floor(pot * WAGER_FEE);
     await give(winnerId, pot - fee);
@@ -76,7 +76,10 @@ async function challenge(ctx, { title, emoji, usage }) {
     require('./referralBonus').onWin(winnerId, bet - fee).catch(() => {});
     ctx.logAdminAction?.(winnerId, winnerId === a.id ? a.username : b.username, title.toLowerCase(), 'Wager won', null, null,
       `${fmt(pot - fee)} coins (${fmt(fee)} fee)`).catch?.(() => {});
-    return `<@${winnerId}> takes **${fmt(pot - fee)}** coins.`;
+    const loser = winnerId === a.id ? b : a, winner = winnerId === a.id ? a : b;
+    // the match result (direct: "x wins, x loses, x amount won")
+    return `\n> 🏆 **${winner.username}** wins · takes **${fmt(pot - fee)}** coins (+${fmt(pot - fee - bet)})`
+      + `\n> 💀 **${loser.username}** loses · **${fmt(bet)}** coins`;
   };
   return { msg, a, b, bet, footer, finish };
 }

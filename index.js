@@ -133,11 +133,17 @@ async function runCommandAs(interaction, name, args = [], opts = {}) {
       ? { content: x, flags: MF.Ephemeral }
       : { ...x, flags: (typeof x.flags === 'number' ? x.flags : 0) | MF.Ephemeral });
   }
+  // <@id> args become real mentions (the .play card launches duels this way)
+  const mentioned = new Collection();
+  for (const a of args) {
+    const m = /^<@!?(\d+)>$/.exec(String(a));
+    if (m) { const u = await client.users.fetch(m[1]).catch(() => null); if (u) mentioned.set(u.id, u); }
+  }
   const message = {
     author: interaction.user, member: interaction.member, guild: interaction.guild, guildId: interaction.guildId,
     channel, channelId: interaction.channelId, client, id: interaction.id,
     content: `${currentPrefix}${name} ${args.join(' ')}`.trim(), createdTimestamp: Date.now(),
-    mentions: { users: new Collection(), members: new Collection(), roles: new Collection(), channels: new Collection() },
+    mentions: { users: mentioned, members: new Collection(), roles: new Collection(), channels: new Collection() },
     reply: (x) => channel.send(x), react: async () => {}, delete: async () => {},
   };
   if (!LOCK_EXEMPT_COMMANDS.has(command.name)) {

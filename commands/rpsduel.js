@@ -34,16 +34,16 @@ module.exports = {
       if (!pa || !pb) {   // whoever didn't pick forfeits; nobody picked = a draw
         const winner = pa ? a.id : pb ? b.id : null;
         const res = await finish(winner);
-        return msg.edit(card({ title: '✊ RPS Duel', body: `> ${winner ? `<@${pa ? b.id : a.id}> didn't pick — forfeit.` : 'Nobody picked.'}\n> ${res}`, footer })).catch(() => {});
+        return msg.edit(card({ title: '✊ RPS Duel', body: `> ${winner ? `<@${pa ? b.id : a.id}> didn't pick — forfeit.` : 'Nobody picked.'}${res}`, footer })).catch(() => {});
       }
       const line = `> ${a.username} ${PICKS[pa][1]} vs ${PICKS[pb][1]} ${b.username}`;
       if (pa === pb) {
         if (round < 3) { await msg.edit(card({ title: '✊ RPS Duel', body: `${line}\n> Tie — again!`, footer })).catch(() => {}); await new Promise((r) => setTimeout(r, 1500)); continue; }
         const res = await finish(null);
-        return msg.edit(card({ title: '✊ RPS Duel', body: `${line}\n> Three ties. ${res}`, footer })).catch(() => {});
+        return msg.edit(card({ title: '✊ RPS Duel', body: `${line}\n> Three ties.${res}`, footer })).catch(() => {});
       }
       const res = await finish(BEATS[pa] === pb ? a.id : b.id);
-      return msg.edit(card({ title: '✊ RPS Duel', body: `${line}\n> ${res}`, footer, accent: 0x3FA34D })).catch(() => {});
+      return msg.edit(card({ title: '✊ RPS Duel', body: `${line}${res}`, footer, accent: 0x3FA34D })).catch(() => {});
     }
   },
 };

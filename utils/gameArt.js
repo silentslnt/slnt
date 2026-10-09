@@ -150,7 +150,7 @@ function connect4({ grid, last = null, line = null, names = ['', ''], turn = nul
 }
 
 // ── Battleship ───────────────────────────────────────────────────────────────
-const SEA = { cell: 58, lab: 30 };
+const SEA = { cell: 80, lab: 30 };   // 4×4 seas (direct: "6 by 6 no, 4 by 4") — big cells
 
 function ocean(ctx, x, y, n, seed = 1) {
   const s = n * SEA.cell;
@@ -296,6 +296,44 @@ function fleetView({ n, ships, shots = new Map(), sunk = new Set(), ghost = null
   return cv.toBuffer('image/png');
 }
 
+/** The placement table everyone sees: both harbours under fog, each stamped PLACING (with ships set n/total) or READY. */
+function harbours({ n, names, ready, placed, total }) {
+  const s = n * SEA.cell;
+  const w = s * 2 + 170, h = s + 170;
+  const cv = createCanvas(w, h);
+  const ctx = cv.getContext('2d');
+  felt(ctx, w, h, ['#123C5A', '#081F33', '#030B14']);
+  rail(ctx, w, h);
+  const ox = [60, 60 + s + 60];
+  [0, 1].forEach((k) => {
+    text(ctx, `${names[k]}'S HARBOUR`, ox[k] + s / 2, 38, { size: 18, font: 'Cinzel', color: GOLD[0], max: s });
+    ocean(ctx, ox[k], 72, n, ox[k]);
+    ctx.save();                                         // fog: nobody sees where the other is placing
+    rr(ctx, ox[k], 72, s, s, 10); ctx.clip();
+    const fog = ctx.createLinearGradient(0, 72, 0, 72 + s);
+    fog.addColorStop(0, 'rgba(10,18,28,0.55)'); fog.addColorStop(1, 'rgba(10,18,28,0.8)');
+    ctx.fillStyle = fog; ctx.fillRect(ox[k], 72, s, s);
+    ctx.restore();
+    const cx = ox[k] + s / 2, cy = 72 + s / 2;
+    const ok = ready[k];
+    ctx.save();                                         // the stamp
+    ctx.translate(cx, cy); ctx.rotate(-0.12);
+    ctx.shadowColor = ok ? '#3FE07A' : '#E9C46A'; ctx.shadowBlur = 20;
+    rr(ctx, -s * 0.38, -34, s * 0.76, 68, 12);
+    ctx.fillStyle = ok ? 'rgba(10,60,30,0.9)' : 'rgba(50,40,10,0.9)'; ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = ok ? '#3FE07A' : GOLD[1]; ctx.lineWidth = 3;
+    rr(ctx, -s * 0.38, -34, s * 0.76, 68, 12); ctx.stroke();
+    text(ctx, ok ? 'READY' : 'PLACING…', 0, -6, { size: 30, font: 'Cinzel', color: ok ? '#C8FFD9' : '#FFF1B8' });
+    text(ctx, ok ? 'fleet in the water' : `${placed[k]}/${total} ships set`, 0, 22, { size: 14, color: '#E6E6EA' });
+    ctx.restore();
+  });
+  const py = 72 + s + 30;
+  plate(ctx, ox[0], py, s, `${names[0]} · ${ready[0] ? 'ready' : 'placing'}`, null, !ready[0]);
+  plate(ctx, ox[1], py, s, `${names[1]} · ${ready[1] ? 'ready' : 'placing'}`, null, !ready[1]);
+  return cv.toBuffer('image/png');
+}
+
 // ── Coin flip ────────────────────────────────────────────────────────────────
 function crown(ctx, cx, cy, s, col) {
   ctx.fillStyle = col;
@@ -360,4 +398,4 @@ function coinflip({ names, calls, face = null, winner = null }) {
   return cv.toBuffer('image/png');
 }
 
-module.exports = { connect4, battleship, fleetView, coinflip };
+module.exports = { connect4, battleship, fleetView, harbours, coinflip };
