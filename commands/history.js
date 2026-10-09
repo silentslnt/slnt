@@ -55,7 +55,7 @@ async function historyCard(target, game, guild, rows = []) {
     return card({
       title: `📜 ${target.username}'s record${game ? ` — ${game}` : ''}`,
       body, accent: net > 0 ? WIN : net < 0 ? LOSE : BLACK,
-      rows, footer: `${guild} · last ${rounds.length} rounds · the house always wins in the long run`,
+      rows, footer: `${guild} · last ${rounds.length} rounds`,
     });
 }
 
