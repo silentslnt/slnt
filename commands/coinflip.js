@@ -24,7 +24,7 @@ module.exports = {
   async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
     const betArg  = args[0];
     const sideArg = (args[1] || '').toLowerCase();
-    const bet     = parseBet(betArg, userData.balance || 0);
+    const bet     = parseBet(betArg, userData);
 
     if (!bet || !['h', 't', 'heads', 'tails'].includes(sideArg)) {
       return message.channel.send(card({

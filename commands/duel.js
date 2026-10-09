@@ -16,7 +16,7 @@ module.exports = {
   async execute({ message, args, userData, saveUserData, getUserData, saveSpecificUserData, logAdminAction }) {
     const challenger = message.author;
     const opponent   = message.mentions.users.first();
-    const bet        = parseBet(args[1], userData.balance || 0);
+    const bet        = parseBet(args[1], userData);
 
     if (!opponent || !bet) {
       return message.channel.send('Usage: `.duel @user <amount|all>`');

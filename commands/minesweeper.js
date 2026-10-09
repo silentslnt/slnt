@@ -2,8 +2,8 @@
 // Bets are atomic (casino.takeBet / settle). Cancelling refunds ONLY before the first pick — the old typed version
 // refunded after picks too, which let anyone walk away from a bad board for free.
 const { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
-const { takeBet, settle, replayRow, attachReplay, WIN, LOSE, BLACK } = require('../utils/casino');
-const { MAX_BET } = require('../utils/config');
+const { takeBet, settle, replayRow, attachReplay, WIN, LOSE, BLACK, themeFor } = require('../utils/casino');
+const { maxBetFor } = require('../utils/parseBet');
 
 const SIZE = 12;
 const MINES = 4;
@@ -29,7 +29,7 @@ function board() {
 
 function render(s, status, guildName) {
   const safeLeft = SIZE - MINES - s.picks.size;
-  const accent = s.over ? (s.result === 'clear' ? WIN : s.result === 'boom' ? LOSE : BLACK) : BLACK;
+  const accent = s.over ? (s.result === 'clear' ? WIN : s.result === 'boom' ? LOSE : themeFor('Minesweeper')) : themeFor('Minesweeper');
   const c = new ContainerBuilder().setAccentColor(accent)
     .addTextDisplayComponents(new TextDisplayBuilder().setContent(
       `## 🧨 Minesweeper\n> **${s.bet.toLocaleString()}** on the board · clear it for **×${CLEAR_MULT}** (**${Math.floor(s.bet * CLEAR_MULT).toLocaleString()}**)\n`
@@ -73,9 +73,10 @@ module.exports = {
     });
     if (!taken) return;
     const { bet } = taken;
-    if (MAX_BET && bet > MAX_BET) {   // refund anything over the table limit
+    const limit = maxBetFor(taken.userData);
+    if (bet > limit) {   // refund anything over the table limit
       await settle(ctx, { bet, payout: bet, game: 'minesweeper', detail: 'over max bet' });
-      return message.channel.send(`Max bet is **${MAX_BET.toLocaleString()}** coins — your bet was returned.`);
+      return message.channel.send(`Max bet is **${limit.toLocaleString()}** coins — your bet was returned.`);
     }
     const g = message.guild?.name || 'Shiro';
     const s = { bet, grid: board(), picks: new Set(), over: false, result: null, replay: false };

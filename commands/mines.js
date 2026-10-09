@@ -2,7 +2,7 @@
 // Bets are taken atomically (casino.takeBet) and paid by increment (casino.settle) — a 5-minute board can never
 // overwrite coins that arrive meanwhile. Left alone: it cashes you out (or refunds you if you never dug).
 const { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
-const { takeBet, settle, replayRow, attachReplay, WIN, LOSE, BLACK } = require('../utils/casino');
+const { takeBet, settle, replayRow, attachReplay, WIN, LOSE, BLACK, themeFor } = require('../utils/casino');
 const { pickUniqueIndices } = require('../utils/rng');
 const { casinoPayout } = require('../utils/houseEdge');
 
@@ -28,7 +28,7 @@ function render(s, status, guildName) {
   const found = safeCount(s);
   const multi = calcMultiplier(FIXED_MINES, found);
   const next = calcMultiplier(FIXED_MINES, found + 1);
-  const accent = s.ended ? (s.result === 'boom' ? LOSE : s.result === 'cash' ? WIN : BLACK) : BLACK;
+  const accent = s.ended ? (s.result === 'boom' ? LOSE : s.result === 'cash' ? WIN : themeFor('Mines')) : themeFor('Mines');
   const c = new ContainerBuilder().setAccentColor(accent)
     .addTextDisplayComponents(new TextDisplayBuilder().setContent(
       `## 💣 Mines\n# ×${multi.toFixed(2)}\n`

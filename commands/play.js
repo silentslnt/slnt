@@ -28,7 +28,7 @@ const fmt = (n) => Number(n || 0).toLocaleString();
 
 function render(st, data, guildName, disabled = false) {
   const g = st.game ? GAMES[st.game] : null;
-  const c = new ContainerBuilder().setAccentColor(0x000000)
+  const c = new ContainerBuilder().setAccentColor(0xD4AF37)
     .addTextDisplayComponents(new TextDisplayBuilder().setContent(
       `## 🎲 Game floor\n-# Coins \`${fmt(data.balance)}\` · pick a game, pick a bet, play.\n-# 🏆 \`.weekly\` — the 10 most active players win SILV, coins and Aether every week · 🎡 \`.freespin\` once a day`))
     .addSeparatorComponents(new SeparatorBuilder())

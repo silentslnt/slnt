@@ -1,7 +1,8 @@
 // utils/wager.js — player-vs-player wagers (direct: "RPS / coinflip wagers, connect 4, battleship").
 // challenge(): an Accept/Decline card for the opponent (60s). On accept BOTH stakes are taken atomically (each only if
 // that player's balance still covers it; the first is refunded if the second can't pay). The game then calls
-// finish(winnerId | null): the winner gets both stakes minus WAGER_FEE (to the house), a draw refunds both.
+// finish(winnerId | null): the winner gets both stakes minus WAGER_FEE, a draw refunds both. Players only ever see
+// "fee" — never where it goes (direct).
 const User = require('../models/user');
 const { card, button, row } = require('./casino');
 const { ButtonStyle } = require('discord.js');
@@ -25,7 +26,7 @@ async function challenge(ctx, { title, emoji, usage }) {
   const b = message.mentions.users.first();
   const footer = message.guild?.name || 'Shiro';
   const me = await getUserData(a.id);
-  const bet = parseBet(args.find((x) => !/^<@!?\d+>$/.test(x)), me.balance || 0);
+  const bet = parseBet(args.find((x) => !/^<@!?\d+>$/.test(x)), me);
   if (!b || !bet) { await message.channel.send(card({ title: `${emoji} ${title}`, body: usage, footer })); return null; }
   if (b.id === a.id || b.bot) { await message.channel.send('Pick another player.'); return null; }
   if (busy.has(a.id) || busy.has(b.id)) { await message.channel.send('One of you is already in a wager.'); return null; }
@@ -34,17 +35,26 @@ async function challenge(ctx, { title, emoji, usage }) {
   const free = () => { busy.delete(a.id); busy.delete(b.id); };
   const msg = await message.channel.send({
     ...card({ title: `${emoji} ${title}`, body: `> ${a} challenges ${b} — **${fmt(bet)}** coins each.\n`
-      + `-# Winner takes both stakes (a ${Math.round(WAGER_FEE * 100)}% fee goes to the house). ${b.username}: 60 seconds to answer.`,
+      + `-# Winner takes the pot (${Math.round(WAGER_FEE * 100)}% fee). ${b.username}: 60 seconds to answer.`,
     rows: [row(button('wg_yes', 'Accept', ButtonStyle.Success), button('wg_no', 'Decline', ButtonStyle.Danger))], footer }),
     allowedMentions: { users: [b.id] },
   });
-  const ans = await msg.awaitMessageComponent({ time: 60_000, filter: (i) => i.user.id === b.id || (i.user.id === a.id && i.customId === 'wg_no') })
-    .catch(() => null);
+  // Every click is answered (an unanswered click shows "didn't respond in time"): only the challenged player can
+  // accept; the challenger can call it off; anyone else is told it isn't theirs.
+  const ans = await new Promise((resolve) => {
+    const col = msg.createMessageComponentCollector({ time: 60_000, filter: (i) => i.customId === 'wg_yes' || i.customId === 'wg_no' });
+    col.on('collect', async (i) => {
+      if (i.user.id === b.id || (i.user.id === a.id && i.customId === 'wg_no')) { col.stop('answered'); return resolve(i); }
+      const why = i.user.id === a.id ? `Waiting for ${b.username} to accept.` : 'This challenge isn\'t for you.';
+      await i.reply({ content: why, ephemeral: true }).catch(() => {});
+    });
+    col.on('end', (_c, reason) => { if (reason !== 'answered') resolve(null); });
+  });
   if (!ans || ans.customId === 'wg_no') {
     free();
     const why = !ans ? `${b.username} didn't answer.` : ans.user.id === a.id ? 'Called off.' : `${b.username} declined.`;
     if (ans) await ans.update(card({ title: `${emoji} ${title}`, body: `> ${why}`, footer })).catch(() => {});
-    else await msg.edit(card({ title: `${emoji} ${title}`, body: `> ${why}`, footer })).catch(() => {});
+    else await msg.edit(card({ title: `${emoji} ${title}`, body: `> ${why}`, footer, rows: [] })).catch(() => {});
     return null;
   }
   await ans.deferUpdate().catch(() => {});

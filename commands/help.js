@@ -20,7 +20,7 @@ const SECTIONS = {
     ['mines', 'mn'], ['minesweeper', 'msw'], ['plinko', 'pl'], ['crash', 'cr'], ['tower', 'tw'], ['cups', ''], ['wheel', 'wh'],
     ['overunder', 'ou'], ['scratch', 'sc'], ['duel', 'dl'], ['history', 'hist'], ['weekly', 'wlb'],
     ['rpsduel', 'rpsd'], ['flipduel', 'cfd'], ['connect4', 'c4'], ['battleship', 'bship'],
-  ], '`.<game> <bet|all>` — or `.play` to pick one with buttons. vs players: `.rpsduel` `.flipduel` `.connect4` `.battleship` `@user <bet>` (winner takes the pot, 5% fee). `.weekly`: the 10 most active players and the 10 most active chatters win SILV and coins every week.'],
+  ], '`.<game> <bet|all>` — or `.play` to pick one with buttons. vs players: `.rpsduel` `.flipduel` `.connect4` `.battleship` `@user <bet>` (winner takes the pot, 5% fee). Max bet is 50,000 and grows +10,000 every 10 levels. Watch the events channel for ☔ coin rains and 🎲 high rolls — press Join. `.weekly`: the 10 most active players and the 10 most active chatters win SILV and coins every week.'],
   chat: ['Chat games', 'Started by staff in the game channel', [
     ['wordscramble', 'ws'], ['hangman', ''], ['guess', ''], ['cipher', ''], ['redeem', 'rd'],
   ], 'Type the answer in the game channel to win. `.rd` claims a dropped key.'],

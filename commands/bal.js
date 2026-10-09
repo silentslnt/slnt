@@ -68,6 +68,7 @@ async function body(tab, target, data, own = false) {
       '',
       `__**XP**__ *(Lv ${level})*`,
       `> ${progressBar(current, needed, 12)} ${current}/${needed}`,
+      `-# Max bet **${fmt(require('../utils/parseBet').maxBetFor(data))}** — +10,000 every 10 levels (next at level ${(Math.floor(level / 10) + 1) * 10})`,
       '',
       '__**Games (last 200 rounds)**__',
       rounds.length
@@ -152,7 +153,7 @@ module.exports = {
         const list = rows.map((r) => `> <@${r.invitee_id}> — \`${fmt(from[String(r.invitee_id)] || 0)}\` coins`).join('\n');
         const c = new ContainerBuilder().setAccentColor(BLACK).addTextDisplayComponents(new TextDisplayBuilder().setContent(
           `## 🤝 Your recruits\n> Earned from their wins: **${fmt(fresh.refEarned || 0)}** coins\n`
-          + `-# You get ${Math.round(RB.pct() * 100)}% of every win your validated recruits make in Shiro — paid by the house, never taken from them.\n\n`
+          + `-# You get ${Math.round(RB.pct() * 100)}% of every win your validated recruits make in Shiro — paid by Shiro, never taken from them.\n\n`
           + (list || '> No validated recruits yet. Invite people to the server — once they really play Silvreign, they count.')));
         return i.reply({ components: [c], flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, allowedMentions: { parse: [] } }).catch(() => {});
       }

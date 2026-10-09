@@ -13,7 +13,7 @@ module.exports = {
   description: 'Roll a die and win rewards based on your roll! `.dice <amount|all>`',
   async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
     if (typeof userData.balance !== 'number') userData.balance = 0;
-    const bet = parseBet(args[0], userData.balance);
+    const bet = parseBet(args[0], userData);
 
     if (!bet) {
       return message.channel.send(card({ title: '🎲 Dice', body: '> `.dice <amount|all>` — roll a die: **4** pays 1.4× · **5** pays 1.7× · **6** pays 2×.\n> Or with buttons: `.play`', footer: message.guild?.name || 'Shiro' }));

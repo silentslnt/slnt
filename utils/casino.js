@@ -4,6 +4,7 @@
 // meantime. Odds live in each game; the house edge rules live in houseEdge.js.
 const {
   ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags,
+  MediaGalleryBuilder, MediaGalleryItemBuilder, AttachmentBuilder,
 } = require('discord.js');
 const { parseBet } = require('./parseBet');
 const { addXP } = require('./xp');
@@ -17,16 +18,34 @@ const BLACK = 0x000000;
 const WIN = 0x3FA34D;
 const LOSE = 0x8B0000;
 
-/** A CV2 card: title, body, optional button rows, footer. */
-function card({ title, body, rows = [], accent = BLACK, footer }) {
+// direct: "the embed colour… black… it should be fitting the theme of the game" — a card that isn't a win/loss result
+// takes its game's colour (matched on the title). WIN / LOSE results keep green / red.
+const THEMES = [
+  [/blackjack/i, 0x0B6E3A], [/crash/i, 0xFF6B1A], [/tower/i, 0x7B4BC4], [/cups/i, 0xC08A2E], [/wheel/i, 0xE0B43A],
+  [/over|under/i, 0x2E86DE], [/minesweeper/i, 0x8E9AAF], [/mines/i, 0x2BB673], [/scratch/i, 0xF2C94C],
+  [/battleship/i, 0x0E6BA8], [/connect/i, 0x1D4ED8], [/flip/i, 0xD4AF37], [/rps|rock/i, 0x9B51E0], [/dice/i, 0xE74C3C],
+  [/roulette/i, 0xB71C1C], [/slots/i, 0xFF2D95], [/plinko/i, 0x00B3E6], [/rain/i, 0x5DADE2], [/roll/i, 0xE67E22],
+];
+const themeFor = (title = '') => (THEMES.find(([re]) => re.test(title)) || [null, BLACK])[1];
+
+/** A CV2 card: title, body, optional button rows, footer. image = { name, buffer } shows a drawn picture under the
+ *  title (the payload carries the file and replaces any older picture on an edit). */
+function card({ title, body, rows = [], accent = BLACK, footer, image = null }) {
+  if (accent === BLACK) accent = themeFor(title);
   const c = new ContainerBuilder().setAccentColor(accent)
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}\n${body}`));
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}${image ? '' : `\n${body}`}`));
+  if (image) {
+    c.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(`attachment://${image.name}`)));
+    if (body) c.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+  }
   if (rows.length) {
     c.addSeparatorComponents(new SeparatorBuilder());
     for (const r of rows) c.addActionRowComponents(r);
   }
   if (footer) c.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${footer}`));
-  return { components: [c], flags: MessageFlags.IsComponentsV2 };
+  const out = { components: [c], flags: MessageFlags.IsComponentsV2 };
+  if (image) { out.files = [new AttachmentBuilder(image.buffer, { name: image.name })]; out.attachments = []; }
+  return out;
 }
 
 function button(id, label, style = ButtonStyle.Secondary, disabled = false, emoji = null) {
@@ -43,7 +62,7 @@ function row(...buttons) {
 async function takeBet(ctx, arg, usage) {
   const { message, getUserData, saveSpecificUserData } = ctx;
   const userData = await getUserData(message.author.id);
-  const bet = parseBet(arg, userData.balance || 0);
+  const bet = parseBet(arg, userData);
   if (!bet) {
     await message.channel.send(card({ title: usage.title, body: usage.body, footer: message.guild?.name || 'Shiro' }));
     return null;
@@ -99,7 +118,7 @@ const fmtN = (n) => Math.floor(n || 0).toLocaleString();
 /** The finished-game card every game uses: a big headline, the numbers, and a replay row.
  *  opts: { emoji, game, headline, won (true|false|null for a push), lines: [..], footer, replay: { game, bet, extra } } */
 function gameResult({ emoji = '🎲', game, headline, won = null, lines = [], footer, replay, rowsBefore = [] }, withReplay = true) {
-  const accent = won === true ? WIN : won === false ? LOSE : BLACK;
+  const accent = won === true ? WIN : won === false ? LOSE : themeFor(game);
   const body = `# ${headline}\n` + lines.filter(Boolean).map((l) => (l.startsWith('-#') ? l : `> ${l}`)).join('\n');
   const rows = [...rowsBefore];
   if (withReplay && replay && replay.bet > 0) {
@@ -138,4 +157,4 @@ function attachReplay(msg, ownerId, opts) {
   col.on('end', () => msg.edit(opts.final ? opts.final() : gameResult(opts, false)).catch(() => {}));   // games with their own board pass final()
 }
 
-module.exports = { card, button, row, takeBet, settle, gameResult, replayRow, attachReplay, BLACK, WIN, LOSE, ButtonStyle };
+module.exports = { card, themeFor, button, row, takeBet, settle, gameResult, replayRow, attachReplay, BLACK, WIN, LOSE, ButtonStyle };

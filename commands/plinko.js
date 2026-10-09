@@ -67,7 +67,7 @@ module.exports = {
   async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
     const betArg  = args[0];
     const riskArg = 'high';   // one table for everyone (direct: "no game should let the user select the difficulty")
-    const bet     = parseBet(betArg, userData.balance || 0);
+    const bet     = parseBet(betArg, userData);
 
     if (!bet) {
       return message.channel.send(card({

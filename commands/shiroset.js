@@ -5,9 +5,10 @@
 //   Players  — pick anyone: coins / SILV give or take, look at their wallet
 //   Games    — set the game channel; start/stop word scramble, hangman and guess the number
 //   Logs     — set the economy log channel and the live-wins channel; recent actions
+//   Events   — coin rain / high roll (start now or automatic), events channel, Player + ping roles, give everyone
 const {
   ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags,
-  UserSelectMenuBuilder, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder,
+  UserSelectMenuBuilder, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder, StringSelectMenuBuilder,
 } = require('discord.js');
 const { isWhitelisted } = require('../utils/permissions');
 const { card, button, row, ButtonStyle } = require('../utils/casino');
@@ -29,13 +30,12 @@ module.exports = {
     const winsCfg = () => {
       return require('../utils/settings').get('vouch', {}) || {};
     };
-    const nav = () => row(
-      button('ss_home', 'Home', state.page === 'home' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      button('ss_house', 'House', state.page === 'house' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      button('ss_players', 'Players', state.page === 'players' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      button('ss_games', 'Games', state.page === 'games' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      button('ss_logs', 'Logs', state.page === 'logs' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-    );
+    const PAGES = [['home', 'Home', 'House balance, supporters, recruiters'], ['house', 'House', 'The game ledger'],
+      ['players', 'Players', 'Give or take coins and SILV'], ['games', 'Games', 'Game channel, chat games, weekly board'],
+      ['events', 'Events', 'Coin rain, high roll, auto events, give everyone'], ['logs', 'Logs', 'Log channels, recent actions']];
+    const nav = () => new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('ss_nav')
+      .setPlaceholder(`Page: ${PAGES.find((p) => p[0] === state.page)?.[1] || 'Home'} — go to…`)
+      .addOptions(PAGES.map(([v, l, d]) => ({ label: l, value: v, description: d, default: v === state.page }))));
 
     const render = async () => {
       const b = await getBank();
@@ -109,6 +109,34 @@ module.exports = {
           footer: `${guildName} · every change is logged`,
         });
       }
+      if (state.page === 'events') {
+        const EV = require('../utils/events');
+        const c = EV.cfg();
+        const L = EV.liveInfo();
+        const chSel = new ChannelSelectMenuBuilder().setCustomId('ss_evch').setPlaceholder('Events channel…')
+          .addChannelTypes(ChannelType.GuildText).setMinValues(0).setMaxValues(1);
+        if (c.channelId) chSel.setDefaultChannels(c.channelId);
+        const plSel = new RoleSelectMenuBuilder().setCustomId('ss_evplayer').setPlaceholder('Player role (who can join / give-all)…').setMinValues(0).setMaxValues(1);
+        if (c.playerRoleId) plSel.setDefaultRoles(c.playerRoleId);
+        const pgSel = new RoleSelectMenuBuilder().setCustomId('ss_evping').setPlaceholder('Role pinged when an event starts…').setMinValues(0).setMaxValues(1);
+        if (c.pingRoleId) pgSel.setDefaultRoles(c.pingRoleId);
+        return card({
+          title: '☔ Events',
+          body: (L ? `> 🔴 **Live:** ${L.kind === 'rain' ? 'Coin rain' : 'High roll'} — ${fmt(L.pot)} coins · ${L.entrants.length} joined · ends <t:${Math.floor(L.endsAt / 1000)}:R>\n`
+            : '> No event running.\n')
+            + `> 📍 Channel ${c.channelId ? `<#${c.channelId}>` : '**not set**'} · Player role ${c.playerRoleId ? `<@&${c.playerRoleId}>` : '**none**'} · ping ${c.pingRoleId ? `<@&${c.pingRoleId}>` : 'none'}\n`
+            + `> ⏱ Auto events **${c.auto.on ? 'ON' : 'off'}** — every ~${c.auto.every}h, **${fmt(c.auto.amount)}** coins, ${c.auto.minutes} min (rain and high roll take turns)\n`
+            + `> 🛡 Joiners: played Shiro, account ${c.minAccountDays}+ days${c.playerRoleId ? ', Player role' : ''}\n\n`
+            + '-# Coin rain: everyone who joins splits the pot. High roll: everyone rolls 1–100, top three take 50/30/20%. The house pays; anything unclaimed goes back.',
+          rows: [nav(), new ActionRowBuilder().addComponents(chSel), new ActionRowBuilder().addComponents(plSel), new ActionRowBuilder().addComponents(pgSel),
+            row(button('ss_ev_rain', 'Start coin rain…', ButtonStyle.Success, !!L, '☔'), button('ss_ev_roll', 'Start high roll…', ButtonStyle.Success, !!L, '🎲'),
+              button('ss_ev_end', 'Call off (refund)', ButtonStyle.Danger, !L)),
+            row(button('ss_ev_auto', c.auto.on ? 'Auto events: ON' : 'Auto events: off', c.auto.on ? ButtonStyle.Primary : ButtonStyle.Secondary),
+              button('ss_ev_autocfg', 'Auto settings…'), button('ss_ev_age', 'Min account age…'),
+              button('ss_giveall', 'Give all players…', ButtonStyle.Primary, false, '🎁'))],
+          footer: guildName,
+        });
+      }
       if (state.page === 'logs') {
         const logs = AdminLog ? await AdminLog.find({}).sort({ timestamp: -1 }).limit(10).lean() : [];
         const lines = logs.map((l) => `> <t:${Math.floor(new Date(l.timestamp).getTime() / 1000)}:R> **${l.adminUsername}** \`.${l.command}\` — ${l.action}`
@@ -160,6 +188,25 @@ module.exports = {
       sub.raw = raw;
       return [sub, Number.isFinite(n) ? n : null];
     };
+
+    // A form with several boxes: fields = [[id, label, placeholder, required]] → [submit, {id: value}]
+    const askMany = async (i, title, fields) => {
+      const id = `ssf_${i.id}`;
+      const m = new ModalBuilder().setCustomId(id).setTitle(title.slice(0, 45));
+      for (const [fid, label, ph, req] of fields) {
+        m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId(fid).setLabel(label.slice(0, 45))
+          .setPlaceholder((ph || '').slice(0, 100)).setStyle(TextInputStyle.Short).setRequired(!!req).setMaxLength(24)));
+      }
+      await i.showModal(m);
+      const sub = await i.awaitModalSubmit({ time: 120_000, filter: (x) => x.customId === id && x.user.id === i.user.id }).catch(() => null);
+      if (!sub) return [null, {}];
+      await sub.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+      sub.reply = (x) => { const { flags, ...rest } = typeof x === 'string' ? { content: x } : x; return sub.editReply(rest).catch(() => {}); };
+      const vals = {};
+      for (const [fid] of fields) vals[fid] = String(sub.fields.getTextInputValue(fid) || '').trim();
+      return [sub, vals];
+    };
+    const num = (v) => { const n = parseInt(String(v || '').replace(/[, ]/g, ''), 10); return Number.isFinite(n) ? n : null; };
 
     col.on('collect', async (i) => {
       if (i.user.id !== message.author.id) return i.reply({ content: 'Only whoever opened this panel can use it.', flags: MessageFlags.Ephemeral });
@@ -277,6 +324,70 @@ module.exports = {
           await message.client.runAs(target, what[0], [what[1], ...extra], { channel: chan });
           await logAdminAction(i.user.id, i.user.username, 'shiroset', `Chat game: ${what[0]} ${what[1]}`, null, null, `#${gc}`);
           return target.editReply({ content: `Done — check <#${gc}>.` }).catch(() => {});
+        }
+        if (id === 'ss_nav') { state.page = i.values[0]; return i.update(await render()); }
+        if (id.startsWith('ss_ev') || id === 'ss_giveall') {
+          const EV = require('../utils/events');
+          const c = EV.cfg();
+          if (id === 'ss_events') { state.page = 'events'; return i.update(await render()); }
+          if (id === 'ss_evch') { await EV.setCfg({ channelId: i.values[0] || null }); return i.update(await render()); }
+          if (id === 'ss_evplayer') { await EV.setCfg({ playerRoleId: i.values[0] || null }); return i.update(await render()); }
+          if (id === 'ss_evping') { await EV.setCfg({ pingRoleId: i.values[0] || null }); return i.update(await render()); }
+          if (id === 'ss_ev_auto') {
+            await EV.setCfg({ auto: { ...c.auto, on: !c.auto.on } });
+            await logAdminAction(i.user.id, i.user.username, 'shiroset', `Auto events ${!c.auto.on ? 'on' : 'off'}`);
+            return i.update(await render());
+          }
+          if (id === 'ss_ev_end') {
+            await i.deferUpdate();
+            await EV.finish(message.client, true);
+            await logAdminAction(i.user.id, i.user.username, 'shiroset', 'Called off the live event (refunded)');
+            return msg.edit(await render()).catch(() => {});
+          }
+          if (id === 'ss_ev_rain' || id === 'ss_ev_roll') {
+            const kind = id === 'ss_ev_rain' ? 'rain' : 'roll';
+            const [sub, v] = await askMany(i, kind === 'rain' ? 'Start a coin rain' : 'Start a high roll',
+              [['pot', 'Pot (coins)', 'e.g. 25000', true], ['min', 'Minutes to join (1–30)', '2', false]]);
+            if (!sub) return;
+            const err = await EV.start(message.client, { kind, pot: num(v.pot), minutes: num(v.min) || 2, channelId: c.channelId || message.channel.id, by: i.user.id });
+            if (!err) await logAdminAction(i.user.id, i.user.username, 'shiroset', `Started a ${kind} event`, null, null, `${num(v.pot)} coins`);
+            await sub.reply(err ? `❌ ${err}` : `✅ Started — ${c.channelId ? `<#${c.channelId}>` : 'here'}.`);
+            return msg.edit(await render()).catch(() => {});
+          }
+          if (id === 'ss_ev_autocfg') {
+            const [sub, v] = await askMany(i, 'Auto events', [['amt', 'Pot (coins)', String(c.auto.amount), false],
+              ['every', 'Every how many hours', String(c.auto.every), false], ['min', 'Minutes to join', String(c.auto.minutes), false]]);
+            if (!sub) return;
+            const auto = { ...c.auto };
+            if (num(v.amt) >= 100) auto.amount = num(v.amt);
+            if (num(v.every) >= 1) auto.every = Math.min(72, num(v.every));
+            if (num(v.min) >= 1) auto.minutes = Math.min(30, num(v.min));
+            await EV.setCfg({ auto });
+            await logAdminAction(i.user.id, i.user.username, 'shiroset', 'Auto event settings', null, null, `${auto.amount} every ${auto.every}h, ${auto.minutes} min`);
+            await sub.reply(`✅ Every ~${auto.every}h · ${fmt(auto.amount)} coins · ${auto.minutes} min.`);
+            return msg.edit(await render()).catch(() => {});
+          }
+          if (id === 'ss_ev_age') {
+            const [sub, n] = await ask(i, 'Minimum account age to join', 'Days (0–365)');
+            if (!sub) return;
+            if (n === null || n < 0 || n > 365) return sub.reply('Enter 0–365.');
+            await EV.setCfg({ minAccountDays: n });
+            await sub.reply(`✅ Accounts must be ${n}+ days old.`);
+            return msg.edit(await render()).catch(() => {});
+          }
+          if (id === 'ss_giveall') {
+            const [sub, v] = await askMany(i, 'Give every Player', [['amt', 'Amount each', 'e.g. 5000', true],
+              ['cur', 'coins or silv', 'coins', false], ['ok', 'Type yes to send', 'yes', true]]);
+            if (!sub) return;
+            const amount = num(v.amt);
+            const silv = /^s/i.test(v.cur || '');
+            if (!amount || amount < 1) return sub.reply('Enter an amount of 1 or more.');
+            if (!/^y/i.test(v.ok)) return sub.reply('Not sent — type yes to confirm.');
+            const { n, error } = await EV.giveAll(message.guild, { amount, silv });
+            if (error) return sub.reply(`❌ ${error}`);
+            await logAdminAction(i.user.id, i.user.username, 'shiroset', `Gave every Player ${amount} ${silv ? 'SILV' : 'coins'}`, null, null, `${n} players`);
+            return sub.reply(`🎁 Gave **${fmt(amount)} ${silv ? 'SILV' : 'coins'}** to **${n}** players.`);
+          }
         }
         if (['ss_home', 'ss_house', 'ss_players', 'ss_games', 'ss_logs'].includes(id)) {
           state.page = id.slice(3);

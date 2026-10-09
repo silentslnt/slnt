@@ -67,7 +67,7 @@ module.exports = {
   description: 'Spin the slots. `.sl <amount|all|max>`',
 
   async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
-    const bet = parseBet(args[0], userData.balance || 0);
+    const bet = parseBet(args[0], userData);
     if (!bet) {
       return message.channel.send(card({
         title: '🎰 Slots',

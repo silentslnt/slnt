@@ -387,6 +387,11 @@ client.once('clientReady', async () => {
   const paySupporters = () => require('./utils/supporter').tick(client, logAdminAction).catch((e) => console.error('supporter pay:', e.message));
   setInterval(paySupporters, 30 * 60 * 1000);
   paySupporters();
+  // Community events (rain / high roll): pick up a live one after a restart, auto events every few hours.
+  client.logAdminAction = logAdminAction;
+  const EV = require('./utils/events');
+  EV.resume(client).catch((e) => console.error('event resume:', e.message));
+  setInterval(() => EV.tick(client).catch((e) => console.error('auto event:', e.message)), 5 * 60 * 1000);
 });
 
 // Sentinel's ,fish command can drop an astronomically rare SILV token — it
@@ -941,6 +946,9 @@ client.on('interactionCreate', async (interaction) => {
   try {
     if (await require('./utils/weeklyLive').handleInteraction(interaction)) return;
   } catch (e) { console.error('weekly notify failed:', e); }
+  try {
+    if (await require('./utils/events').handleInteraction(interaction)) return;
+  } catch (e) { console.error('event join failed:', e); }
 
   // /setup vouch — admin: pick channel then appearance modal
   if (interaction.isChatInputCommand() && interaction.commandName === 'setup') {

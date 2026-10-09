@@ -34,7 +34,7 @@ module.exports = {
   description: 'Play rock paper scissors and double your bet if you win! `.rps <amount|all> <r|p|s>`',
   async execute({ message, args, userData, saveUserData, client, logAdminAction }) {
     if (typeof userData.balance !== 'number') userData.balance = 0;
-    const bet = parseBet(args[0], userData.balance);
+    const bet = parseBet(args[0], userData);
     const choiceMap = { r: 'rock', p: 'paper', s: 'scissors' };
     const playerChoice = choiceMap[(args[1] || '').toLowerCase()] || (args[1] || '').toLowerCase();
 
