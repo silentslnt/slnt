@@ -2,6 +2,7 @@
 // Ball drops through 16 rows of pegs, landing in one of 17 buckets.
 // Risk level controls the spread of multipliers (low/medium/high).
 const { card, gameResult, attachReplay } = require('../utils/casino');
+const art = require('../utils/casinoArt');
 const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
 
 const CHECK = '<:check:1547659779877642360>';
@@ -119,7 +120,7 @@ module.exports = {
     // the ball falls: one peg row per frame, drifting toward where it really lands
     const W = mults.length;
     let pos = Math.floor(W / 2);
-    const frame = (p, row) => card({ title: '🎯 Plinko', body: `# ${'·'.repeat(Math.max(0, p))}⚪${'·'.repeat(Math.max(0, W - 1 - p))}\n> Row ${row}/4 — **${bet.toLocaleString()}** falling…`, footer: g });
+    const frame = (p, row) => card({ title: '🎯 Plinko', body: '-# The ball is falling…', footer: g, image: { name: 'game.png', buffer: art.plinko({ mults, ball: [p, row * 2], bet }) } });
     const dropMsg = await message.channel.send(frame(pos, 1));
     for (let r = 2; r <= 4; r++) {
       pos += Math.sign(bucket - pos) * Math.ceil(Math.abs(bucket - pos) / (5 - r)) + (Math.random() < 0.3 ? (Math.random() < 0.5 ? -1 : 1) : 0);
@@ -136,6 +137,7 @@ module.exports = {
         `Balance **${(userData.balance || 0).toLocaleString()}**`,
       ],
       footer: g, replay: { game: 'plinko', bet },
+      art: art.plinko({ mults, bucket, ball: [bucket, 9], bet, payout, balance: userData.balance || 0 }),
     };
     await dropMsg.edit(gameResult(opts)).catch(() => {});
     attachReplay(dropMsg, message.author.id, opts);

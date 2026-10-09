@@ -2,6 +2,7 @@
 // (🍒 5× · 🍋 8× · 🔔 25× · 💎 100× · 👑 1,000×); two of a kind returns a quarter of the stake. ≈92% return.
 const { card, button, row, takeBet, settle, WIN, LOSE, BLACK, ButtonStyle, replayRow, attachReplay } = require('../utils/casino');
 const { casinoPayout } = require('../utils/houseEdge');
+const art = require('../utils/casinoArt');
 
 const SYMBOLS = [['🍒', 40, 5], ['🍋', 30, 8], ['🔔', 18, 25], ['💎', 9, 100], ['👑', 3, 1000]];
 const PAIR_BACK = 0.25;
@@ -36,7 +37,8 @@ module.exports = {
     const face = () => tiles.map((t, k) => (shown[k] ? t[0] : '⬜')).join(' ');
     const rows = () => [row(...[0, 1, 2].map((k) => button(`scr_${k}`, shown[k] ? tiles[k][0] : 'Scratch', ButtonStyle.Secondary, shown[k])),
       button('scr_all', 'Scratch all', ButtonStyle.Primary))];
-    const msg = await message.channel.send(card({ title: '🎟 Scratch card', body: `# ${face()}\n> **${bet.toLocaleString()}** on the card — scratch away.`, rows: rows(), accent: BLACK, footer: guild }));
+    const pic = (o = {}) => ({ name: 'game.png', buffer: art.scratch({ tiles: tiles.map((t) => t[0]), shown, bet, ...o }) });
+    const msg = await message.channel.send(card({ title: '🎟 Scratch card', body: '-# Scratch away.', rows: rows(), accent: BLACK, footer: guild, image: pic() }));
     const col = msg.createMessageComponentCollector({ time: 90_000 });
     let over = false;
     const end = async (i) => {
@@ -49,8 +51,9 @@ module.exports = {
       const balance = await settle(ctx, { bet, payout, game: 'scratch', detail: same ? `three ${tiles[0][0]}` : 'scratched' });
       const view = (r) => card({ rows: r ? [replayRow('scratch', bet)] : [],
         title: same ? `${tiles[0][0]} Three of a kind!` : pair ? '🎟 A pair' : '🎟 No match',
-        body: `# ${face()}\n> ${same ? `**+${(payout - bet).toLocaleString()}** coins (${tiles[0][2]}×).` : pair ? `A quarter back: **${payout.toLocaleString()}**.` : `Lost **${bet.toLocaleString()}**.`}`,
-        accent: same ? WIN : LOSE, footer: `${guild} · balance ${balance.toLocaleString()}` });
+        body: same ? `-# ${tiles[0][2]}× the bet` : pair ? '-# A pair pays a quarter back' : '',
+        image: pic({ payout, balance, done: true }),
+        accent: same ? WIN : LOSE, footer: guild });
       if (i) await i.update(view(true)).catch(() => {}); else await msg.edit(view(true)).catch(() => {});
       attachReplay(msg, uid, { replay: { game: 'scratch', bet }, final: () => view(false) });
     };
@@ -60,7 +63,7 @@ module.exports = {
       if (i.customId === 'scr_all') return end(i);
       shown[Number(i.customId.slice(4))] = true;
       if (shown.every(Boolean)) return end(i);
-      await i.update(card({ title: '🎟 Scratch card', body: `# ${face()}\n> Keep scratching…`, rows: rows(), accent: BLACK, footer: guild })).catch(() => {});
+      await i.update(card({ title: '🎟 Scratch card', body: '-# Keep scratching…', rows: rows(), accent: BLACK, footer: guild, image: pic() })).catch(() => {});
     });
     col.on('end', () => { if (!over) end(null); });
   },

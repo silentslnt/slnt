@@ -2,6 +2,7 @@
 // find it and win 2.8× (a 1-in-3 shot — 93% return).
 const { card, button, row, takeBet, settle, WIN, LOSE, BLACK, ButtonStyle, replayRow, attachReplay } = require('../utils/casino');
 const { casinoPayout } = require('../utils/houseEdge');
+const art = require('../utils/casinoArt');
 
 const PAYOUT = 2.8;
 const active = new Set();
@@ -25,14 +26,14 @@ module.exports = {
     active.add(uid);
     const guild = message.guild?.name || 'Shiro';
     const coin = Math.floor(Math.random() * 3);
-    const frames = ['🥤 🪙 🥤', '🥤 🥤 🥤', '  🥤🥤 🥤', '🥤  🥤🥤', '🥤 🥤 🥤'];
-    const msg = await message.channel.send(card({ title: '🥤 Cups', body: `# ${frames[0]}\n> The coin goes under a cup…`, footer: guild }));
-    for (const f of frames.slice(1)) {
+    const pic = (o) => ({ name: 'game.png', buffer: art.cups({ bet, ...o }) });
+    const msg = await message.channel.send(card({ title: '🥤 Cups', body: '-# The coin goes under a cup…', footer: guild, image: pic({ coin, show: true }) }));
+    for (const off of [[0, 0, 0], [60, -60, 0], [0, 70, -70], [-50, 0, 50]]) {
       await sleep(700);
-      await msg.edit(card({ title: '🥤 Cups', body: `# ${f}\n> Shuffling…`, footer: guild })).catch(() => {});
+      await msg.edit(card({ title: '🥤 Cups', body: '-# Shuffling…', footer: guild, image: pic({ offsets: off }) })).catch(() => {});
     }
     await msg.edit(card({
-      title: '🥤 Cups', body: `# 🥤 🥤 🥤\n> Which cup has the coin? Bet **${bet.toLocaleString()}** → **${Math.floor(bet * PAYOUT).toLocaleString()}**`,
+      title: '🥤 Cups', body: `> Which cup has the coin? **${bet.toLocaleString()}** → **${Math.floor(bet * PAYOUT).toLocaleString()}**`, image: pic({}),
       rows: [row(...[0, 1, 2].map((n) => button(`cups_${n}`, `Cup ${n + 1}`, ButtonStyle.Primary)))], accent: BLACK, footer: guild,
     })).catch(() => {});
 
@@ -45,12 +46,12 @@ module.exports = {
       const won = pick === coin;
       const payout = won ? casinoPayout(bet, bet * PAYOUT, userData) : 0;
       const balance = await settle(ctx, { bet, payout, game: 'cups', detail: 'found the coin' });
-      const reveal = [0, 1, 2].map((n) => (n === coin ? '🪙' : '🥤')).join(' ');
       const view = (r) => card({
         rows: r ? [replayRow('cups', bet)] : [],
         title: won ? '🪙 Found it!' : '🥤 Empty',
-        body: `# ${reveal}\n> ${pick === null ? 'Too slow — ' : ''}${won ? `**+${(payout - bet).toLocaleString()}** coins.` : `The coin was under cup ${coin + 1}. Lost **${bet.toLocaleString()}**.`}`,
-        accent: won ? WIN : LOSE, footer: `${guild} · balance ${balance.toLocaleString()}`,
+        body: `### ${pick === null ? 'Too slow — ' : ''}${won ? 'You found the coin' : `The coin was under cup ${coin + 1}`}`,
+        image: pic({ coin, show: true, pick, payout, balance }),
+        accent: won ? WIN : LOSE, footer: guild,
       });
       if (i) await i.update(view(true)).catch(() => {});
       else await msg.edit(view(true)).catch(() => {});

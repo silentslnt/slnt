@@ -1,6 +1,7 @@
 const { recordRound } = require('../utils/houseBank');
 const { card, gameResult, attachReplay } = require('../utils/casino');
 const FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+const art = require('../utils/casinoArt');
 const { awardPoints } = require('../utils/sentinelDb');
 const { parseBet } = require('../utils/parseBet');
 const { announceWin } = require('../utils/winAnnouncer');
@@ -61,16 +62,18 @@ module.exports = {
     await checkAchievements(userData, { message, saveUserData });
 
     const g = message.guild?.name || 'Shiro';
-    const rollMsg = await message.channel.send(card({ title: '🎲 Dice', body: `# ${FACES[0]}\n> Rolling for **${bet.toLocaleString()}**…`, footer: g }));
-    for (const f of [FACES[3], FACES[1], FACES[4]]) {
+    const rolling = (f) => card({ title: '🎲 Dice', body: '-# Rolling…', footer: g, image: { name: 'game.png', buffer: art.dice({ face: f, rolling: true, bet }) } });
+    const rollMsg = await message.channel.send(rolling(1));
+    for (const f of [4, 2, 5]) {
       await new Promise((r) => setTimeout(r, 280));
-      await rollMsg.edit(card({ title: '🎲 Dice', body: `# ${f}\n> Rolling for **${bet.toLocaleString()}**…`, footer: g })).catch(() => {});
+      await rollMsg.edit(rolling(f)).catch(() => {});
     }
     const opts = {
       emoji: '🎲', game: 'Dice', won: reward > bet ? true : false,
       headline: `${FACES[roll - 1]}  ${roll}` + (roll === 6 ? ' — JACKPOT' : roll >= 4 ? ' — win' : ' — lose'),
       lines: [resultLine.replace(/^> /, ''), `Balance **${userData.balance.toLocaleString()}**`, '-# 4 → 1.4× · 5 → 1.7× · 6 → 2×'],
       footer: g, replay: { game: 'dice', bet },
+      art: art.dice({ face: roll, bet, payout: reward, balance: userData.balance }),
     };
     await rollMsg.edit(gameResult(opts)).catch(() => {});
     attachReplay(rollMsg, message.author.id, opts);

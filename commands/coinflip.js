@@ -11,6 +11,7 @@ const { announceWin } = require('../utils/winAnnouncer');
 const { recordRound } = require('../utils/houseBank');
 const { casinoPayout, casinoLuck } = require('../utils/houseEdge');
 const { card, gameResult, attachReplay } = require('../utils/casino');
+const art = require('../utils/casinoArt');
 
 const CF_FEE = 0.10;   // taken from the winnings of every winning flip
 
@@ -52,11 +53,13 @@ module.exports = {
     const picked      = pickedHeads ? 'Heads 🪙' : 'Tails 🌑';
 
     // Animation
-    const spin = (f) => card({ title: '🪙 Coinflip', body: `# ${f}\n> ${picked} · **${bet.toLocaleString()}** on the line…`, footer: message.guild?.name || 'Shiro' });
-    const spinMsg = await message.channel.send(spin(SPIN_FRAMES[0]));
-    for (let i = 1; i < SPIN_FRAMES.length; i++) {
+    const calledName = pickedHeads ? 'Heads' : 'Tails';
+    const spin = (k) => card({ title: '🪙 Coinflip', body: '-# Flipping…', footer: message.guild?.name || 'Shiro',
+      image: { name: 'game.png', buffer: art.coinflip({ called: calledName, bet, spin: k, streak: userData.stats?.cfStreak || 0 }) } });
+    const spinMsg = await message.channel.send(spin(0));
+    for (let i = 1; i < 4; i++) {
       await new Promise(r => setTimeout(r, 300));
-      await spinMsg.edit(spin(SPIN_FRAMES[i])).catch(() => {});
+      await spinMsg.edit(spin(i)).catch(() => {});
     }
 
     // Calculate payout
@@ -114,6 +117,7 @@ module.exports = {
       ],
       footer: [frenzyMult > 1 ? 'Frenzy +5% winnings' : '', luckBonus > 0 ? '+1% luck' : '', message.guild?.name || 'Shiro'].filter(Boolean).join(' · '),
       replay: { game: 'coinflip', bet, extra: [pickedHeads ? 'h' : 't'], picks: [['Heads', '🪙', ['h']], ['Tails', '🌑', ['t']]] },
+      art: art.coinflip({ called: calledName, landed: landedHeads ? 'Heads' : 'Tails', bet, payout: payout + streakBonus, balance: userData.balance, streak: cfStreak }),
     };
     await spinMsg.edit(gameResult(opts)).catch(() => {});
     attachReplay(spinMsg, message.author.id, opts);

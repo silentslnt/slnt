@@ -6,6 +6,7 @@ const { card, button, row, takeBet, settle, gameResult, attachReplay, BLACK, But
 const { casinoPayout } = require('../utils/houseEdge');
 const { debit, credit } = require('../utils/atomicInv');
 const User = require('../models/user');
+const art = require('../utils/casinoArt');
 
 const active = new Set();
 const SUITS = ['♠', '♥', '♦', '♣'];
@@ -53,9 +54,8 @@ module.exports = {
 
     const table = (note, reveal = false) => card({
       title: '♠ Blackjack',
-      body: `**Dealer** — ${reveal ? `${show(dealer)} · **${value(dealer)}**` : `\`${dealer[0].display}\` \`🂠\``}\n`
-        + `**You** — ${show(player)} · **${value(player)}**\n> Bet **${bet.toLocaleString()}**${doubled ? ' (doubled)' : ''}`
-        + (note ? `\n-# ${note}` : ''),
+      body: note ? `-# ${note}` : '',
+      image: { name: 'game.png', buffer: art.blackjack({ dealer, player, hide: !reveal, dv: reveal ? value(dealer) : '?', pv: value(player), bet, doubled }) },
       rows: reveal ? [] : [row(
         button('bj_hit', 'Hit', ButtonStyle.Primary, false, '🃏'),
         button('bj_stand', 'Stand', ButtonStyle.Secondary, false, '✋'),
@@ -105,6 +105,7 @@ module.exports = {
           `Balance **${balance.toLocaleString()}**`,
         ],
         footer: g, replay: { game: 'blackjack', bet: baseBet },
+        art: art.blackjack({ dealer, player, dv, pv, bet, payout, balance, doubled }),
       };
       if (i) await i.update(gameResult(opts)).catch(() => msg.edit(gameResult(opts)).catch(() => {}));
       else await msg.edit(gameResult(opts)).catch(() => {});

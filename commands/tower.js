@@ -4,6 +4,7 @@
 const { shuffle } = require('../utils/shuffle');
 const { card, button, row, takeBet, settle, WIN, LOSE, BLACK, ButtonStyle, replayRow, attachReplay } = require('../utils/casino');
 const { casinoPayout } = require('../utils/houseEdge');
+const art = require('../utils/casinoArt');
 
 const FLOORS = 8;
 // one fixed tower (direct: picking a difficulty was a cheat code) -> [doors per floor, safe doors]
@@ -51,14 +52,15 @@ module.exports = {
       const next = multiplier(mode, floor + 1);
       const doorRow = row(...[...Array(doors).keys()].map((d) => button(`tw_door_${d}`, `Door ${d + 1}`, ButtonStyle.Primary)));
       const cash = row(button('tw_cash', floor ? `Cash out ×${now} (${Math.floor(bet * now).toLocaleString()})` : 'Cash out', ButtonStyle.Success, floor === 0));
-      const tower = [...Array(FLOORS).keys()].reverse()
-        .map((f) => `\`${String(f + 1).padStart(2)}\` ${f < floor ? '🟩' : f === floor ? '➡️' : '⬛'}  ×${multiplier(mode, f + 1)}`).join('\n');
       return card({
         title: '🗼 Tower',
-        body: `${tower}\n\n> Floor **${floor + 1}/${FLOORS}** · pick a door · next: **×${next}**`,
+        body: `> Floor **${floor + 1}/${FLOORS}** · pick a door · next **×${next}**`,
+        image: { name: 'game.png', buffer: art.tower({ floors: FLOORS, floor, mults: mults(), picks: history, bet }) },
         rows: [doorRow, cash], accent: BLACK, footer: `${guild} · ${safe} safe door${safe > 1 ? 's' : ''} of ${doors} per floor`,
       });
     };
+    const mults = () => [...Array(FLOORS).keys()].map((f) => multiplier(mode, f + 1));
+    let trapAt = null;
     const msg = await message.channel.send(view());
     const collector = msg.createMessageComponentCollector({ time: 180_000 });
     let over = false;
@@ -74,8 +76,9 @@ module.exports = {
         rows: r ? [replayRow('tower', bet)] : [],
         title: cashed ? (floor >= FLOORS ? '🏆 Top of the tower!' : '🗼 Cashed out') : '💥 Trap!',
         body: cashed
-          ? `> Climbed **${floor}** floor${floor === 1 ? '' : 's'} — **×${m}** → **+${(payout - bet).toLocaleString()}** coins.`
-          : `> Floor ${floor + 1} was a trap. You lost **${bet.toLocaleString()}** coins.${history.length ? `\n> Made it past ${history.length} floor${history.length === 1 ? '' : 's'}.` : ''}`,
+          ? `### Climbed ${floor} floor${floor === 1 ? '' : 's'} — ×${m}`
+          : `### Floor ${floor + 1} was a trap`,
+        image: { name: 'game.png', buffer: art.tower({ floors: FLOORS, floor, mults: mults(), picks: history, trapAt, bet, payout, balance }) },
         accent: cashed ? WIN : LOSE, footer: `${guild} · balance ${balance.toLocaleString()}`,
       });
       if (i) await i.update(result(true)).catch(() => {});
@@ -88,7 +91,7 @@ module.exports = {
       if (over) return i.deferUpdate().catch(() => {});
       if (i.customId === 'tw_cash') return end(i, true);
       const d = parseInt(i.customId.split('_')[2], 10);
-      if (traps.has(d)) return end(i, false);
+      if (traps.has(d)) { trapAt = [floor, d]; return end(i, false); }
       history.push(d);
       floor += 1;
       if (floor >= FLOORS) return end(i, true);

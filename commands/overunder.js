@@ -2,6 +2,7 @@
 // Riskier calls pay more: payout = 94% of the fair odds (a 6% house edge).
 const { card, button, row, takeBet, settle, replayRow, attachReplay, WIN, LOSE, BLACK, ButtonStyle } = require('../utils/casino');
 const { casinoPayout, casinoLuck } = require('../utils/houseEdge');
+const art = require('../utils/casinoArt');
 
 const EDGE = 0.94;
 
@@ -39,13 +40,12 @@ module.exports = {
     const won = side === 'over' ? roll > target : roll < target;
     const payout = won ? casinoPayout(bet, bet * mult, userData) : 0;
     const balance = await settle(ctx, { bet, payout, game: 'overunder', detail: `${side} ${target}, rolled ${roll}` });
-    const bar = '▰'.repeat(Math.round(roll / 5)) + '▱'.repeat(20 - Math.round(roll / 5));
     const view = (r) => card({
       rows: r ? [replayRow('overunder', bet)] : [],
       title: won ? '🎲 Called it' : '🎲 Missed',
-      body: `# ${roll}\n\`${bar}\`\n> You called **${side} ${target}** (${Math.round(chance * 100)}% · ×${mult}) — `
-        + (won ? `**+${(payout - bet).toLocaleString()}** coins.` : `lost **${bet.toLocaleString()}**.`),
-      accent: won ? WIN : LOSE, footer: `${guild} · balance ${balance.toLocaleString()}`,
+      body: `-# ${Math.round(chance * 100)}% to hit · ×${mult}`,
+      image: { name: 'game.png', buffer: art.overunder({ roll, side, target, mult, bet, payout, balance }) },
+      accent: won ? WIN : LOSE, footer: guild,
     });
     const sent = await message.channel.send(view(true));
     attachReplay(sent, message.author.id, { replay: { game: 'overunder', bet, extra: [side, String(target)] }, final: () => view(false) });

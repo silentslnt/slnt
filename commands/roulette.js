@@ -1,5 +1,6 @@
 // commands/roulette.js — European Roulette (0-36)
 const { card, gameResult, attachReplay } = require('../utils/casino');
+const art = require('../utils/casinoArt');
 const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
 
 const CHECK = '<:check:1547659779877642360>';
@@ -114,12 +115,13 @@ module.exports = {
     }
 
     const g = message.guild?.name || 'Shiro';
-    const wheel = (n, c) => card({ title: '🔴 Roulette', body: `# ${COLOR_EMOJI[c]} ${n}\n> **${bet.toLocaleString()}** on **${betLabel}** — the ball is rolling…`, footer: g });
-    const spinMsg = await message.channel.send(wheel('?', 'green'));
+    const wheel = (n) => card({ title: '🔴 Roulette', body: '-# The ball is rolling…', footer: g,
+      image: { name: 'game.png', buffer: art.roulette({ num: n, rolling: true, betLabel, bet }) } });
+    const spinMsg = await message.channel.send(wheel(null));
     for (let k = 0; k < 4; k++) {
       await new Promise((r) => setTimeout(r, 300));
       const f = spinWheel();
-      await spinMsg.edit(wheel(f.num, f.color)).catch(() => {});
+      await spinMsg.edit(wheel(f.num)).catch(() => {});
     }
     const opts = {
       emoji: '🔴', game: 'Roulette', won,
@@ -132,6 +134,7 @@ module.exports = {
       footer: g,
       replay: { game: 'roulette', bet, extra: [betType === 'number' ? String(betNumber) : betType],
         picks: [['Red', '🟥', ['red']], ['Black', '⬛', ['black']], ['Green', '🟩', ['green']]] },
+      art: art.roulette({ num: result.num, betLabel, bet, payout, balance: userData.balance || 0 }),
     };
     await spinMsg.edit(gameResult(opts)).catch(() => {});
     attachReplay(spinMsg, message.author.id, opts);

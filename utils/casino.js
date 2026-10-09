@@ -117,9 +117,12 @@ const fmtN = (n) => Math.floor(n || 0).toLocaleString();
 
 /** The finished-game card every game uses: a big headline, the numbers, and a replay row.
  *  opts: { emoji, game, headline, won (true|false|null for a push), lines: [..], footer, replay: { game, bet, extra } } */
-function gameResult({ emoji = '🎲', game, headline, won = null, lines = [], footer, replay, rowsBefore = [] }, withReplay = true) {
+function gameResult({ emoji = '🎲', game, headline, won = null, lines = [], footer, replay, rowsBefore = [], art = null }, withReplay = true) {
   const accent = won === true ? WIN : won === false ? LOSE : themeFor(game);
-  const body = `# ${headline}\n` + lines.filter(Boolean).map((l) => (l.startsWith('-#') ? l : `> ${l}`)).join('\n');
+  // with a drawn picture (art: PNG buffer) the numbers live in the picture — the text keeps the headline + small notes
+  const body = art
+    ? `### ${headline}` + lines.filter((l) => l && l.startsWith('-#')).map((l) => `\n${l}`).join('')
+    : `# ${headline}\n` + lines.filter(Boolean).map((l) => (l.startsWith('-#') ? l : `> ${l}`)).join('\n');
   const rows = [...rowsBefore];
   if (withReplay && replay && replay.bet > 0) {
     if (replay.picks) {   // play again straight away with a different call (heads/tails, a colour, a hand)
@@ -127,7 +130,7 @@ function gameResult({ emoji = '🎲', game, headline, won = null, lines = [], fo
     }
     rows.push(replayRow(replay.game, replay.bet));
   }
-  return card({ title: `${emoji} ${game}`, body, rows, accent, footer });
+  return card({ title: `${emoji} ${game}`, body, rows, accent, footer, image: art ? { name: 'game.png', buffer: art } : null });
 }
 
 /** Again · Double · Half · Game floor. */

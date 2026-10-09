@@ -1,4 +1,5 @@
 const { card, gameResult, attachReplay } = require('../utils/casino');
+const art = require('../utils/casinoArt');
 const { parseBet } = require('../utils/parseBet');
 const { announceWin } = require('../utils/winAnnouncer');
 const { trackStat, checkAchievements } = require('../utils/achievements');
@@ -89,6 +90,7 @@ module.exports = {
       ],
       footer: message.guild?.name || 'Shiro',
       replay: { game: 'rps', bet, extra: [playerChoice[0]], picks: [['Rock', '🪨', ['r']], ['Paper', '📄', ['p']], ['Scissors', '✂️', ['s']]] },
+      art: art.rps({ you: playerChoice, house: botChoice, bet, payout, balance: userData.balance }),
     };
     const sent = await message.channel.send(gameResult(opts));
     attachReplay(sent, message.author.id, opts);

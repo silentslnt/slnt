@@ -1,5 +1,6 @@
 // commands/slots.js
 const { card, gameResult, attachReplay } = require('../utils/casino');
+const art = require('../utils/casinoArt');
 const mongoose = require('mongoose');
 const { XP_PER_GAME, XP_PER_WIN } = require('../utils/config');
 
@@ -90,14 +91,14 @@ module.exports = {
 
     // ── Spin animation ────────────────────────────────────────────────────
     const g = message.guild?.name || 'Shiro';
-    const reelCard = (a, b, c) => card({ title: '🎰 Slots', body: `# ┃ ${a} ┃ ${b} ┃ ${c} ┃\n> **${bet.toLocaleString()}** in · jackpot **${(jackpot + jackpotContrib).toLocaleString()}**`, footer: g });
-    const rnd = () => SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)].s;
-    const spinMsg = await message.channel.send(reelCard('🌀', '🌀', '🌀'));
+    const reelCard = (a, b, c) => card({ title: '🎰 Slots', body: '-# The reels are spinning…', footer: g,
+      image: { name: 'game.png', buffer: art.slots({ reels: [a, b, c], bet, jackpot: jackpot + jackpotContrib }) } });
+        const spinMsg = await message.channel.send(reelCard('🌀', '🌀', '🌀'));
     // ── Spin reels ────────────────────────────────────────────────────────
     const reels  = [spinReel(casinoLuck(userData)), spinReel(casinoLuck(userData)), spinReel(casinoLuck(userData))];
     const row    = reels.map(r => r.s).join(' ');
     // reels stop one by one
-    for (const shown of [[rnd(), rnd(), rnd()], [reels[0].s, rnd(), rnd()], [reels[0].s, reels[1].s, rnd()]]) {
+    for (const shown of [['🌀', '🌀', '🌀'], [reels[0].s, '🌀', '🌀'], [reels[0].s, reels[1].s, '🌀']]) {
       await new Promise((r) => setTimeout(r, 380));
       await spinMsg.edit(reelCard(...shown)).catch(() => {});
     }
@@ -165,6 +166,8 @@ module.exports = {
         '-# 5% of every bet feeds the jackpot' + (frenzyMult > 1 ? ' · Frenzy +5%' : ''),
       ],
       footer: g, replay: { game: 'slots', bet },
+      art: art.slots({ reels: reels.map((r) => r.s), bet, payout, balance: userData.balance, jackpot: newJackpot,
+        win: allMatch ? [0, 1, 2] : twoMatch ? [0, 1, 2].filter((k) => reels.filter((r) => r.s === reels[k].s).length > 1) : [] }),
     };
     await spinMsg.edit(gameResult(opts)).catch(() => {});
     attachReplay(spinMsg, message.author.id, opts);
