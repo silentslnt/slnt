@@ -52,14 +52,14 @@ module.exports = {
     await credit(target.id, { balance: net, totalEarned: net }); // never an absolute write
     if (tax) require('../utils/houseBank').creditHouse(tax, 'transfer');
     const leftNow = remaining - capped;
-    await logAdminAction(message.author.id, message.author.username, 'gift', 'Gift Sent', target.id, target.username, `${capped.toLocaleString()} coins (${tax.toLocaleString()} tax)`);
+    await logAdminAction(message.author.id, message.author.username, 'gift', 'Gift Sent', target.id, target.username, `${capped.toLocaleString()} coins (${tax.toLocaleString()} fee)`);
 
     return message.channel.send({
       embeds: [new EmbedBuilder().setColor(BLACK)
         .setTitle('GIFT SENT')
         .setDescription(
           `> ${PRESENT} ${message.author} gifted **${capped.toLocaleString()}** coins to ${target}\n` +
-          `> They receive **${net.toLocaleString()}** · ${Math.round(TRANSFER_TAX * 100)}% transfer tax **${tax.toLocaleString()}**\n\n` +
+          `> They receive **${net.toLocaleString()}** · ${Math.round(TRANSFER_TAX * 100)}% transfer fee **${tax.toLocaleString()}**\n\n` +
           `> Your balance: **${userData.balance.toLocaleString()}**\n` +
           `> Left to send today: **${leftNow.toLocaleString()}** coins`
         )

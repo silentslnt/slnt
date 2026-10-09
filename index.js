@@ -383,6 +383,10 @@ client.once('clientReady', async () => {
   setInterval(payWeekly, 10 * 60 * 1000);
   payWeekly();
   setInterval(() => WL.refresh(client).catch((e) => console.error('weekly live board:', e.message)), 5 * 60 * 1000);
+  // Supporter role: weekly coins (once per ISO week each, see utils/supporter.js)
+  const paySupporters = () => require('./utils/supporter').tick(client, logAdminAction).catch((e) => console.error('supporter pay:', e.message));
+  setInterval(paySupporters, 30 * 60 * 1000);
+  paySupporters();
 });
 
 // Sentinel's ,fish command can drop an astronomically rare SILV token — it
@@ -402,11 +406,15 @@ async function claimPendingSilvTokens() {
   for (const grant of grants) {
     try {
       // SILV lives in inventory['Silv token'] — this used to add the grant to the COIN balance by mistake.
-      await User.updateOne({ userId: grant.userId }, { $inc: { 'inventory.Silv token': grant.amount } }, { upsert: true });
+      // A `coins:` source (Sentinel giveaway prizes) is a coin grant instead.
+      const isCoins = String(grant.source || '').startsWith('coins:');
+      await User.updateOne({ userId: grant.userId }, { $inc: isCoins ? { balance: grant.amount } : { 'inventory.Silv token': grant.amount } }, { upsert: true });
       const user = await client.users.fetch(grant.userId).catch(() => null);
       if (user) {
         const src = String(grant.source || '');
-        const why = src.startsWith('invite:')
+        const why = src.includes('giveaway:')
+          ? `🎉 **Your giveaway prize has been delivered.**`
+          : src.startsWith('invite:')
           ? `🎟 **Your invite has been validated** — <@${src.split(':')[1]}> joined, began their journey and really played.`
           : src.startsWith('dungeon:')
             ? '🌀 **SILV you carried out of a dungeon has been claimed.**'
@@ -415,13 +423,13 @@ async function claimPendingSilvTokens() {
           embeds: [
             new EmbedBuilder()
               .setColor(0x000000)
-              .setDescription(`${why}\n\n> +\`${grant.amount.toLocaleString()}\` SILV added to your inventory.`),
+              .setDescription(`${why}\n\n> +\`${grant.amount.toLocaleString()}\` ${isCoins ? 'coins added to your wallet' : 'SILV added to your inventory'}.`),
           ],
         }).catch(() => {});
       }
       // every SILV that lands is logged (direct: "I should see all logs… even when people earn silv from inviting or playing")
       const src = String(grant.source || 'sentinel');
-      await logAdminAction(grant.userId, user?.username || grant.userId, 'silvgrant', `+${grant.amount} SILV from Sentinel`,
+      await logAdminAction(grant.userId, user?.username || grant.userId, 'silvgrant', `+${grant.amount} ${isCoins ? 'coins' : 'SILV'} from Sentinel`,
         grant.userId, user?.username || grant.userId, src);
     } catch (err) {
       console.error(`Failed to credit SILV token grant to ${grant.userId}:`, err.message);
@@ -547,6 +555,7 @@ async function savePrefix(p) {
 
 // Global cooldowns
 const cooldowns = new Map();
+const notHereSeen = new Map();   // user id → last 'Not here' notice (throttle)
 const COOLDOWN_MS = 5000;
 
 // Per-user in-flight lock — the 5s per-command cooldown above blocks spamming
@@ -569,6 +578,7 @@ const usersInFlight = new Set();
 const LOCK_EXEMPT_COMMANDS = new Set([
   'duel', 'blackjack', 'mines', 'minesweeper', 'trade',
   'hangman', 'wordscramble', 'guess', 'cipher', 'crash', 'tower', 'cups',
+  'rpsduel', 'flipduel', 'connect4', 'battleship', 'scratch', 'leaderboard',
 ]);
 
 // Load commands dynamically (exclude keydrop.js)
@@ -837,6 +847,17 @@ client.on('messageCreate', async (message) => {
   // (The old rule here only let a short allowlist run IN the game channel, which is why `.weekly` and most
   // commands silently did nothing there.) Now: command channels from `.shiroset` → Games.
   if (!require('./utils/gameChannel').commandAllowed(message.channel, message.member, command.name)) {
+    // Say where it works instead of silence (direct: ".bal just gets ignored") — once per user per 30s, then it tidies up.
+    const gc = require('./utils/gameChannel');
+    const key = message.author.id;
+    const last = notHereSeen.get(key) || 0;
+    if (Date.now() - last > 30_000) {
+      notHereSeen.set(key, Date.now());
+      const where = gc.getCommandChannels().slice(0, 5).map((id) => `<#${id}>`).join(' · ');
+      message.reply({ content: `<:xmark:1547659816783061153> Not here — Shiro commands work in ${where || 'the game channels'}.`,
+                      allowedMentions: { repliedUser: false } })
+        .then((m) => setTimeout(() => m.delete().catch(() => {}), 8000)).catch(() => {});
+    }
     return;
   }
 

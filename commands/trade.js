@@ -18,7 +18,7 @@ const fmt = (n) => Math.floor(n || 0).toLocaleString();
 function offerText(o) {
   const items = Object.entries(o.items).filter(([, n]) => n > 0).map(([k, n]) => `${n}× ${k}`);
   const parts = [];
-  if (o.coins) parts.push(`🪙 \`${fmt(o.coins)}\` coins *(−10% transfer tax on arrival)*`);
+  if (o.coins) parts.push(`🪙 \`${fmt(o.coins)}\` coins *(−10% transfer fee on arrival)*`);
   if (items.length) parts.push(...items.map((s) => `• ${s}`));
   return parts.length ? parts.map((p) => `> ${p}`).join('\n') : '> *nothing yet*';
 }
@@ -201,7 +201,7 @@ module.exports = {
             await credit(t.b, { ...A, balance: A.balance - taxA, stats: { trades: 1 } });
             await credit(t.a, { ...B, balance: B.balance - taxB, stats: { trades: 1 } });
             if (taxA + taxB) require('../utils/houseBank').creditHouse(taxA + taxB, 'transfer');
-            result = '✅ **Trade complete.** Everything changed hands.' + (taxA + taxB ? `\n-# ${Math.round(TRANSFER_TAX * 100)}% transfer tax on coins: ${fmt(taxA + taxB)}` : '');
+            result = '✅ **Trade complete.** Everything changed hands.' + (taxA + taxB ? `\n-# ${Math.round(TRANSFER_TAX * 100)}% transfer fee on coins: ${fmt(taxA + taxB)}` : '');
             const ua = await client.users.fetch(t.a).catch(() => null);
             const ub = await client.users.fetch(t.b).catch(() => null);
             const sum = (o) => [o.coins ? `${o.coins} coins` : '', ...Object.entries(o.items).map(([k, n]) => `${n}x ${k}`)].filter(Boolean).join(', ') || 'nothing';

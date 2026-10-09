@@ -21,6 +21,7 @@ const GAMES = {
   coinflip:  ['Coinflip', '🪙', '50 / 50 — call it.', [['h', 'Heads'], ['t', 'Tails']]],
   roulette:  ['Roulette', '🔴', 'Red, black or green.', [['red', 'Red'], ['black', 'Black'], ['green', 'Green']]],
   rps:       ['Rock Paper Scissors', '✊', 'Beat the house hand.', [['r', 'Rock'], ['p', 'Paper'], ['s', 'Scissors']]],
+  scratch:   ['Scratch card', '🎟', 'Match three — up to 1,000×.', null],
 };
 const BETS = [100, 1_000, 5_000, 10_000, 50_000];
 const fmt = (n) => Number(n || 0).toLocaleString();

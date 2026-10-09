@@ -78,6 +78,7 @@ async function settle(ctx, { bet, payout, game, detail }) {
   if (won) {
     await trackStat(userData, 'gamesWon', 1);
     await trackStat(userData, 'coinsWon', payout - bet);
+    require('./referralBonus').onWin(uid, payout - bet).catch(() => {});   // their recruiter's share — paid by the house
   }
   const save = (d) => saveSpecificUserData(uid, d);
   await save({ totalEarned: userData.totalEarned, stats: userData.stats });

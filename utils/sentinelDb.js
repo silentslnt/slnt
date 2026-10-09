@@ -297,8 +297,15 @@ async function recordShiroEvent(guildId, userId, kind) {
   }
 }
 
+/** Raw read against Sentinel's DB (null when the bridge isn't configured). */
+async function query(sql, params = []) {
+  const pool = _getPool();
+  if (!pool) return null;
+  try { return (await pool.query(sql, params)).rows; } catch (err) { console.error('[sentinel-db] query failed:', err.message); return null; }
+}
+
 module.exports = {
-  recordShiroEvent,
+  query, recordShiroEvent,
   awardPoints, grantItem, getOwnedItems, removeItem, setArtifactEffect, getSpellDisplay,
   claimPendingSilvGrants, getPoints, spendPoints, addFishingBait,
 };

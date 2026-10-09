@@ -103,7 +103,8 @@ function walletRow(disabled) {
     new ButtonBuilder().setCustomId('bal_play').setLabel('Play').setEmoji('🎲').setStyle(ButtonStyle.Success).setDisabled(disabled),
     new ButtonBuilder().setCustomId('bal_convert').setLabel('Convert').setEmoji('💎').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
     new ButtonBuilder().setCustomId('bal_payout').setLabel('Payout').setEmoji('💸').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
-    new ButtonBuilder().setCustomId('bal_daily').setLabel('Daily').setEmoji('📅').setStyle(ButtonStyle.Secondary).setDisabled(disabled));
+    new ButtonBuilder().setCustomId('bal_daily').setLabel('Daily').setEmoji('📅').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+    new ButtonBuilder().setCustomId('bal_recruits').setLabel('Recruits').setEmoji('🤝').setStyle(ButtonStyle.Secondary).setDisabled(disabled));
 }
 
 async function profile(tab, target, data, guild, disabled = false, own = false) {
@@ -115,7 +116,9 @@ async function profile(tab, target, data, guild, disabled = false, own = false) 
     .addActionRowComponents(tabRow(tab, disabled))
     .addSeparatorComponents(new SeparatorBuilder())
     .addTextDisplayComponents(new TextDisplayBuilder().setContent(await body(tab, target, data, own)));
-  if (own) c.addSeparatorComponents(new SeparatorBuilder()).addActionRowComponents(walletRow(disabled));
+  if (own) c.addSeparatorComponents(new SeparatorBuilder()).addActionRowComponents(walletRow(disabled))
+    .addActionRowComponents(new ActionRowBuilder().addComponents(   // the server's top players, one click away
+      new ButtonBuilder().setCustomId('bal_leaderboard').setLabel('Top players').setEmoji('🏆').setStyle(ButtonStyle.Secondary).setDisabled(disabled)));
   c.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${guild}${own ? ' · only you can use these buttons' : ''}`));
   return { components: [c], flags: MessageFlags.IsComponentsV2 };
 }
@@ -141,10 +144,22 @@ module.exports = {
       if (i.user.id !== message.author.id) {
         return i.reply({ content: 'Open your own with `.bal`.', ephemeral: true }).catch(() => {});
       }
+      if (i.customId === 'bal_recruits') {   // who you brought in, and what their wins have paid you
+        const RB = require('../utils/referralBonus');
+        const fresh = await getUserData(target.id);
+        const rows = await RB.recruits(target.id);
+        const from = fresh.refFrom || {};
+        const list = rows.map((r) => `> <@${r.invitee_id}> — \`${fmt(from[String(r.invitee_id)] || 0)}\` coins`).join('\n');
+        const c = new ContainerBuilder().setAccentColor(BLACK).addTextDisplayComponents(new TextDisplayBuilder().setContent(
+          `## 🤝 Your recruits\n> Earned from their wins: **${fmt(fresh.refEarned || 0)}** coins\n`
+          + `-# You get ${Math.round(RB.pct() * 100)}% of every win your validated recruits make in Shiro — paid by the house, never taken from them.\n\n`
+          + (list || '> No validated recruits yet. Invite people to the server — once they really play Silvreign, they count.')));
+        return i.reply({ components: [c], flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, allowedMentions: { parse: [] } }).catch(() => {});
+      }
       if (i.customId.startsWith('bal_')) {
         await i.deferUpdate().catch(() => {});
         const cmd = i.customId.slice(4);
-        await i.client.runAs?.(i, cmd, [], { private: cmd !== 'play' });   // Convert/Payout/Daily open privately — no channel flood
+        await i.client.runAs?.(i, cmd, [], { private: cmd !== 'play' && cmd !== 'leaderboard' });   // Convert/Payout/Daily open privately — no channel flood
         const fresh = await getUserData(target.id);
         return msg.edit(await profile('overview', target, fresh, guild, false, own)).catch(() => {});
       }

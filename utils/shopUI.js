@@ -122,7 +122,8 @@ async function sendShopUI({ message, interaction: opener, onBack, title, headerD
     if (id.startsWith(`${buyPrefix}buy_`)) {
       const itemId = id.slice(`${buyPrefix}buy_`.length);
       const result = await onBuy(interaction, itemId);
-      await interaction.reply({ content: (result.ok ? '✅ ' : '') + result.message, ephemeral: true });
+      const text = result.message || [result.title && `**${result.title}**`, result.description].filter(Boolean).join('\n') || 'Done.';
+      await interaction.reply({ content: (result.ok ? '✅ ' : '') + text, ephemeral: true });   // was `undefined` for {title, description} results
       items = await getItems();
       await msg.edit(payload()).catch(() => {});
     }

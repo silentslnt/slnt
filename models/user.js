@@ -21,6 +21,10 @@ const userSchema = new mongoose.Schema({
   lastWeekly:   { type: Date,   default: null },
   lastMonthly:  { type: Date,   default: null },
   lastFreeSpin: { type: Date,   default: null },   // .freespin — one free wheel spin a day
+  insuranceDay: { type: String, default: '' },
+  supporterWeek: { type: String, default: '' },
+  refEarned:    { type: Number, default: 0 },      // coins earned from recruits' winnings (utils/referralBonus.js)
+  refFrom:      { type: Object, default: {} },     // recruit id → coins they've earned you    // ISO week the Supporter role's weekly coins were last paid     // UTC date an Insurance Slip last paid out (once a day)
 
   // ── Missions ─────────────────────────────────────────────────────────────
   missionDate:     { type: String, default: '' },

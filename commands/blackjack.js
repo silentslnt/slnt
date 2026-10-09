@@ -80,7 +80,12 @@ module.exports = {
       let won = null;
       if (pv > 21) {
         head = `Bust — ${pv}`; won = false;
-        if (await debit(uid, { items: { 'Insurance Slip': 1 } })) { payout = bet; head = 'Bust — your Insurance Slip returned the bet'; won = null; }
+        // An Insurance Slip pays out at most once a UTC day: claim the day first, then spend the slip
+        const today = new Date().toISOString().slice(0, 10);
+        const claimed = await User.updateOne({ userId: uid, insuranceDay: { $ne: today } }, { $set: { insuranceDay: today } })
+          .then((r) => r.modifiedCount > 0).catch(() => false);
+        if (claimed && await debit(uid, { items: { 'Insurance Slip': 1 } })) { payout = bet; head = 'Bust — your Insurance Slip returned the bet'; won = null; }
+        else if (claimed) await User.updateOne({ userId: uid }, { $set: { insuranceDay: '' } }).catch(() => {});   // no slip: the day stays free
       } else if (natural) {
         if (dv === 21 && dealer.length === 2) { payout = bet; head = 'Both blackjack — push'; }
         else { payout = casinoPayout(bet, bet * 2.5, userData); head = 'BLACKJACK — 2.5×'; won = true; }

@@ -96,14 +96,16 @@ module.exports = {
             row(button('ss_g_ws', 'Start word scramble', ButtonStyle.Success), button('ss_g_hm', 'Start hangman', ButtonStyle.Success),
               button('ss_g_gn', 'Start guess the number', ButtonStyle.Success)),
             row(button('ss_g_wsx', 'Stop scramble', ButtonStyle.Danger), button('ss_g_hmx', 'Stop hangman', ButtonStyle.Danger),
-              button('ss_g_gnx', 'Stop guess', ButtonStyle.Danger), button('ss_cmdall', 'Allow everywhere', ButtonStyle.Secondary, !cmd.length)),
+              button('ss_g_gnx', 'Stop guess', ButtonStyle.Danger), button('ss_cmdall', 'Allow everywhere', ButtonStyle.Secondary, !cmd.length),
+              button('ss_cmdadd', 'Add channel ID', ButtonStyle.Primary)),
             new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('ss_wkpost')
               .setPlaceholder('Post the live weekly board in…').addChannelTypes(ChannelType.GuildText)),
             new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId('ss_wkrole')
               .setPlaceholder('Or pick an existing ping role…')),
             new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId('ss_crown')
               .setPlaceholder('Top 3 chatters role (e.g. Crowned)…')),
-            row(button('ss_wkmk', wk.roleId ? 'Ping role made' : 'Create the leaderboard ping role', ButtonStyle.Success, !!wk.roleId, '🔔'))],
+            row(button('ss_wkmk', wk.roleId ? 'Ping role made' : 'Create the leaderboard ping role', ButtonStyle.Success, !!wk.roleId, '🔔'),
+              button('ss_cmdrem', 'Remove channel ID', ButtonStyle.Secondary, !cmd.length))],
           footer: `${guildName} · every change is logged`,
         });
       }
@@ -123,11 +125,19 @@ module.exports = {
         });
       }
       const econ = getEconomyLogsChannel?.();
+      const sup = require('../utils/supporter').cfg();
+      const refPct = require('../utils/referralBonus').pct();
+      const supSel = new RoleSelectMenuBuilder().setCustomId('ss_suprole').setPlaceholder('Supporter role (weekly coins)…').setMinValues(0).setMaxValues(1);
+      if (sup.roleId) supSel.setDefaultRoles(sup.roleId);
       return card({
         title: '⚙ Shiro panel',
-        body: `> 🏦 House **${(b.balance || 0) >= 0 ? '+' : ''}${fmt(b.balance)}** coins · ${fmt(b.rounds)} rounds · taxes ${fmt(b.fees)}\n`
-          + `> 📜 Logs ${econ ? `<#${econ}>` : '**not set** — open Logs'}\n\n-# House: the game ledger · Players: give/take coins and SILV · Logs: where everything is posted.`,
-        rows: [nav()],
+        body: `> 🏦 House **${(b.balance || 0) >= 0 ? '+' : ''}${fmt(b.balance)}** coins · ${fmt(b.rounds)} rounds · fees ${fmt(b.fees)}\n`
+          + `> 📜 Logs ${econ ? `<#${econ}>` : '**not set** — open Logs'}\n`
+          + `> 💖 Supporters: ${sup.roleId ? `<@&${sup.roleId}>` : '**no role set**'} get **${fmt(sup.amount)}** coins every week\n`
+          + `> 🤝 Recruiters get **${Math.round(refPct * 1000) / 10}%** of their validated recruits' wins (paid by the house)\n\n`
+          + '-# House: the game ledger · Players: give/take coins and SILV · Logs: where everything is posted.',
+        rows: [nav(), new ActionRowBuilder().addComponents(supSel),
+          row(button('ss_supamt', 'Supporter coins / week…'), button('ss_refpct', 'Recruiter % …'))],
         footer: guildName,
       });
     };
@@ -139,10 +149,15 @@ module.exports = {
       const id = `ssm_${i.id}`;
       await i.showModal(new ModalBuilder().setCustomId(id).setTitle(title.slice(0, 45)).addComponents(
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('n').setLabel(label.slice(0, 45))
-          .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(14))));
+          .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(24))));
       const sub = await i.awaitModalSubmit({ time: 90_000, filter: (m) => m.customId === id && m.user.id === i.user.id }).catch(() => null);
       if (!sub) return [null, null];
-      const n = parseInt(String(sub.fields.getTextInputValue('n')).replace(/[, ]/g, ''), 10);
+      // Acknowledge at once (the 10062 "Unknown interaction": DB work ran past Discord's 3s before the reply)
+      await sub.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+      sub.reply = (x) => { const { flags, ...rest } = typeof x === 'string' ? { content: x } : x; return sub.editReply(rest).catch(() => {}); };
+      const raw = String(sub.fields.getTextInputValue('n')).replace(/[, ]/g, '');
+      const n = parseInt(raw, 10);
+      sub.raw = raw;
       return [sub, Number.isFinite(n) ? n : null];
     };
 
@@ -198,6 +213,40 @@ module.exports = {
           await require('../utils/weeklyLive').setCfg({ roleId: role.id });
           await logAdminAction(i.user.id, i.user.username, 'shiroset', 'Set the weekly notify role', null, null, role.name);
           return i.update(await render());
+        }
+        if (id === 'ss_suprole') {
+          const rid = i.values[0] || null;
+          await require('../utils/settings').set('supporterRoleId', rid);
+          await logAdminAction(i.user.id, i.user.username, 'shiroset', 'Set the supporter role', null, null, rid ? `@&${rid}` : 'none');
+          return i.update(await render());
+        }
+        if (id === 'ss_supamt' || id === 'ss_refpct') {
+          const sup = id === 'ss_supamt';
+          const [sub, n] = await ask(i, sup ? 'Supporter coins per week' : 'Recruiter share of wins (%)', sup ? 'Coins (0 = off)' : 'Percent, e.g. 5 (0 = off)');
+          if (!sub) return;
+          if (n === null || n < 0 || (!sup && n > 50)) return sub.reply(sup ? 'Enter 0 or more.' : 'Enter 0–50.');
+          await require('../utils/settings').set(sup ? 'supporterWeekly' : 'referralPct', sup ? n : n / 100);
+          await logAdminAction(i.user.id, i.user.username, 'shiroset', sup ? 'Set supporter weekly coins' : 'Set recruiter %', null, null, String(n));
+          await sub.reply(`✅ Saved: ${sup ? `${fmt(n)} coins a week` : `${n}%`}.`);
+          return msg.edit(await render()).catch(() => {});
+        }
+        if (id === 'ss_cmdadd' || id === 'ss_cmdrem') {   // by ID (direct: "add / remove channel-ID buttons")
+          const add = id === 'ss_cmdadd';
+          const [sub] = await ask(i, add ? 'Add a command channel' : 'Remove a command channel', 'Channel ID');
+          if (!sub) return;
+          const cid = (sub.raw || '').replace(/[<#>]/g, '');
+          if (!/^\d{15,21}$/.test(cid)) return sub.reply('That isn\'t a channel ID.');
+          const GCh = require('../utils/gameChannel');
+          const cur = GCh.getCommandChannels();
+          if (add) {
+            const ch = await message.client.channels.fetch(cid).catch(() => null);
+            if (!ch) return sub.reply("I can't see that channel.");
+          }
+          const ids = add ? [...cur, cid] : cur.filter((c) => c !== cid);
+          await GCh.setCommandChannels(ids);
+          await logAdminAction(i.user.id, i.user.username, 'shiroset', add ? 'Added a command channel' : 'Removed a command channel', null, null, `#${cid}`);
+          await sub.reply(add ? `✅ Added <#${cid}>.` : (cur.includes(cid) ? `✅ Removed <#${cid}>.` : 'That channel wasn\'t on the list.'));
+          return msg.edit(await render()).catch(() => {});
         }
         if (id === 'ss_cmdch' || id === 'ss_cmdall') {
           const ids = id === 'ss_cmdch' ? i.values : [];
