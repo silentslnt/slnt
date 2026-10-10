@@ -114,6 +114,7 @@ const PREMIUM_GEAR = {
   // Not gear — delivered raw (no gear_ prefix). Sentinel's ,race revive restores a lives-out wipe within 14 days.
   fate_shard:       { name: 'Fate Shard',          emoji: '🔮', silvCost: 20, stats: 'Reroll one birth roll in Sentinel (`,fate`): mutation, Dragon kind, Angel halo or Ghoul kagune — same odds as birth, you never pick', raw: true, use: '`,fate`' },
   revive_token:     { name: 'Revive Token',        emoji: '✨', silvCost: 100, stats: 'Lost every life and got wiped? Buy this, then `,race revive` in Sentinel within 14 days — you keep your race, this brings back everything else', raw: true, use: '`,race revive`' },
+  slot_key:         { name: 'Character Slot Key',  emoji: '🗝', silvCost: 20, stats: 'Unlocks your 2nd Sentinel character slot (`,slots`) — a whole new soul, your first stays untouched', raw: true, use: '`,slots`' },
 };
 
 async function showGear({ message, interaction, onBack, getUserData, saveSpecificUserData, logAdminAction }) {
